@@ -4,12 +4,18 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-## Project Roadmap
+## Project Roadmap / TODO List
 
 - [x] Grug is able to respond to discord messages
 - [x] Grug is aware of DnD schedules and handles food reminders and who's on for food
+- [ ] Frontend web ui for admin, monitoring, and to have a place for user tooling links
+    - i.e. if we have SMS/email/etc., we'll want a page for attendance or food tracking to allow people to interact
+      without requiring Discord
 - [ ] Grug is able to handle DnD attendance tracking (stretch goal)
-- [ ] Grug is able to draw pictures (stretch goal)
+- [ ] Keep record of group chats in a database and create tooling for Grug to be able to search that
+- [ ] Grug is able to read and answer questions from a Google doc (session notes)
+- [ ] Grug is able to generate pictures in discord with DALLE
+- [ ] Grug can listen to a discord voice channel and transcribe the conversation (possibly even respond in it)
 - [ ] Grug is able to send and receive texts
 - [ ] Grug is able to create scheduled reminders for things
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
@@ -25,7 +31,7 @@
 2. Clone this repository.
 3. Run `poetry install` to install dependencies.
 4. Run `pre-commit install` to install pre-commit hooks.
-5. Run `docker-compose up -d` to start the database.
+5. Run `docker-compose up -d postgres` to start the database.
 
 ### Poetry Reference
 
