@@ -21,7 +21,7 @@ COPY alembic.ini alembic.ini
 COPY config config
 
 # Copy application files
-COPY grug_bot grug_bot
+COPY grug grug
 
 # Run the application
-CMD poetry run python grug_bot
+CMD poetry run python grug
