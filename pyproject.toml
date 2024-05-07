@@ -1,0 +1,86 @@
+[tool.poetry]
+name = "grug"
+version = "0.1.0"
+description = ""
+authors = ["Foehammer82 <notreal@somewhere.com>"]
+readme = "README.md"
+packages = [{ include = "grug" }]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.31.0"
+sqlmodel = "^0.0.18"
+discord-py = { extras = ["voice"], version = "^2.3.2" }
+alembic = "^1.13.1"
+asyncpg = "^0.29.0"
+pydantic = "^2.6.3"
+pydantic-settings = "^2.2.1"
+email-validator = "^2.1.1"
+apscheduler = { version = "<=4", allow-prereleases = true }
+croniter = "^2.0.2"
+openai = "^1.13.3"
+psycopg2 = "^2.9.9"
+loguru = "^0.7.2"
+elasticsearch = "^8.13.1"
+
+[tool.poetry.group.test.dependencies]
+pytest = "^8.1.1"
+pytest-asyncio = "^0.23.5.post1"
+
+[tool.poetry.group.dev.dependencies]
+pre-commit = "^3.6.2"
+black = "^24.2.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[flake8]
+max-line-length = 90
+
+[tool.black]
+line-length = 90
+extend-exclude = '''
+/(
+  | alembic/versions
+)/
+'''
+
+[tool.isort]
+profile = "black"
+
+[tool.mypy]
+strict = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_missing_imports = true
+check_untyped_defs = true
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests"
+]
+
+[tool.interrogate]
+ignore-init-module = true
+ignore-magic = true
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = true
+ignore-nested-functions = false
+ignore-nested-classes = false
+ignore-setters = false
+ignore-overloaded-functions = false
+fail-under = 100
+exclude = ["setup.py", "docs", "build", "alembic", "tests"]
+ext = []
+style = "google"
+verbose = 1
+quiet = false
+whitelist-regex = []
+color = true
+omit-covered-files = true

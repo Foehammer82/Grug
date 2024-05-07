@@ -1,0 +1,33 @@
+services:
+  application:
+    build: ./
+    restart: unless-stopped
+    environment:
+      TZ: "America/Chicago"
+      DISCORD_BOT_CHANNEL: ${DISCORD_BOT_CHANNEL}
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_SERVER_ID: ${DISCORD_SERVER_ID}
+      DND_SESSION_FOOD_REMINDER_CRON: ${DND_SESSION_FOOD_REMINDER_CRON:-"5 * * * *"}
+      OPENAI_KEY: ${OPENAI_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-3.5-turbo}
+      PG_DB: ${PG_DB:-postgres}
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PASS: ${PG_PASS:-secret}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+
+  postgres:
+    image: postgres:15
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: 'postgres'
+      POSTGRES_USER: 'postgres'
+      POSTGRES_PASSWORD: 'secret'
+    ports:
+      - "5431:5432"
+
+volumes:
+  redis_data:
+  postgres_data:
