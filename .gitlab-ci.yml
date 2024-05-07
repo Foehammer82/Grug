@@ -1,0 +1,50 @@
+stages:
+  - test
+  - build
+  - deploy
+
+pre-commit:
+  stage: test
+  image: python:3.11
+  tags:
+    - docker
+  script:
+    - pip install pre-commit
+    - pre-commit run --all-files
+
+build-docker-image:
+  # TODO: have this build and save the image to the repo's registry
+  stage: build
+  tags:
+    - kronos
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+  script:
+    - docker compose build
+
+run-migrations:
+  # TODO: once the image is being stored in the repo's registry, we can use it here and have this use the docker runner
+  stage: build
+  tags:
+    - kronos
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+  script:
+    - docker compose run --rm --name alembic-migrations application alembic upgrade head
+  needs:
+    - build-docker-image
+
+deploy-prod:
+  # TODO: once the image is being stored in the repo's registry, we can use it here and have this pull the image from the repo's registry
+  stage: deploy
+  tags:
+    - kronos
+  rules:
+    - if: $CI_COMMIT_REF_NAME == "main"
+  script:
+    - docker compose up -d --pull always --remove-orphans application
+  needs:
+    - build-docker-image
+    - run-migrations
+
+# TODO: create a CI job that can set and update the version number like what we do at work
