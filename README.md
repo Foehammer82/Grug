@@ -48,9 +48,3 @@
 - first migration: `alembic upgrade head`
 - create a new migration: `alembic revision --autogenerate -m "migration message"`
     - then run the migration: `alembic upgrade head`
-
-## References
-
-- [discord.py](https://github.com/Rapptz/discord.py)
-- [Rocketry](https://rocketry.readthedocs.io/en/stable/index.html)
-- [SQLModel](https://sqlmodel.tiangolo.com/)
