@@ -21,11 +21,22 @@ from grug.utils.food import get_food_history, send_discord_food_reminder
 
 
 class Assistant:
-    """https://platform.openai.com/docs/assistants/overview?context=with-streaming"""
+    """Class for interacting with the OpenAI API."""
 
-    response_wait_seconds: float = 0.5
+    def __init__(
+        self,
+        assistant_functions: list[Callable] | None = None,
+        response_wait_seconds: float = 0.5,
+    ):
+        """
+        Initialize the Assistant class.
 
-    def __init__(self, assistant_functions: list[Callable] | None = None):
+        Args:
+            assistant_functions (list[Callable], optional): List of functions to add to the assistant. Defaults to None.
+            response_wait_seconds (float, optional): The number of seconds to wait between checking the assistant's
+                                                     response. Defaults to 0.5.
+        """
+        self.response_wait_seconds = response_wait_seconds
         self.async_client = AsyncOpenAI(api_key=settings.openai_key.get_secret_value())
         self.sync_client = OpenAI(api_key=settings.openai_key.get_secret_value())
         self._tools = (
@@ -132,7 +143,7 @@ class Assistant:
                 else await self.async_client.beta.threads.create()
             ),
             message=(
-                f"This message is from {player.discord_username}.  The following is their message:"
+                f"This message is from {player.friendly_name}.  The following is their message:"
                 f"\n{message}"
                 "\n\n[AI should not factor the person's name into its response.]"
                 "\n[AI should not state that they received a message from the person.]"
@@ -286,6 +297,7 @@ class Assistant:
             }
 
 
+# Instantiate the assistant singleton for use in the application
 assistant = Assistant(
     assistant_functions=[
         search_aon,

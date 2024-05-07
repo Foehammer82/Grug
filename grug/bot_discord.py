@@ -1,6 +1,7 @@
 """Discord bot interface for the Grug assistant server."""
 
 import logging
+from collections.abc import Iterable
 
 import discord
 import discord.utils
@@ -12,7 +13,6 @@ from grug.models import DiscordTextChannel, Player
 from grug.openai_assistant import assistant
 from grug.settings import settings
 from grug.utils.food import DiscordFoodBringerSelectionView
-from grug.utils.user_management import add_discord_members_to_db_as_players
 
 # Grug bot invite link:
 # https://discord.com/api/oauth2/authorize?client_id=1059330324313690223&permissions=8&scope=bot]
@@ -51,7 +51,7 @@ discord.utils.setup_logging(handler=InterceptLogHandler())
 async def on_ready():
     """https://discordpy.readthedocs.io/en/stable/api.html#discord.on_ready"""
     guild = discord_bot.get_guild(settings.discord_server_id)
-    players = await add_discord_members_to_db_as_players(discord_members=guild.members)
+    players = await _add_discord_members_to_db_as_players(discord_members=guild.members)
 
     # Register the persistent view for listening
     discord_bot.add_view(DiscordFoodBringerSelectionView(players))
@@ -169,7 +169,7 @@ async def on_message(message: discord.Message):
 @discord_bot.event
 async def on_guild_join(guild: discord.Guild):
     """https://discordpy.readthedocs.io/en/stable/api.html#discord.on_guild_join"""
-    players = await add_discord_members_to_db_as_players(discord_members=guild.members)
+    players = await _add_discord_members_to_db_as_players(discord_members=guild.members)
 
     # Update the food bringer selection view with the new players
     discord_bot.add_view(
@@ -207,3 +207,41 @@ async def on_member_join(member: discord.Member):
                 logger.info(f"Set player {member.name} to active in the database.")
 
         await session.commit()
+
+
+async def _add_discord_members_to_db_as_players(
+    discord_members: Iterable[discord.Member],
+):
+    """
+    Add Discord members to the database as Players if they do not already exist.
+
+    Args:
+        discord_members (Iterable[discord.Member]): An iterable of discord.Member objects.
+    """
+
+    players: list[Player] = []
+
+    async with async_session() as session:
+        for member in discord_members:
+            if not member.bot:
+                result = await session.execute(
+                    select(Player)
+                    .where(Player.discord_member_id == str(member.id))
+                    .where(Player.discord_guild_id == str(member.guild.id))
+                )
+                player: Player | None = result.scalars().one_or_none()
+
+                if player is None:
+                    player = Player(
+                        discord_member_id=str(member.id),
+                        discord_guild_id=str(member.guild.id),
+                        discord_username=member.name,
+                    )
+
+                    session.add(player)
+                    await session.commit()
+                    await session.refresh(player)
+
+                players.append(player)
+
+    return players
