@@ -11,6 +11,7 @@
 - [ ] Grug is able to draw pictures (stretch goal)
 - [ ] Grug is able to send and receive texts
 - [ ] Grug is able to create scheduled reminders for things
+- [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
 
 ## Development
 
