@@ -39,11 +39,7 @@ class Assistant:
         self.response_wait_seconds = response_wait_seconds
         self.async_client = AsyncOpenAI(api_key=settings.openai_key.get_secret_value())
         self.sync_client = OpenAI(api_key=settings.openai_key.get_secret_value())
-        self._tools = (
-            {str(tool.__name__): tool for tool in assistant_functions}
-            if assistant_functions
-            else {}
-        )
+        self._tools = {str(tool.__name__): tool for tool in assistant_functions} if assistant_functions else {}
 
         # Create, or Update and Retrieve the assistant
         assistants = {a.name: a.id for a in self.sync_client.beta.assistants.list().data}
@@ -109,9 +105,7 @@ class Assistant:
                 session.add(player)
                 await session.commit()
         else:
-            thread = await self.async_client.beta.threads.retrieve(
-                thread_id=player.assistant_thread_id
-            )
+            thread = await self.async_client.beta.threads.retrieve(thread_id=player.assistant_thread_id)
 
         return await self._send_message(
             thread=thread,
@@ -174,29 +168,20 @@ class Assistant:
         )
 
         while run.status != "completed":
-            run = await self.async_client.beta.threads.runs.retrieve(
-                thread_id=thread.id, run_id=run.id
-            )
+            run = await self.async_client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
 
             if run.status == "failed":
-                raise Exception(
-                    f"Run failed with message: {run.last_error.code}: {run.last_error.message}"
-                )
+                raise Exception(f"Run failed with message: {run.last_error.code}: {run.last_error.message}")
 
             elif run.status == "in_progress" or run.status == "queued":
                 await asyncio.sleep(self.response_wait_seconds)
 
             elif run.status == "requires_action":
-                if (
-                    tool_calls := run.required_action.submit_tool_outputs.tool_calls
-                ) is not None:
+                if (tool_calls := run.required_action.submit_tool_outputs.tool_calls) is not None:
                     run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=run.id,
-                        tool_outputs=[
-                            await self._call_tool_function(tool_call)
-                            for tool_call in tool_calls
-                        ],
+                        tool_outputs=[await self._call_tool_function(tool_call) for tool_call in tool_calls],
                     )
 
             elif run.status == "completed":
@@ -242,11 +227,7 @@ class Assistant:
                         "parameters": {
                             "type": "object",
                             "properties": {
-                                arg: {
-                                    "type": openai_type_map[
-                                        function_arg_spec.annotations[arg]
-                                    ]
-                                }
+                                arg: {"type": openai_type_map[function_arg_spec.annotations[arg]]}
                                 for arg in function_arg_spec.args
                             },
                             "required": (
@@ -271,9 +252,7 @@ class Assistant:
 
             for arg in inspect.getfullargspec(self._tools[tool_call.function.name]).args:
                 if arg not in function_args:
-                    raise ValueError(
-                        f"Missing argument: {arg} from function call {tool_callable.__name__}"
-                    )
+                    raise ValueError(f"Missing argument: {arg} from function call {tool_callable.__name__}")
 
             if inspect.iscoroutinefunction(tool_callable):
                 tools_response = await tool_callable(**function_args)

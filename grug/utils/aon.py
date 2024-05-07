@@ -36,16 +36,8 @@ def search_aon(search_string: str):
                 "query": {
                     "bool": {
                         "should": [
-                            {
-                                "match_phrase_prefix": {
-                                    "name.sayt": {"query": search_string}
-                                }
-                            },
-                            {
-                                "match_phrase_prefix": {
-                                    "text.sayt": {"query": search_string, "boost": 0.1}
-                                }
-                            },
+                            {"match_phrase_prefix": {"name.sayt": {"query": search_string}}},
+                            {"match_phrase_prefix": {"text.sayt": {"query": search_string, "boost": 0.1}}},
                             {"term": {"name": search_string}},
                             {
                                 "bool": {
@@ -83,9 +75,7 @@ def search_aon(search_string: str):
         aggs={
             "group1": {
                 "composite": {
-                    "sources": [
-                        {"field1": {"terms": {"field": "type", "missing_bucket": True}}}
-                    ],
+                    "sources": [{"field1": {"terms": {"field": "type", "missing_bucket": True}}}],
                     "size": 10000,
                 }
             }

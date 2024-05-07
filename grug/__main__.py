@@ -19,9 +19,7 @@ async def main():
     async with asyncio.TaskGroup() as tg:
         tg.create_task(grug_scheduler.run_until_stopped())
         tg.create_task(update_default_schedules())
-        tg.create_task(
-            discord_bot.start(token=settings.discord_bot_token.get_secret_value())
-        )
+        tg.create_task(discord_bot.start(token=settings.discord_bot_token.get_secret_value()))
 
 
 if __name__ == "__main__":

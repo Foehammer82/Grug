@@ -13,9 +13,7 @@ async_engine = create_async_engine(
 )
 
 # Database session factory singleton
-async_session = async_sessionmaker(
-    bind=async_engine, class_=AsyncSession, expire_on_commit=False
-)
+async_session = async_sessionmaker(bind=async_engine, class_=AsyncSession, expire_on_commit=False)
 
 
 def init_db():

@@ -25,9 +25,7 @@ class Player(SQLModel, table=True):
 
     assistant_thread_id: str | None = None
 
-    brought_food_for_sessions: list["DndSession"] = Relationship(
-        back_populates="food_bringer"
-    )
+    brought_food_for_sessions: list["DndSession"] = Relationship(back_populates="food_bringer")
 
     @property
     def friendly_name(self):
@@ -50,9 +48,7 @@ class DndSession(SQLModel, table=True):
     food_bringer_player_id: int | None = Field(default=None, foreign_key="player.id")
     food_bringer: Player | None = Relationship(back_populates="brought_food_for_sessions")
 
-    food_selection_messages: list["FoodSelectionMessage"] | None = Relationship(
-        back_populates="dnd_session"
-    )
+    food_selection_messages: list["FoodSelectionMessage"] | None = Relationship(back_populates="dnd_session")
 
 
 class FoodSelectionMessage(SQLModel, table=True):

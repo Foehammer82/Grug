@@ -32,8 +32,8 @@ class Settings(BaseSettings):
     discord_copy_global_on_startup: bool = True
 
     # Scheduler Settings
-    dnd_session_food_reminder_cron: str = "30 * * * *"
-    dnd_session_schedule_cron: str = "0 17 * * 0"
+    dnd_session_food_reminder_cron: str = "30 * * * *"  # Defines the scheduled time for the food reminder
+    dnd_session_schedule_cron: str = "0 17 * * 0"  # Defines the time for the weekly D&D session
 
     # Database Settings
     pg_user: str

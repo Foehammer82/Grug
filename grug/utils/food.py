@@ -85,11 +85,7 @@ async def send_discord_food_reminder():
         for brought_food in food_history:
             message_content += f"\n- [{brought_food.on_date.isoformat()}] {brought_food.by_player.friendly_name}"
 
-        if next_up := (
-            food_history[0]
-            if len(food_history) > 0 and food_history[0].on_date >= date.today()
-            else None
-        ):
+        if next_up := (food_history[0] if len(food_history) > 0 and food_history[0].on_date >= date.today() else None):
             message_content += (
                 f"\n\n{next_up.by_player.friendly_name} volunteered to bring food next.  "
                 "Select from list below to change."
@@ -100,9 +96,7 @@ async def send_discord_food_reminder():
         dnd_session: DndSession | None = (
             (
                 await session.execute(
-                    select(DndSession).where(
-                        DndSession.session_start_datetime == next_session_datetime
-                    )
+                    select(DndSession).where(DndSession.session_start_datetime == next_session_datetime)
                 )
             )
             .scalars()
@@ -121,20 +115,14 @@ async def send_discord_food_reminder():
         if settings.discord_bot_channel is not None:
             guild_channel = discord_bot.get_channel(settings.discord_bot_channel)
         else:
-            guild_channel = discord_bot.get_guild(
-                settings.discord_server_id
-            ).system_channel
+            guild_channel = discord_bot.get_guild(settings.discord_server_id).system_channel
 
         message = await guild_channel.send(
             content=message_content,
             view=view,
         )
 
-        session.add(
-            FoodSelectionMessage(
-                discord_message_id=str(message.id), dnd_session_id=dnd_session.id
-            )
-        )
+        session.add(FoodSelectionMessage(discord_message_id=str(message.id), dnd_session_id=dnd_session.id))
         await session.commit()
 
 
@@ -154,11 +142,7 @@ class DiscordFoodBringerDropdown(discord.ui.Select):
                 )
             )
 
-        menu_options.append(
-            discord.SelectOption(
-                label="nobody", description="No food this week", value="none"
-            )
-        )
+        menu_options.append(discord.SelectOption(label="nobody", description="No food this week", value="none"))
 
         super().__init__(
             placeholder="Select a player...",
@@ -177,17 +161,14 @@ class DiscordFoodBringerDropdown(discord.ui.Select):
         """
 
         player_id: int | None = int(self.values[0]) if self.values[0] != "none" else None
-        player_name = {option.value: option.label for option in self.options}[
-            self.values[0]
-        ]
+        player_name = {option.value: option.label for option in self.options}[self.values[0]]
 
         async with async_session() as session:
             food_selection_message: FoodSelectionMessage | None = (
                 (
                     await session.execute(
                         select(FoodSelectionMessage).where(
-                            FoodSelectionMessage.discord_message_id
-                            == str(interaction.message.id)
+                            FoodSelectionMessage.discord_message_id == str(interaction.message.id)
                         )
                     )
                 )
@@ -196,17 +177,12 @@ class DiscordFoodBringerDropdown(discord.ui.Select):
             )
 
             if food_selection_message is None:
-                raise Exception(
-                    "food_selection_message should have been instantiated when the "
-                    "message was sent"
-                )
+                raise Exception("food_selection_message should have been instantiated when the " "message was sent")
 
             dnd_session: DndSession | None = (
                 (
                     await session.execute(
-                        select(DndSession).where(
-                            DndSession.id == food_selection_message.dnd_session_id
-                        )
+                        select(DndSession).where(DndSession.id == food_selection_message.dnd_session_id)
                     )
                 )
                 .scalars()
@@ -224,8 +200,7 @@ class DiscordFoodBringerDropdown(discord.ui.Select):
 
         # noinspection PyUnresolvedReferences
         await interaction.response.send_message(
-            f"Grug hear {player_name} bring food "
-            f"{dnd_session.session_start_datetime.date().isoformat()}"
+            f"Grug hear {player_name} bring food " f"{dnd_session.session_start_datetime.date().isoformat()}"
         )
 
 

@@ -81,16 +81,12 @@ async def _respond_to_dm(message: discord.Message):
             db_user: Player | None = result.scalars().one_or_none()
 
         # Send the message to the assistant
-        assistant_response = await assistant.send_direct_message(
-            message=message.content, player=db_user
-        )
+        assistant_response = await assistant.send_direct_message(message=message.content, player=db_user)
 
         max_discord_message_length = 2000
         for output in [
             assistant_response.response[i : i + max_discord_message_length]
-            for i in range(
-                0, len(assistant_response.response), max_discord_message_length
-            )
+            for i in range(0, len(assistant_response.response), max_discord_message_length)
         ]:
             await message.channel.send(output)
 
@@ -106,9 +102,7 @@ async def _respond_to_channel_mention(message: discord.Message):
         async with async_session() as session:
             # Check if the channel is already tied to a thread
             result = await session.execute(
-                select(DiscordTextChannel).where(
-                    DiscordTextChannel.discord_id == str(message.channel.id)
-                )
+                select(DiscordTextChannel).where(DiscordTextChannel.discord_id == str(message.channel.id))
             )
             discord_channel: DiscordTextChannel | None = result.scalars().one_or_none()
 
@@ -163,10 +157,7 @@ async def on_message(message: discord.Message):
         await _respond_to_dm(message)
 
     # respond to @mentions in channels
-    elif (
-        isinstance(message.channel, discord.TextChannel)
-        and discord_bot.user in message.mentions
-    ):
+    elif isinstance(message.channel, discord.TextChannel) and discord_bot.user in message.mentions:
         await _respond_to_channel_mention(message)
 
 
@@ -176,11 +167,7 @@ async def on_guild_join(guild: discord.Guild):
     players = await _add_discord_members_to_db_as_players(discord_members=guild.members)
 
     # Update the food bringer selection view with the new players
-    discord_bot.add_view(
-        DiscordFoodBringerSelectionView(
-            [p for p in players if p.is_active and p.brings_food]
-        )
-    )
+    discord_bot.add_view(DiscordFoodBringerSelectionView([p for p in players if p.is_active and p.brings_food]))
 
 
 @discord_bot.event

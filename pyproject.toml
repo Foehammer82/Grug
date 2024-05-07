@@ -39,7 +39,7 @@ build-backend = "poetry.core.masonry.api"
 max-line-length = 90
 
 [tool.black]
-line-length = 90
+line-length = 120
 extend-exclude = '''
 /(
   | alembic/versions
