@@ -2,7 +2,7 @@
 name = "grug"
 version = "0.1.0"
 description = ""
-authors = ["Foehammer82 <notreal@somewhere.com>"]
+authors = ["Foehammer82 contact-project+dark-water-grug-57605831-issue-@incoming.gitlab.com"]
 readme = "README.md"
 packages = [{ include = "grug" }]
 
