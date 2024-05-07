@@ -49,7 +49,11 @@ discord.utils.setup_logging(handler=InterceptLogHandler())
 
 @discord_bot.event
 async def on_ready():
-    """https://discordpy.readthedocs.io/en/stable/api.html#discord.on_ready"""
+    """
+    Event handler for when the bot is ready.
+
+    Documentation: https://discordpy.readthedocs.io/en/stable/api.html#discord.on_ready
+    """
     guild = discord_bot.get_guild(settings.discord_server_id)
     players = await _add_discord_members_to_db_as_players(discord_members=guild.members)
 
