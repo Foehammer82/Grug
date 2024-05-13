@@ -7,7 +7,7 @@ pre-commit:
   stage: test
   image: python:3.11
   tags:
-    - gitlab-org-docker
+    - docker
   script:
     - pip install pre-commit
     - pre-commit run --all-files
@@ -16,7 +16,7 @@ unit-tests:
   stage: test
   image: python:3.11
   tags:
-    - gitlab-org-docker
+    - docker
   script:
     - pip install poetry
     - poetry install
