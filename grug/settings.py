@@ -8,6 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
 
 
+# TODO: configure to allow secret files for secret values so that env vars don't show the values as plaintext on
+#       the container description
 # TODO: add descriptions to fields here to auto generate documentation for use in deployment instructions
 # noinspection PyNestedDecorators
 class Settings(BaseSettings):
