@@ -4,13 +4,16 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
+[![pipeline status](https://gitlab.com/Foehammer82/Grug/badges/main/pipeline.svg)](https://gitlab.com/Foehammer82/Grug/-/commits/main)
+[![coverage report](https://gitlab.com/Foehammer82/Grug/badges/main/coverage.svg)](https://gitlab.com/Foehammer82/Grug/-/commits/main)
+
 ## Project Roadmap / TODO List
 
 - [x] Grug is able to respond to discord messages
 - [x] Grug is aware of DnD schedules and handles food reminders and who's on for food
-- [ ] Frontend web ui for admin, monitoring, and to have a place for user tooling links
-    - i.e. if we have SMS/email/etc., we'll want a page for attendance or food tracking to allow people to interact
-      without requiring Discord
+- [x] embedded FastAPI and admin page
+- [ ] migrate legacy Grug models to new models and build more robust food reminder and event system
+- [ ] need an easy way to make nice UIs for Grug that can be easily integrated with the FastAPI backend
 - [ ] Grug is able to handle DnD attendance tracking (stretch goal)
 - [ ] Keep record of group chats in a database and create tooling for Grug to be able to search that
 - [ ] Grug is able to read and answer questions from a Google doc (session notes)
@@ -19,32 +22,9 @@
 - [ ] Grug is able to send and receive texts
 - [ ] Grug is able to create scheduled reminders for things
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
+    - these instructions should be clear and complete enough that someone could mindlessly follow them with no previous
+      experience and get a Grug of their own deployed
 
-## Development
+### Nice To Have One-Day Features
 
-### Setup
-
-1. Install:
-    - [Docker](https://docs.docker.com/get-docker/)
-    - [Docker Compose](https://docs.docker.com/compose/install/)
-    - [Poetry](https://python-poetry.org/docs/#installation)
-2. Clone this repository.
-3. Run `poetry install` to install dependencies.
-4. Run `pre-commit install` to install pre-commit hooks.
-5. Run `docker-compose up -d postgres` to start the database.
-
-### Poetry Reference
-
-- `poetry add <package>` to add a new dependency.
-    - `poetry add -G dev <package>` to add a new dev dependency.
-    - `poetry add -G docs <package>` to add a new docs dependency.
-- `poetry install` to install dependencies.
-- `poetry update` to update dependencies.
-
-### Alembic Reference
-
-[Official Docs](https://alembic.sqlalchemy.org/en/latest/tutorial.html#running-our-first-migration)
-
-- first migration: `alembic upgrade head`
-- create a new migration: `alembic revision --autogenerate -m "migration message"`
-    - then run the migration: `alembic upgrade head`
+- [ ] implement discord oauth to enable discord user logins (https://discord.com/developers/docs/topics/oauth2)

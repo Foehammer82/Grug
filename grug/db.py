@@ -1,5 +1,6 @@
 """Database setup and initialization."""
 
+from pydantic import PostgresDsn
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel, create_engine
 
@@ -7,7 +8,16 @@ from grug.settings import settings
 
 # Database engine singleton
 async_engine = create_async_engine(
-    url=settings.get_db_urn(is_async=True),
+    url=str(
+        PostgresDsn.build(
+            scheme="postgresql+asyncpg",
+            host=settings.pg_host,
+            port=settings.pg_port,
+            username=settings.pg_user,
+            password=settings.pg_pass.get_secret_value(),
+            path=settings.pg_db,
+        )
+    ),
     echo=False,
     future=True,
 )
@@ -21,4 +31,17 @@ def init_db():
     # noinspection PyUnresolvedReferences
     from grug import models  # noqa: F401
 
-    SQLModel.metadata.create_all(create_engine(settings.get_db_urn(is_async=False)))
+    SQLModel.metadata.create_all(
+        create_engine(
+            str(
+                PostgresDsn.build(
+                    scheme="postgresql",
+                    host=settings.pg_host,
+                    port=settings.pg_port,
+                    username=settings.pg_user,
+                    password=settings.pg_pass.get_secret_value(),
+                    path=settings.pg_db,
+                )
+            )
+        )
+    )

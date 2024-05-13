@@ -1,11 +1,15 @@
+import secrets
+import string
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
 
 
+# TODO: add descriptions to fields here to auto generate documentation for use in deployment instructions
+# noinspection PyNestedDecorators
 class Settings(BaseSettings):
     """Settings for the Grug Bot."""
 
@@ -13,6 +17,25 @@ class Settings(BaseSettings):
         env_file=f"{_ROOT_DIR}/config/secrets.env",
         extra="ignore",
     )
+
+    # General Settings
+    admin_user: str = "admin"
+    admin_password: SecretStr = SecretStr("password")
+
+    # Security Settings
+    security_key: SecretStr = Field(
+        default=SecretStr("".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))),
+        description=(
+            "The secret key used for security.  If not set, a random key will be generated, however this means that "
+            "sessions will not be maintained between restarts."
+        ),
+    )
+    security_algorithm: str = "HS256"
+    security_access_token_expire_minutes: int = 30
+
+    # API Settings
+    api_port: int = 9000
+    api_host: str = "localhost"
 
     # Bot Settings
     bot_name: str = "Grug"
@@ -26,14 +49,21 @@ class Settings(BaseSettings):
     )
 
     # Discord Settings
+    # TODO: make discord integration optional
     discord_bot_token: SecretStr
     discord_server_id: int
-    discord_bot_channel: int | None = None
-    discord_copy_global_on_startup: bool = True
+    discord_bot_channel_id: int | None = None
 
     # Scheduler Settings
-    dnd_session_food_reminder_cron: str = "30 * * * *"  # Defines the scheduled time for the food reminder
-    dnd_session_schedule_cron: str = "0 17 * * 0"  # Defines the time for the weekly D&D session
+    # TODO: deprecated, remove this once we cut over to the dynamic scheduler
+    dnd_session_food_reminder_cron: str = Field(
+        default="30 * * * *",
+        description="Defines the scheduled time for the food reminder",
+    )
+    dnd_session_schedule_cron: str = Field(
+        default="0 17 * * 0",
+        description="Defines the time for the weekly D&D session",
+    )
 
     # Database Settings
     pg_user: str
@@ -46,25 +76,11 @@ class Settings(BaseSettings):
     openai_key: SecretStr
     openai_model: str = "gpt-3.5-turbo"
 
+    @computed_field
     @property
     def root_dir(self) -> Path:
         """Get the root directory of the project."""
         return _ROOT_DIR
-
-    def get_db_urn(self, is_async: bool = True) -> str:
-        """
-        Get the database URN for the PostgreSQL database.
-
-        Args:
-            is_async (bool): Whether to use the asyncpg driver.
-        """
-
-        return (
-            f"postgresql+{'asyncpg' if is_async else 'psycopg2'}://"
-            f"{self.pg_user}:{self.pg_pass.get_secret_value()}"
-            f"@{self.pg_host}:{self.pg_port}"
-            f"/{self.pg_db}"
-        )
 
 
 settings = Settings()

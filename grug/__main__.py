@@ -1,26 +1,44 @@
 """Main entry point for the grug package."""
 
 import asyncio
+from contextlib import asynccontextmanager
 
+import uvicorn
+from fastapi import FastAPI
 from loguru import logger
 
-from grug.bot_discord import discord_bot
+from grug.admin import init_admin
+from grug.api_routers import routers
+from grug.assistant_interfaces.discord_interface import start_discord_bot
+from grug.auth import init_auth
 from grug.db import init_db
-from grug.scheduler import grug_scheduler, update_default_schedules
+from grug.log_config import init_logging
+from grug.scheduler import start_scheduler
 from grug.settings import settings
 
+# TODO: setup external session handling with redis or pg
 
-async def main():
-    """Main entry point for the grug package."""
-    logger.info({"settings": settings.dict()})
 
+# noinspection PyUnusedLocal,PyAsyncCall
+@asynccontextmanager
+async def lifespan(fast_api_app: FastAPI):
+    """Lifespan event handler for the FastAPI app."""
+    init_logging()
     init_db()
+    init_auth(fast_api_app)
+    init_admin(fast_api_app)
+    asyncio.create_task(start_discord_bot())
+    asyncio.create_task(start_scheduler())
+    yield
 
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(grug_scheduler.run_until_stopped())
-        tg.create_task(update_default_schedules())
-        tg.create_task(discord_bot.start(token=settings.discord_bot_token.get_secret_value()))
+
+app = FastAPI(lifespan=lifespan)
+
+for router in routers:
+    app.include_router(router)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    logger.info({"app_settings": settings.dict()})
+
+    uvicorn.run(app, port=settings.api_port, host=settings.api_host)

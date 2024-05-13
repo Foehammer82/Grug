@@ -1,6 +1,7 @@
 import asyncio
 import logging.config
 
+from pydantic import PostgresDsn
 from sqlalchemy.engine import Connection
 
 from alembic import context
@@ -15,7 +16,16 @@ target_metadata = models.SQLModel.metadata
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=settings.get_db_urn(is_async=False),
+        url=str(
+            PostgresDsn.build(
+                scheme="postgresql",
+                host=settings.pg_host,
+                port=settings.pg_port,
+                username=settings.pg_user,
+                password=settings.pg_pass.get_secret_value(),
+                path=settings.pg_db,
+            )
+        ),
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

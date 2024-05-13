@@ -2,8 +2,8 @@
 name = "grug"
 version = "0.1.0"
 description = ""
-authors = ["Foehammer82 contact-project+dark-water-grug-57605831-issue-@incoming.gitlab.com"]
-readme = "README.md"
+authors = ["Foehammer82 <contact-project+dark-water-grug-57605831-issue-@incoming.gitlab.com>"]
+readme = "docs/README.md"
 packages = [{ include = "grug" }]
 
 [tool.poetry.dependencies]
@@ -22,10 +22,15 @@ openai = "^1.13.3"
 psycopg2 = "^2.9.9"
 loguru = "^0.7.2"
 elasticsearch = "^8.13.1"
+sqladmin = {extras = ["full"], version = "^0"}
+fastapi = "^0.111.0"
+uvicorn = "^0.29.0"
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.1.1"
 pytest-asyncio = "^0.23.5.post1"
+pytest-cov = "^5.0.0"
 
 [tool.poetry.group.dev.dependencies]
 pre-commit = "^3.6.2"
@@ -34,9 +39,6 @@ black = "^24.2.0"
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[flake8]
-max-line-length = 90
 
 [tool.black]
 line-length = 120
