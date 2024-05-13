@@ -29,15 +29,13 @@ unit-tests:
         coverage_format: cobertura
         path: coverage.xml
 
-build:
+build-grug-image:
   stage: build
   rules:
     - if: $CI_COMMIT_REF_NAME == "main"
   tags:
     - docker
-  image: docker:26
-  services:
-    - docker:26-dind
+  image: docker:26-dind
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   script:
