@@ -3,7 +3,7 @@ name = "grug"
 version = "1.0.0"
 description = ""
 authors = ["Foehammer82 <contact-project+dark-water-grug-57605831-issue-@incoming.gitlab.com>"]
-readme = "docs/README.md"
+readme = "README.md"
 packages = [{ include = "grug" }]
 
 [tool.poetry.dependencies]
