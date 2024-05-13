@@ -62,4 +62,4 @@ deploy-prod:
   needs:
     - publish-docker-image
 
-# TODO: add a tag and release step
+# TODO: add a tag and release step https://python-poetry.org/docs/cli#version
