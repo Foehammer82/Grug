@@ -12,7 +12,11 @@ class Settings(BaseSettings):
     """Settings for the Grug Bot."""
 
     model_config = SettingsConfigDict(
-        env_file=f"{_ROOT_DIR}/config/secrets.env",
+        env_file=(
+            f"{_ROOT_DIR}/config/postgres.env",
+            f"{_ROOT_DIR}/config/local.env",
+            f"{_ROOT_DIR}/config/secrets.env",
+        ),
         extra="ignore",
     )
 
