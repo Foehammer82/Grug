@@ -1,6 +1,6 @@
 """Discord bot interface for the Grug assistant server."""
 
-import logging
+import asyncio
 from collections.abc import Iterable
 
 import discord
@@ -8,11 +8,12 @@ import discord.utils
 from loguru import logger
 from sqlmodel import select
 
+from grug.assistant_functions.food import DiscordFoodBringerSelectionView
 from grug.db import async_session
+from grug.log_config import InterceptHandler
 from grug.models import DiscordTextChannel, Player
 from grug.openai_assistant import assistant
 from grug.settings import settings
-from grug.utils.food import DiscordFoodBringerSelectionView
 
 # Grug bot invite link:
 # https://discord.com/api/oauth2/authorize?client_id=1059330324313690223&permissions=8&scope=bot]
@@ -22,26 +23,8 @@ _intents = discord.Intents.default()
 _intents.members = True
 
 
-class InterceptLogHandler(logging.Handler):
-    """Intercepts log messages and sends them to the logger."""
-
-    def emit(self, record):
-        """Emit the log message to the logger."""
-        try:
-            level = logger.level(record.levelname).name
-        except ValueError:
-            level = record.levelno
-
-        frame, depth = logging.currentframe(), 2
-        while frame.f_code.co_filename == logging.__file__:
-            frame = frame.f_back
-            depth += 1
-
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
-
-
 discord_bot = discord.Client(intents=_intents)
-discord.utils.setup_logging(handler=InterceptLogHandler())
+discord.utils.setup_logging(handler=InterceptHandler())
 
 # TODO: add a check or something that won't let this bot connect to a server other than what is assigned in
 #       the settings
@@ -236,3 +219,19 @@ async def _add_discord_members_to_db_as_players(
                 players.append(player)
 
     return players
+
+
+async def start_discord_bot():
+    """Start the Discord bot."""
+    await discord_bot.start(settings.discord_bot_token.get_secret_value())
+
+
+async def wait_for_discord_to_start(timeout: int = 10) -> None:
+    """Wait for the Discord bot to start."""
+    for _ in range(timeout):
+        if discord_bot.is_ready():
+            return
+        await asyncio.sleep(1)
+    raise TimeoutError(
+        f"Timeout reached in {timeout} seconds. Discord bot did not achieve ready state in the allowed time."
+    )

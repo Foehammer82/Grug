@@ -3,18 +3,16 @@
 import asyncio
 import inspect
 import json
-from collections.abc import Callable
 
 from loguru import logger
 from openai import AsyncOpenAI, OpenAI
 from openai.types.beta import Thread
 from openai.types.beta.threads import RequiredActionFunctionToolCall
 
+from grug.assistant_functions import get_assistant_functions
 from grug.db import async_session
 from grug.models import AssistantResponse, Player
 from grug.settings import settings
-from grug.utils.aon import search_aon
-from grug.utils.food import get_food_history, send_discord_food_reminder
 
 # TODO: setup monitor/log/handle openai rate limits:
 #       https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers
@@ -25,21 +23,19 @@ class Assistant:
 
     def __init__(
         self,
-        assistant_functions: list[Callable] | None = None,
         response_wait_seconds: float = 0.5,
     ):
         """
         Initialize the Assistant class.
 
         Args:
-            assistant_functions (list[Callable], optional): List of functions to add to the assistant. Defaults to None.
             response_wait_seconds (float, optional): The number of seconds to wait between checking the assistant's
                                                      response. Defaults to 0.5.
         """
         self.response_wait_seconds = response_wait_seconds
         self.async_client = AsyncOpenAI(api_key=settings.openai_key.get_secret_value())
         self.sync_client = OpenAI(api_key=settings.openai_key.get_secret_value())
-        self._tools = {str(tool.__name__): tool for tool in assistant_functions} if assistant_functions else {}
+        self._tools = {str(tool.__name__): tool for tool in get_assistant_functions()}
 
         # Create, or Update and Retrieve the assistant
         assistants = {a.name: a.id for a in self.sync_client.beta.assistants.list().data}
@@ -277,10 +273,4 @@ class Assistant:
 
 
 # Instantiate the assistant singleton for use in the application
-assistant = Assistant(
-    assistant_functions=[
-        search_aon,
-        get_food_history,
-        send_discord_food_reminder,
-    ]
-)
+assistant = Assistant()
