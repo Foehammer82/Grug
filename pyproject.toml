@@ -61,7 +61,7 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 minversion = "6.0"
-addopts = "-ra -q"
+addopts = "--cov grug -ra -q"
 testpaths = [
     "tests"
 ]
