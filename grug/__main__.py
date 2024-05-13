@@ -16,8 +16,6 @@ from grug.log_config import init_logging
 from grug.scheduler import start_scheduler
 from grug.settings import settings
 
-# TODO: setup external session handling with redis or pg
-
 
 # noinspection PyUnusedLocal,PyAsyncCall
 @asynccontextmanager
