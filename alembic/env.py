@@ -19,11 +19,11 @@ def run_migrations_offline() -> None:
         url=str(
             PostgresDsn.build(
                 scheme="postgresql",
-                host=settings.pg_host,
-                port=settings.pg_port,
-                username=settings.pg_user,
-                password=settings.pg_pass.get_secret_value(),
-                path=settings.pg_db,
+                host=settings.postgres_host,
+                port=settings.postgres_port,
+                username=settings.postgres_user,
+                password=settings.postgres_password.get_secret_value(),
+                path=settings.postgres_db,
             )
         ),
         target_metadata=target_metadata,

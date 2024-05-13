@@ -11,11 +11,11 @@ async_engine = create_async_engine(
     url=str(
         PostgresDsn.build(
             scheme="postgresql+asyncpg",
-            host=settings.pg_host,
-            port=settings.pg_port,
-            username=settings.pg_user,
-            password=settings.pg_pass.get_secret_value(),
-            path=settings.pg_db,
+            host=settings.postgres_host,
+            port=settings.postgres_port,
+            username=settings.postgres_user,
+            password=settings.postgres_password.get_secret_value(),
+            path=settings.postgres_db,
         )
     ),
     echo=False,
@@ -36,11 +36,11 @@ def init_db():
             str(
                 PostgresDsn.build(
                     scheme="postgresql",
-                    host=settings.pg_host,
-                    port=settings.pg_port,
-                    username=settings.pg_user,
-                    password=settings.pg_pass.get_secret_value(),
-                    path=settings.pg_db,
+                    host=settings.postgres_host,
+                    port=settings.postgres_port,
+                    username=settings.postgres_user,
+                    password=settings.postgres_password.get_secret_value(),
+                    path=settings.postgres_db,
                 )
             )
         )

@@ -8,10 +8,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
 
 
-# TODO: configure to allow secret files for secret values so that env vars don't show the values as plaintext on
-#       the container description
-# TODO: add descriptions to fields here to auto generate documentation for use in deployment instructions
-# noinspection PyNestedDecorators
 class Settings(BaseSettings):
     """Settings for the Grug Bot."""
 
@@ -37,7 +33,7 @@ class Settings(BaseSettings):
 
     # API Settings
     api_port: int = 9000
-    api_host: str = "localhost"
+    api_host: str = "0.0.0.0"
 
     # Bot Settings
     bot_name: str = "Grug"
@@ -68,11 +64,11 @@ class Settings(BaseSettings):
     )
 
     # Database Settings
-    pg_user: str
-    pg_pass: SecretStr
-    pg_host: str
-    pg_port: int = 5342
-    pg_db: str = "postgres"
+    postgres_user: str
+    postgres_password: SecretStr
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "postgres"
 
     # OpenAI Settings
     openai_key: SecretStr
