@@ -4,9 +4,6 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-[![pipeline status](https://gitlab.com/Foehammer82/Grug/badges/main/pipeline.svg)](https://gitlab.com/Foehammer82/Grug/-/commits/main)
-[![coverage report](https://gitlab.com/Foehammer82/Grug/badges/main/coverage.svg)](https://gitlab.com/Foehammer82/Grug/-/commits/main)
-
 ## Project Roadmap / TODO List
 
 - [x] Grug is able to respond to discord messages
