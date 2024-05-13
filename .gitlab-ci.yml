@@ -34,8 +34,7 @@ build-grug-image:
   rules:
     - if: $CI_COMMIT_REF_NAME == "main"
   tags:
-    - docker
-  image: docker:26-dind
+    - kronos
   variables:
     IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_REF_SLUG
   script:
