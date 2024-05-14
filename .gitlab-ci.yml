@@ -20,7 +20,7 @@ unit-tests:
   script:
     - pip install poetry
     - poetry install
-    - poetry run python -m pytest --cov-report term --cov-report xml:coverage.xml --junitxml=report.xml tests/unit
+    - poetry run python -m pytest --cov grug --cov-report term --cov-report xml:coverage.xml --junitxml=report.xml tests/unit
   artifacts:
     when: always
     reports:

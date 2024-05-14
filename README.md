@@ -4,7 +4,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-## Project Roadmap / TODO List
+## Project Roadmap / ToDo List
 
 - [x] Grug is able to respond to discord messages
 - [x] Grug is aware of DnD schedules and handles food reminders and who's on for food
