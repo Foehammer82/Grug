@@ -12,6 +12,7 @@ from grug.api_routers import routers
 from grug.assistant_interfaces.discord_interface import start_discord_bot
 from grug.auth import init_auth
 from grug.db import init_db
+from grug.health import initialize_health_endpoints
 from grug.log_config import init_logging
 from grug.metrics import initialize_metrics
 from grug.scheduler import start_scheduler
@@ -40,6 +41,10 @@ for router in routers:
 # Initialize metrics if enabled
 if settings.enable_metrics:
     initialize_metrics(app)
+
+# Initialize health endpoints if enabled
+if settings.enable_health_endpoint:
+    initialize_health_endpoints(app)
 
 
 if __name__ == "__main__":

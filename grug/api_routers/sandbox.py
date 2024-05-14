@@ -6,7 +6,7 @@ from loguru import logger
 from grug.auth import get_current_active_user
 from grug.models import User
 
-router = APIRouter()
+router = APIRouter(tags=["Sandbox API"], prefix="/api/v1")
 
 
 @router.get("/")
@@ -16,12 +16,6 @@ def index() -> str:
     logger.info({"test": 1})
 
     return "Hello, world!"
-
-
-@router.get("/health")
-def healthy() -> str:
-    """Health check route."""
-    return "Healthy"
 
 
 @router.get("/secure", dependencies=[Depends(get_current_active_user)])
