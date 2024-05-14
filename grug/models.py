@@ -1,6 +1,6 @@
 """SQLModel classes for the bot's database."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Optional
 
@@ -113,7 +113,6 @@ class DiscordServer(SQLModel, table=True):
 class Event(SQLModel, table=True):
     """Model for an event."""
 
-    # TODO: add a cron validator to make sure the cron string is good
     # TODO: either as a method or a separate function, will need to have a way to get food and attendance history
 
     __tablename__ = "events"
@@ -141,19 +140,13 @@ class Event(SQLModel, table=True):
     event_schedule_end_date: date | None = None
 
     # Food Tracking
-    # TODO: trigger scheduler updates whenever these values change or are created so that a scheduler can be created
-    #       or updated to send reminders
     track_food: bool = True
-    food_reminder_days_in_advance: int = 3
-    food_reminder_time: time = time(hour=11, minute=0)
+    food_reminder_cron: str | None = None
     food: list["EventFood"] = Relationship(back_populates="event")
 
     # Attendance Tracking
-    # TODO: trigger scheduler updates whenever these values change or are created so that a scheduler can be created
-    #       or updated to send reminders
     track_attendance: bool = True
-    attendance_check_days_in_advance: int = 2
-    attendance_check_time: time = time(hour=11, minute=0)
+    attendance_reminder_cron: str | None = None
     attendance: list["EventAttendance"] = Relationship(back_populates="event")
 
 
