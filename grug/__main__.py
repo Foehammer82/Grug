@@ -35,7 +35,6 @@ app = FastAPI(lifespan=lifespan)
 for router in routers:
     app.include_router(router)
 
-
 if __name__ == "__main__":
     logger.info({"app_settings": settings.dict()})
 

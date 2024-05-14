@@ -21,6 +21,7 @@
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
     - these instructions should be clear and complete enough that someone could mindlessly follow them with no previous
       experience and get a Grug of their own deployed
+- [ ] metrics endpoint (i.e. https://github.com/trallnag/prometheus-fastapi-instrumentator)
 
 ### Nice To Have One-Day Features
 

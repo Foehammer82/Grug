@@ -17,9 +17,6 @@ RUN poetry install --only=main
 COPY alembic alembic
 COPY alembic.ini alembic.ini
 
-# Copy config files
-COPY config config
-
 # Copy application files
 COPY grug grug
 
