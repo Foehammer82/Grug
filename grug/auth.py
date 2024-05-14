@@ -15,7 +15,7 @@ from starlette.requests import Request
 from grug.models import User
 from grug.settings import settings
 
-auth_router = APIRouter(tags=["auth"])
+auth_router = APIRouter(tags=["Auth"])
 
 
 class Token(BaseModel):

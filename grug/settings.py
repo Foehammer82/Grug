@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     # General Settings
     admin_user: str = "admin"
     admin_password: SecretStr = SecretStr("password")
+    enable_metrics: bool = True
 
     # Security Settings
     security_key: SecretStr = Field(

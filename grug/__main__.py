@@ -13,6 +13,7 @@ from grug.assistant_interfaces.discord_interface import start_discord_bot
 from grug.auth import init_auth
 from grug.db import init_db
 from grug.log_config import init_logging
+from grug.metrics import initialize_metrics
 from grug.scheduler import start_scheduler
 from grug.settings import settings
 
@@ -32,8 +33,14 @@ async def lifespan(fast_api_app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Include all API routers
 for router in routers:
     app.include_router(router)
+
+# Initialize metrics if enabled
+if settings.enable_metrics:
+    initialize_metrics(app)
+
 
 if __name__ == "__main__":
     logger.info({"app_settings": settings.dict()})
