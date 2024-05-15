@@ -19,7 +19,7 @@ email-validator = "^2.1.1"
 apscheduler = { version = "<=4", allow-prereleases = true }
 croniter = "^2.0.2"
 openai = "^1.13.3"
-psycopg2 = "^2.9.9"
+psycopg2-binary = "^2.9.9"
 loguru = "^0.7.2"
 elasticsearch = "^8.13.1"
 sqladmin = {extras = ["full"], version = "^0"}
