@@ -19,7 +19,7 @@ from grug.utils.attendance import send_attendance_reminder
 from grug.utils.food import send_food_reminder
 
 scheduler = AsyncScheduler(
-    data_store=SQLAlchemyDataStore(engine=async_engine),
+    data_store=SQLAlchemyDataStore(engine_or_url=async_engine),
     event_broker=AsyncpgEventBroker.from_async_sqla_engine(engine=async_engine),
 )
 
