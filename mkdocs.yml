@@ -1,0 +1,8 @@
+site_name: "Grug Docs"
+
+theme:
+  name: "material"
+
+plugins:
+  - search
+  - mkdocstrings
