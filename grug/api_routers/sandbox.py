@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from loguru import logger
 
+from grug.assistant_functions.food import send_discord_food_reminder
 from grug.auth import get_current_active_user
 from grug.models import User
 
@@ -30,3 +31,8 @@ async def read_users_me(
 ):
     """Return the current user."""
     return current_user
+
+
+@router.get("/send-food-reminder")
+async def send_food_reminder():
+    await send_discord_food_reminder()
