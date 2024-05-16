@@ -1,5 +1,7 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
+# look into adding https://github.com/Yelp/detect-secrets
+# if i have sql files https://github.com/sqlfluff/sqlfluff
 
 # pre-commit run --all-files
 
@@ -13,6 +15,8 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
         exclude: alembic/versions/
+      - id: detect-private-key
+      - id: check-docstring-first
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.15.2
     hooks:
@@ -32,17 +36,20 @@ repos:
     hooks:
       - id: black
         exclude: alembic/versions/
+#  - repo: https://github.com/pre-commit/mirrors-mypy
+#    rev: 'v1.10.0'
+#    hooks:
+#      - id: mypy
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.4.3
+    rev: v0.4.4
     hooks:
       - id: ruff
         exclude: ^alembic/
-#  - repo: https://github.com/econchick/interrogate
-#    rev: 1.7.0
-#    hooks:
-#      - id: interrogate
-#        pass_filenames: false
   - repo: https://github.com/python-poetry/poetry
     rev: 1.8.0
     hooks:
       - id: poetry-check
+#  - repo: https://github.com/PyCQA/bandit
+#    rev: 1.7.8
+#    hooks:
+#      - id: bandit
