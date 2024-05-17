@@ -64,7 +64,8 @@ async def _respond_to_dm(message: discord.Message):
             db_user: Player | None = result.scalars().one_or_none()
 
         # Send the message to the assistant
-        assistant_response = await assistant.send_direct_message(message=message.content, player=db_user)
+        if db_user:
+            assistant_response = await assistant.send_direct_message(message=message.content, player=db_user)
 
         max_discord_message_length = 2000
         for output in [
@@ -97,7 +98,7 @@ async def _respond_to_channel_mention(message: discord.Message):
             )
             player: Player | None = result.scalars().one_or_none()
 
-            if discord_channel and discord_channel.assistant_thread_id:
+            if discord_channel and discord_channel.assistant_thread_id and player:
                 assistant_response = await assistant.send_group_message(
                     message=message.content,
                     thread_id=discord_channel.assistant_thread_id,
@@ -105,10 +106,11 @@ async def _respond_to_channel_mention(message: discord.Message):
                 )
 
             else:
-                assistant_response = await assistant.send_group_message(
-                    message=message.content,
-                    player=player,
-                )
+                if player:
+                    assistant_response = await assistant.send_group_message(
+                        message=message.content,
+                        player=player,
+                    )
 
                 if discord_channel:
                     discord_channel.assistant_thread_id = assistant_response.thread_id

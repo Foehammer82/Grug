@@ -29,7 +29,7 @@ async def get_food_history(show_only_active_players: bool = True) -> list[Brough
         dnd_session_result = await session.execute(
             select(DndSession)
             .where(DndSession.discord_guild_id == str(settings.discord_server_id))
-            .order_by(DndSession.session_start_datetime.desc())
+            .order_by(DndSession.session_start_datetime.desc())  # type: ignore
             .options(selectinload(DndSession.food_bringer))
         )
 
@@ -184,29 +184,31 @@ class DiscordFoodBringerDropdown(discord.ui.Select):
             if food_selection_message is None:
                 raise Exception("food_selection_message should have been instantiated when the " "message was sent")
 
-            dnd_session: DndSession | None = (
-                (
-                    await session.execute(
-                        select(DndSession).where(DndSession.id == food_selection_message.dnd_session_id)
+            if player_id is not None:
+                dnd_session: DndSession | None = (
+                    (
+                        await session.execute(
+                            select(DndSession).where(DndSession.id == food_selection_message.dnd_session_id)
+                        )
                     )
+                    .scalars()
+                    .one_or_none()
                 )
-                .scalars()
-                .one_or_none()
+
+                dnd_session.food_bringer_player_id = player_id  # type: ignore
+
+                session.add(dnd_session)
+                await session.commit()
+
+        if dnd_session:
+            logger.info(
+                f"Player {player_name} selected to bring food for {dnd_session.session_start_datetime.date().isoformat()}"
             )
 
-            dnd_session.food_bringer_player_id = player_id
-
-            session.add(dnd_session)
-            await session.commit()
-
-        logger.info(
-            f"Player {player_name} selected to bring food for {dnd_session.session_start_datetime.date().isoformat()}"
-        )
-
-        # noinspection PyUnresolvedReferences
-        await interaction.response.send_message(
-            f"Grug hear {player_name} bring food " f"{dnd_session.session_start_datetime.date().isoformat()}"
-        )
+            # noinspection PyUnresolvedReferences
+            await interaction.response.send_message(
+                f"Grug hear {player_name} bring food " f"{dnd_session.session_start_datetime.date().isoformat()}"
+            )
 
 
 class DiscordFoodBringerSelectionView(discord.ui.View):

@@ -1,16 +1,18 @@
 import importlib
 import inspect
 import pkgutil
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 
-def get_assistant_functions() -> list[callable]:
+def get_assistant_functions() -> list[Callable[[], Any]]:
     """Return a list of all assistant functions."""
 
-    output: list[callable] = []
+    output: list[Callable[[], Any]] = []
 
     # Import all assistant_functions from the submodules
-    for importer, modname, ispkg in pkgutil.iter_modules([Path(__file__).parent]):
+    for importer, modname, ispkg in pkgutil.iter_modules([Path(__file__).parent.as_posix()]):
         module = importlib.import_module(f".{modname}", package="grug.assistant_functions")
 
         for obj in inspect.getmembers(module):

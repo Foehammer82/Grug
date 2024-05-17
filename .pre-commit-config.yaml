@@ -1,9 +1,3 @@
-# See https://pre-commit.com for more information
-# See https://pre-commit.com/hooks.html for more hooks
-# look into adding https://github.com/Yelp/detect-secrets
-
-# pre-commit run --all-files
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -35,10 +29,17 @@ repos:
     hooks:
       - id: black
         exclude: alembic/versions/
-#  - repo: https://github.com/pre-commit/mirrors-mypy
-#    rev: 'v1.10.0'
-#    hooks:
-#      - id: mypy
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v1.10.0'
+    hooks:
+      - id: mypy
+        exclude: ^alembic/
+        args:
+          - --ignore-missing-imports
+          - --disable-error-code=call-arg
+          - --disable-error-code=misc
+          - --install-types
+          - --non-interactive
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.4
     hooks:
@@ -52,5 +53,5 @@ repos:
     rev: 1.7.8
     hooks:
       - id: bandit
-        args: ["-c", "pyproject.toml"]
-        additional_dependencies: ["bandit[toml]"]
+        args: [ "-c", "pyproject.toml" ]
+        additional_dependencies: [ "bandit[toml]" ]

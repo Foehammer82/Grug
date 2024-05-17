@@ -44,6 +44,7 @@ def get_user(username: str) -> User | None:
     # if the username is not the admin user, check the database for the user
     else:
         logger.error("General user lookup is not implemented yet.  returning None.")
+        return None
 
 
 def authenticate_user(username: str, password: str):
@@ -51,7 +52,7 @@ def authenticate_user(username: str, password: str):
     user = get_user(username)
 
     # Check if the user is the system admin account
-    if user.username == settings.admin_user:
+    if user and user.username == settings.admin_user:
         # Check if the password is the admin password
         if secrets.compare_digest(password, settings.admin_password.get_secret_value()):
             return user
@@ -89,11 +90,15 @@ def create_access_token(username: str, expires_delta: timedelta | None = None):
         The encoded JWT token.
     """
     to_encode = {"sub": username}.copy()
-    if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
-    else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
+    to_encode.update(
+        {
+            "exp": (
+                (datetime.now(timezone.utc) + expires_delta).isoformat()
+                if expires_delta
+                else (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+            )
+        }
+    )
     encoded_jwt = jwt.encode(to_encode, settings.security_key.get_secret_value(), algorithm=settings.security_algorithm)
     return encoded_jwt
 
@@ -122,7 +127,7 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
-    user = get_user(username=token_data.username)
+    user = get_user(username=token_data.username) if token_data.username else None
     if user is None:
         raise credentials_exception
     return user

@@ -38,7 +38,7 @@ async def start_scheduler():
 
 
 @event.listens_for(Event, "after_insert")
-def handle_event_model_created(mapper: Mapper, connection: Connection, event_model: Event) -> Event:
+def handle_event_model_created(mapper: Mapper, connection: Connection, event_model: Event):
     if event_model.track_food:
         asyncio.run(
             scheduler.add_schedule(
@@ -64,7 +64,7 @@ def handle_event_model_created(mapper: Mapper, connection: Connection, event_mod
 
 
 @event.listens_for(Event, "after_update")
-def handle_event_model_updated(mapper: Mapper, connection: Connection, event_model: Event) -> Event:
+def handle_event_model_updated(mapper: Mapper, connection: Connection, event_model: Event):
     with suppress(ScheduleLookupError):
         # Update the food reminder job
         if event_model.track_food:
@@ -100,7 +100,7 @@ def handle_event_model_updated(mapper: Mapper, connection: Connection, event_mod
 
 
 @event.listens_for(Event, "after_delete")
-def handle_event_model_deleted(mapper: Mapper, connection: Connection, event_model: Event) -> Event:
+def handle_event_model_deleted(mapper: Mapper, connection: Connection, event_model: Event):
     """Remove food and attendance reminder jobs from the scheduler when an event is deleted."""
     asyncio.run(scheduler.remove_schedule(id=f"event_{event_model.id}_food_reminder"))
     asyncio.run(scheduler.remove_schedule(id=f"event_{event_model.id}_attendance_reminder"))
