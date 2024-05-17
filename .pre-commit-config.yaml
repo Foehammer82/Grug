@@ -1,7 +1,6 @@
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
 # look into adding https://github.com/Yelp/detect-secrets
-# if i have sql files https://github.com/sqlfluff/sqlfluff
 
 # pre-commit run --all-files
 
@@ -49,7 +48,9 @@ repos:
     rev: 1.8.0
     hooks:
       - id: poetry-check
-#  - repo: https://github.com/PyCQA/bandit
-#    rev: 1.7.8
-#    hooks:
-#      - id: bandit
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.8
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml"]
+        additional_dependencies: ["bandit[toml]"]

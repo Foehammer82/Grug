@@ -20,5 +20,8 @@ COPY alembic.ini alembic.ini
 # Copy application files
 COPY grug grug
 
+EXPOSE 9000
+ENV API_HOST="0.0.0.0"
+
 # Run the application
 CMD poetry run python grug

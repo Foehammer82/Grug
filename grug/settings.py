@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # API Settings
     api_port: int = 9000
-    api_host: str = "0.0.0.0"
+    api_host: str = "localhost"
 
     # Bot Settings
     bot_name: str = "Grug"

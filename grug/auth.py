@@ -67,8 +67,8 @@ def authenticate_user(username: str, password: str):
             dklen=64,
         )
 
-        # TODO: remove this assert once implemented...
-        assert hashed_password is not None
+        if hashed_password is not None:
+            raise NotImplementedError("General user authentication is not implemented yet.")
 
         # TODO: lookup the user in the database and confirm their hashed_password against the stored hash
         logger.error("General user authentication is not implemented yet.")
@@ -172,7 +172,7 @@ async def login_for_access_token(
         username=user.username,
         expires_delta=timedelta(minutes=settings.security_access_token_expire_minutes),
     )
-    return Token(access_token=access_token, token_type="bearer")
+    return Token(access_token=access_token, token_type="bearer")  # noqa: B106
 
 
 class AdminAuth(AuthenticationBackend):
