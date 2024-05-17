@@ -12,8 +12,7 @@ def admin_auth(settings):
 
 
 @pytest.mark.asyncio
-async def test_admin_auth_login(admin_auth, settings):
-    # Test a successful admin login
+async def test_admin_auth_login_expected_success(admin_auth, settings):
     mock_good_login_request = MagicMock()
     mock_good_login_request.form = AsyncMock(
         return_value={"username": settings.admin_user, "password": settings.admin_password.get_secret_value()}
@@ -21,6 +20,9 @@ async def test_admin_auth_login(admin_auth, settings):
 
     assert await admin_auth.login(mock_good_login_request) is True
 
+
+@pytest.mark.asyncio
+async def test_admin_auth_login_expected_failure(admin_auth, settings):
     # Test a failed admin login
     mock_bad_login_request = MagicMock()
     mock_bad_login_request.form = AsyncMock(return_value={"username": settings.admin_user, "password": "bad_password"})
@@ -37,19 +39,25 @@ async def test_admin_auth_logout(admin_auth):
 
 
 @pytest.mark.asyncio
-async def test_admin_auth_authenticate(admin_auth, settings):
+async def test_admin_auth_authenticate_expected_success(admin_auth, settings):
     # Test a successful admin authentication
     mock_authenticated_request = MagicMock()
     mock_authenticated_request.session = {"token": create_access_token(settings.admin_user)}
 
     assert await admin_auth.authenticate(mock_authenticated_request) is True
 
+
+@pytest.mark.asyncio
+async def test_admin_auth_authenticate_expected_failure(admin_auth, settings):
     # Test a failed admin authentication
     mock_unauthenticated_request = MagicMock()
     mock_unauthenticated_request.session = {}
 
     assert await admin_auth.authenticate(mock_unauthenticated_request) is False
 
+
+@pytest.mark.asyncio
+async def test_admin_auth_authenticate_expired_token(admin_auth, settings):
     # Test expired token
     mock_expired_authenticate_request = MagicMock()
     mock_expired_authenticate_request.session = {

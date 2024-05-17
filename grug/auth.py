@@ -92,10 +92,12 @@ def create_access_token(username: str, expires_delta: timedelta | None = None):
     to_encode = {"sub": username}.copy()
     to_encode.update(
         {
-            "exp": (
-                (datetime.now(timezone.utc) + expires_delta).isoformat()
-                if expires_delta
-                else (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat()
+            "exp": str(
+                int(
+                    (datetime.now(timezone.utc) + expires_delta).timestamp()
+                    if expires_delta
+                    else (datetime.now(timezone.utc) + timedelta(minutes=15)).timestamp()
+                )
             )
         }
     )
