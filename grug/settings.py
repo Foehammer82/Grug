@@ -78,7 +78,7 @@ class Settings(BaseSettings):
 
     # OpenAI Settings
     openai_key: SecretStr
-    openai_model: str = "gpt-3.5-turbo"
+    openai_model: str = "gpt-4o"
 
     @computed_field
     @property
