@@ -1,6 +1,5 @@
 """Main entry point for the grug package."""
 
-import asyncio
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -9,17 +8,16 @@ from loguru import logger
 
 from grug.admin import init_admin
 from grug.api_routers import routers
-from grug.assistant_interfaces.discord_interface import start_discord_bot
+from grug.assistant_interfaces.discord_interface import init_discord_bot
 from grug.auth import init_auth
 from grug.db import init_db
 from grug.health import initialize_health_endpoints
 from grug.log_config import init_logging
 from grug.metrics import initialize_metrics
-from grug.scheduler import start_scheduler
+from grug.scheduler import init_scheduler
 from grug.settings import settings
 
 
-# noinspection PyUnusedLocal,PyAsyncCall
 @asynccontextmanager
 async def lifespan(fast_api_app: FastAPI):
     """Lifespan event handler for the FastAPI app."""
@@ -27,8 +25,8 @@ async def lifespan(fast_api_app: FastAPI):
     init_db()
     init_auth(fast_api_app)
     init_admin(fast_api_app)
-    asyncio.create_task(start_discord_bot())
-    asyncio.create_task(start_scheduler())
+    init_discord_bot()
+    init_scheduler()
     yield
 
 

@@ -26,6 +26,7 @@ _intents.members = True
 discord_bot = discord.Client(intents=_intents)
 discord.utils.setup_logging(handler=InterceptHandler())
 
+
 # TODO: add a check or something that won't let this bot connect to a server other than what is assigned in
 #       the settings
 
@@ -223,9 +224,10 @@ async def _add_discord_members_to_db_as_players(
     return players
 
 
-async def start_discord_bot():
+def init_discord_bot():
     """Start the Discord bot."""
-    await discord_bot.start(settings.discord_bot_token.get_secret_value())
+    discord_task = asyncio.create_task(discord_bot.start(settings.discord_bot_token.get_secret_value()))
+    logger.info(f"Discord bot initialized with task ID {discord_task.get_name()}")
 
 
 async def wait_for_discord_to_start(timeout: int = 10) -> None:

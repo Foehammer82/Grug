@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     # Scheduler Settings
     # TODO: deprecated, remove this once we cut over to the dynamic scheduler
     dnd_session_food_reminder_cron: str = Field(
-        default="30 * * * *",
+        default="*/10 * * * *",
         description="Defines the scheduled time for the food reminder",
     )
     dnd_session_schedule_cron: str = Field(

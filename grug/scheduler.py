@@ -2,12 +2,14 @@
 
 import asyncio
 from contextlib import suppress
+from datetime import datetime
 
-from apscheduler import AsyncScheduler, ConflictPolicy, ScheduleLookupError
+from apscheduler import AsyncScheduler, ConflictPolicy, Schedule, ScheduleLookupError
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
 from apscheduler.triggers.cron import CronTrigger
 from loguru import logger
+from pydantic import BaseModel, computed_field
 from sqlalchemy import Connection, event
 from sqlalchemy.orm import Mapper
 
@@ -24,17 +26,58 @@ scheduler = AsyncScheduler(
 )
 
 
-async def start_scheduler():
-    """Start the scheduler."""
-    async with scheduler:
-        await scheduler.add_schedule(
-            func_or_task_id=send_discord_food_reminder,
-            trigger=CronTrigger.from_crontab(settings.dnd_session_food_reminder_cron),
-            id="food-reminder",
-            conflict_policy=ConflictPolicy.replace,
+def init_scheduler():
+    """Initialize the scheduler."""
+
+    async def start_scheduler():
+        async with scheduler:
+            # TODO: remove this schedule once the new system is online
+            await scheduler.add_schedule(
+                func_or_task_id=send_discord_food_reminder,
+                trigger=CronTrigger.from_crontab(settings.dnd_session_food_reminder_cron),
+                id="food-reminder",
+                conflict_policy=ConflictPolicy.replace,
+            )
+
+            await scheduler.run_until_stopped()
+
+    scheduler_task = asyncio.create_task(start_scheduler())
+    logger.info(f"Scheduler started with task ID {scheduler_task.get_name()}")
+
+
+class ScheduleModel(BaseModel):
+    id: str
+    paused: bool
+    last_fire_time: datetime | None = None
+    next_fire_time: datetime | None = None
+    task_id: str | None = None
+
+    @computed_field
+    @property
+    def scheduler_state(self) -> str:
+        return scheduler.state.name
+
+    @classmethod
+    def _from_schedule(cls, schedule: Schedule):
+        return cls(
+            id=schedule.id,
+            paused=schedule.paused,
+            last_fire_time=schedule.last_fire_time,
+            next_fire_time=schedule.next_fire_time,
+            task_id=schedule.task_id,
         )
 
-    await scheduler.run_until_stopped()
+    @classmethod
+    async def get_all(cls):
+        schedules = await scheduler.get_schedules()
+
+        return [cls._from_schedule(schedule) for schedule in schedules]
+
+    @classmethod
+    async def get(cls, schedule_id: str):
+        schedule = await scheduler.get_schedule(id=schedule_id)
+
+        return cls._from_schedule(schedule)
 
 
 @event.listens_for(Event, "after_insert")
