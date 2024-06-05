@@ -73,67 +73,53 @@ def handle_event_model_created(mapper: Mapper, connection: Connection, event_mod
     from grug.utils.attendance import send_attendance_reminder
     from grug.utils.food import send_food_reminder
 
-    if event_model.track_food:
-        asyncio.create_task(
-            scheduler.add_schedule(
-                func_or_task_id=send_food_reminder,
-                trigger=event_model.get_food_reminder_calendar_interval_trigger(),
-                id=f"event_{event_model.id}_food_reminder",
-                conflict_policy=ConflictPolicy.replace,
-                kwargs={"event_id": event_model.id},
-            )
+    # Create the food reminder schedule for the given event
+    asyncio.create_task(
+        scheduler.add_schedule(
+            func_or_task_id=send_food_reminder,
+            trigger=event_model.get_food_reminder_calendar_interval_trigger(),
+            id=f"event_{event_model.id}_food_reminder",
+            conflict_policy=ConflictPolicy.replace,
+            kwargs={"event_id": event_model.id},
+            paused=(not event_model.track_food),
         )
-        logger.info(f"Created food reminder job for event {event_model.id}")
-    if event_model.track_attendance:
-        asyncio.create_task(
-            scheduler.add_schedule(
-                func_or_task_id=send_attendance_reminder,
-                trigger=event_model.get_attendance_reminder_calendar_interval_trigger(),
-                id=f"event_{event_model.id}_attendance_reminder",
-                conflict_policy=ConflictPolicy.replace,
-                kwargs={"event_id": event_model.id},
-            )
+    )
+    logger.info(f"Created food reminder job for event {event_model.id} [paused={not event_model.track_food}]")
+
+    # Create the attendance reminder schedule for the given event
+    asyncio.create_task(
+        scheduler.add_schedule(
+            func_or_task_id=send_attendance_reminder,
+            trigger=event_model.get_attendance_reminder_calendar_interval_trigger(),
+            id=f"event_{event_model.id}_attendance_reminder",
+            conflict_policy=ConflictPolicy.replace,
+            kwargs={"event_id": event_model.id},
+            paused=(not event_model.track_attendance),
         )
-        logger.info(f"Created attendance reminder job for event {event_model.id}")
+    )
+    logger.info(
+        f"Created attendance reminder job for event {event_model.id} [paused={not event_model.track_attendance}]"
+    )
 
 
 @event.listens_for(Event, "after_update")
 def handle_event_model_updated(mapper: Mapper, connection: Connection, event_model: Event):
-    from grug.utils.attendance import send_attendance_reminder
-    from grug.utils.food import send_food_reminder
-
     with suppress(ScheduleLookupError):
         # Update the food reminder job
         if event_model.track_food:
-            asyncio.create_task(
-                scheduler.add_schedule(
-                    func_or_task_id=send_food_reminder,
-                    trigger=event_model.get_food_reminder_calendar_interval_trigger(),
-                    id=f"event_{event_model.id}_food_reminder",
-                    conflict_policy=ConflictPolicy.replace,
-                    kwargs={"event_id": event_model.id},
-                )
-            )
-            logger.info(f"Updated/Created food reminder job for event {event_model.id}")
+            asyncio.create_task(scheduler.unpause_schedule(id=f"event_{event_model.id}_food_reminder"))
+            logger.info(f"Un-paused food reminder job for event {event_model.id}")
         else:
-            asyncio.create_task(scheduler.remove_schedule(id=f"event_{event_model.id}_food_reminder"))
-            logger.info(f"Removed food reminder job for event {event_model.id}")
+            asyncio.create_task(scheduler.pause_schedule(id=f"event_{event_model.id}_food_reminder"))
+            logger.info(f"Paused food reminder job for event {event_model.id}")
 
         # Update the attendance reminder job
         if event_model.track_attendance:
-            asyncio.create_task(
-                scheduler.add_schedule(
-                    func_or_task_id=send_attendance_reminder,
-                    trigger=event_model.get_attendance_reminder_calendar_interval_trigger(),
-                    id=f"event_{event_model.id}_attendance_reminder",
-                    conflict_policy=ConflictPolicy.replace,
-                    kwargs={"event_id": event_model.id},
-                )
-            )
-            logger.info(f"Updated/Created attendance reminder job for event {event_model.id}")
+            asyncio.create_task(scheduler.unpause_schedule(id=f"event_{event_model.id}_attendance_reminder"))
+            logger.info(f"Un-paused attendance reminder job for event {event_model.id}")
         else:
-            asyncio.create_task(scheduler.remove_schedule(id=f"event_{event_model.id}_attendance_reminder"))
-            logger.info(f"Removed attendance reminder job for event {event_model.id}")
+            asyncio.create_task(scheduler.pause_schedule(id=f"event_{event_model.id}_attendance_reminder"))
+            logger.info(f"Paused attendance reminder job for event {event_model.id}")
 
 
 @event.listens_for(Event, "after_delete")
