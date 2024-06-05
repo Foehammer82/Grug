@@ -1,5 +1,7 @@
 FROM python:3.11-slim
 
+RUN apt-get update && apt-get install -y curl
+
 ARG WORKDIR=/app
 
 WORKDIR $WORKDIR
@@ -26,5 +28,5 @@ ENV API_HOST="0.0.0.0"
 # Start the application
 CMD poetry run python grug
 
-#HEALTHCHECK --start-period=10s --interval=30s --timeout=10s \
-#  CMD curl -f http://localhost:9000/health/ || exit 1
+HEALTHCHECK --start-period=20s --interval=60s --timeout=10s \
+  CMD curl -f http://localhost:9000/health/ || exit 1
