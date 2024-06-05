@@ -47,6 +47,16 @@ class UserAdmin(ModelView, model=User):
         },
     }
 
+    # Detail Page Options
+    column_details_exclude_list = [
+        "id",
+        "secrets",
+        "assistant_thread_id",
+        "auto_created",
+        "event_attendance",
+        "brought_food_for",
+    ]
+
 
 class GroupAdmin(ModelView, model=Group):
     """Admin interface for the Group model."""
@@ -72,9 +82,16 @@ class GroupAdmin(ModelView, model=Group):
         },
     }
 
+    # Detail Page Options
+    column_details_exclude_list = ["id", "auto_created"]
+
 
 class DiscordAccountAdmin(ModelView, model=DiscordAccount):
     """Admin interface for the DiscordAccount model."""
+
+    # TODO: create an event listener that triggers before a change to the discord_member_id field that checks
+    #       checks if that user id exists in discord and grabbing the username if it does.  in short, when editing the
+    #       discord account, only the discord id should be edited, the rest should be pulled.
 
     name = "Discord Account"
     name_plural = "Discord Accounts"
@@ -94,13 +111,16 @@ class DiscordAccountAdmin(ModelView, model=DiscordAccount):
     ]
 
     # Form Options
-    # form_excluded_columns = [Group.events]
+    form_excluded_columns = ["discord_member_name"]
     form_ajax_refs = {
         "user": {
             "fields": ("username",),
             "order_by": "username",
         }
     }
+
+    # Detail Page Options
+    column_details_exclude_list = ["id", "user_id"]
 
 
 class DiscordServerAdmin(ModelView, model=DiscordServer):
@@ -123,13 +143,16 @@ class DiscordServerAdmin(ModelView, model=DiscordServer):
     ]
 
     # Form Options
-    form_excluded_columns = [DiscordServer.discord_text_channels]
+    form_excluded_columns = [DiscordServer.discord_text_channels, DiscordServer.discord_guild_name]
     form_ajax_refs = {
         "group": {
             "fields": ("name",),
             "order_by": "name",
         }
     }
+
+    # Detail Page Options
+    column_details_exclude_list = ["id", "discord_text_channels", "group_id"]
 
 
 class EventAdmin(ModelView, model=Event):
@@ -145,6 +168,15 @@ class EventAdmin(ModelView, model=Event):
 
     # Form Options
     form_excluded_columns = [Event.food, Event.attendance]
+    form_ajax_refs = {
+        "group": {
+            "fields": ("name",),
+            "order_by": "name",
+        }
+    }
+
+    # Detail Page Options
+    column_details_exclude_list = ["id", "group_id"]
 
 
 class EventFoodAdmin(ModelView, model=EventFood):
@@ -154,8 +186,24 @@ class EventFoodAdmin(ModelView, model=EventFood):
     category = "Events"
 
     # List Page
-    column_list = [EventFood.id, EventFood.event_date]
+    column_list = [EventFood.id, EventFood.event_date, "user_assigned_food.friendly_name", "food_name"]
     column_sortable_list = [EventFood.event_date]
+
+    # Form Options
+    form_excluded_columns = ["discord_messages"]
+    form_ajax_refs = {
+        "event": {
+            "fields": ("name",),
+            "order_by": "name",
+        },
+        "user_assigned_food": {
+            "fields": ("username",),
+            "order_by": "username",
+        },
+    }
+
+    # Detail Page Options
+    column_details_exclude_list = ["id", "user_assigned_food_id", "event_id", "discord_messages"]
 
 
 class EventAttendanceAdmin(ModelView, model=EventAttendance):
@@ -167,6 +215,22 @@ class EventAttendanceAdmin(ModelView, model=EventAttendance):
     # List Page
     column_list = [EventAttendance.id, EventAttendance.event_date]
     column_sortable_list = [EventAttendance.event_date]
+
+    # Form Options
+    form_excluded_columns = ["discord_messages"]
+    form_ajax_refs = {
+        "event": {
+            "fields": ("name",),
+            "order_by": "name",
+        },
+        "users": {
+            "fields": ("username",),
+            "order_by": "username",
+        },
+    }
+
+    # Detail Page Options
+    column_details_exclude_list = ["id", "user_assigned_food_id", "event_id", "discord_messages"]
 
 
 def init_admin(app: FastAPI):

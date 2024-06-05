@@ -183,7 +183,7 @@ class DiscordAccount(SQLModel, table=True):
         return discord_account
 
     def __str__(self):
-        return f"{self.discord_member_name} ({self.discord_member_id})"
+        return f"{self.discord_member_name} [{self.discord_member_id}]"
 
 
 class DiscordServer(SQLModel, table=True):
@@ -233,7 +233,7 @@ class DiscordServer(SQLModel, table=True):
         return discord_server
 
     def __str__(self):
-        return f"{self.discord_guild_name} ({self.discord_guild_id})"
+        return f"{self.discord_guild_name} [{self.discord_guild_id}]"
 
 
 class DiscordTextChannel(SQLModel, table=True):
@@ -297,7 +297,7 @@ class EventFood(SQLModel, table=True):
     event_id: int = Field(default=None, foreign_key="event.id", index=True)
     event: "Event" = Relationship(
         back_populates="food",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "joined"},
     )
     user_assigned_food_id: int | None = Field(default=None, foreign_key="users.id")
     user_assigned_food: User | None = Relationship(
@@ -351,7 +351,7 @@ class EventAttendance(SQLModel, table=True):
     event_id: int = Field(default=None, foreign_key="event.id", index=True)
     event: "Event" = Relationship(
         back_populates="attendance",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "joined"},
     )
     users: list[User] = Relationship(
         back_populates="event_attendance",
@@ -518,4 +518,4 @@ class Event(SQLModel, table=True):
         return attendance_reminder_calendar_interval_trigger
 
     def __str__(self):
-        return self.name
+        return f"{self.name} [{self.group.name}]"
