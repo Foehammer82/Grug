@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
-from loguru import logger
+from starlette.staticfiles import StaticFiles
 
 from grug.admin import init_admin
 from grug.api_routers import routers
@@ -17,12 +17,16 @@ from grug.metrics import initialize_metrics
 from grug.scheduler import init_scheduler
 from grug.settings import settings
 
+# TODO: create unit tests to make sure that the food and attendance tracking all works as expected!
+# TODO: make unit tests for good code coverage
+# TODO: evaluate adding this: https://github.com/aminalaee/fastapi-storages
+
 
 @asynccontextmanager
 async def lifespan(fast_api_app: FastAPI):
     """Lifespan event handler for the FastAPI app."""
     init_logging()
-    init_db()
+    await init_db()
     init_auth(fast_api_app)
     init_admin(fast_api_app)
     init_discord_bot()
@@ -30,7 +34,8 @@ async def lifespan(fast_api_app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, title=f"{settings.openai_assistant_name} API")
+app.mount("/static", StaticFiles(directory=settings.root_dir / "grug" / "static"), name="static")
 
 # Include all API routers
 for router in routers:
@@ -44,8 +49,5 @@ if settings.enable_metrics:
 if settings.enable_health_endpoint:
     initialize_health_endpoints(app)
 
-
 if __name__ == "__main__":
-    logger.info({"app_settings": settings.dict()})
-
-    uvicorn.run(app, port=settings.api_port, host=settings.api_host)
+    uvicorn.run(app, port=settings.api_port, host=settings.api_host, log_level="info")

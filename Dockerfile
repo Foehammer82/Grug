@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.11-slim
 
 ARG WORKDIR=/app
 
@@ -23,5 +23,5 @@ COPY grug grug
 EXPOSE 9000
 ENV API_HOST="0.0.0.0"
 
-# Run the application
-CMD poetry run python grug
+# Run DB migrations and then start the application
+CMD alembic upgrade head && poetry run python grug

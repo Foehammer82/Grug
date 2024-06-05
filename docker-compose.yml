@@ -4,25 +4,12 @@ services:
     image: ${CI_REGISTRY_IMAGE:-grug}:latest
     restart: unless-stopped
     env_file:
-      - path: ./config/postgres.env
+      - path: config/postgres.env
         required: true
-      - path: ${SECRETS_ENV_FILE:-./config/secrets.env}
+      - path: ${SECRETS_ENV_FILE:-config/secrets.env}
         required: true
     ports:
       - "9089:9000"
-    depends_on:
-      - db-migrations
-
-  db-migrations:
-    build: ./
-    image: grug:latest
-    restart: no
-    env_file:
-      - path: ./config/postgres.env
-        required: true
-      - path: ${SECRETS_ENV_FILE:-./config/secrets.env}
-        required: true
-    command: alembic upgrade head
 
   postgres:
     image: postgres:15
@@ -36,5 +23,4 @@ services:
       - "5432:5432"
 
 volumes:
-  redis_data:
   postgres_data:

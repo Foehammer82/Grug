@@ -11,7 +11,8 @@
 - [x] Grug is able to respond to discord messages
 - [x] Grug is aware of DnD schedules and handles food reminders and who's on for food
 - [x] embedded FastAPI and admin page
-- [ ] migrate legacy Grug models to new models and build more robust food reminder and event system
+- [x] migrate legacy Grug models to new models and build more robust food reminder and event system
+- [x] metrics endpoint (i.e. https://github.com/trallnag/prometheus-fastapi-instrumentator)
 - [ ] need an easy way to make nice UIs for Grug that can be easily integrated with the FastAPI backend
     - wait until there is a clear need for a UI endpoint first before just implementing this. i have a feeling we're
       going to want some basic form pages so that Grug can send users to something easy to fill out or interact with
@@ -26,13 +27,11 @@
 - [ ] Grug is able to generate pictures in discord with DALLE
 - [ ] Grug can listen to a discord voice channel and transcribe the conversation (possibly even respond in it)
 - [ ] Grug is able to send and receive texts
-- [ ] Grug is able to create scheduled reminders for things
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
-    - these instructions should be clear and complete enough that someone could mindlessly follow them with no previous
-      experience and get a Grug of their own deployed
-- [x] metrics endpoint (i.e. https://github.com/trallnag/prometheus-fastapi-instrumentator)
 - [ ] setup mkdocs documentation focused on both deploying and using Grug as is, and for how to fork and extend Grug for
   use in custom applications
+- [ ] ability to export and import a grug database for backups and migrations
+- [ ] ability to backup to a dedicated directory that a user could map to a volume to handle backups and recovery
 
 ### Nice To Have One-Day Features
 

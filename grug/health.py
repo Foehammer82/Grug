@@ -1,7 +1,9 @@
+"""Health checks and status endpoints for the Grug application."""
+
 from fastapi import FastAPI
 from pydantic import BaseModel, computed_field
 
-from grug.assistant_interfaces.discord_interface import discord_bot
+from grug.assistant_interfaces.discord_interface.bot import discord_bot
 from grug.scheduler import scheduler
 
 
@@ -9,17 +11,17 @@ class Health(BaseModel):
 
     @computed_field
     @property
-    def scheduler_state(self) -> str:
+    def scheduler(self) -> str:
         return scheduler.state.name
 
     @computed_field
     @property
-    def discord_bot_status(self) -> str:
+    def discord(self) -> str:
         return discord_bot.status.name
 
     @computed_field
     @property
-    def db_status(self) -> str:
+    def postgres(self) -> str:
         # TODO: implement this by running select 1=1 or something
         return "NOT IMPLEMENTED"
 
