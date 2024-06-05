@@ -26,7 +26,6 @@ sqladmin = {extras = ["full"], version = "^0"}
 fastapi = "^0.111"
 uvicorn = "^0.30"
 python-jose = {extras = ["cryptography"], version = "^3.3"}
-fastcrud = "^0.13"
 prometheus-fastapi-instrumentator = "^7.0"
 alembic-postgresql-enum = "^1.2.0"
 
