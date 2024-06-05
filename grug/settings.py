@@ -14,7 +14,7 @@ class DiscordSettings(BaseSettings):
     server_id: int
     bot_token: SecretStr
     bot_channel_id: int | None = None
-    auto_create_users: bool = False
+    auto_create_users: bool = True
 
 
 class Settings(BaseSettings):
