@@ -23,7 +23,7 @@ async def send_food_reminder(event_id: int) -> EventFood:
         if event is None:
             raise ValueError(f"Event {event_id} not found.")
 
-        await send_discord_food_reminder(
+        return await send_discord_food_reminder(
             event=event,
             session=session,
         )

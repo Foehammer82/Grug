@@ -8,7 +8,7 @@ from typing import Optional
 import discord
 from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
 from pydantic import computed_field
-from sqlalchemy import BigInteger, Column, ForeignKey
+from sqlalchemy import BigInteger, Column, ForeignKey, Index
 from sqlmodel import Field, Relationship, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -283,6 +283,14 @@ class EventFood(SQLModel, table=True):
     """Model for tracking food."""
 
     __tablename__ = "event_food"
+    __table_args__ = (
+        Index(
+            "compound_index_event_food_event_id_date",
+            "event_id",
+            "event_date",
+            unique=True,
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     event_date: date
@@ -329,6 +337,14 @@ class EventAttendance(SQLModel, table=True):
     """Model for tracking attendance."""
 
     __tablename__ = "event_attendance"
+    __table_args__ = (
+        Index(
+            "compound_index_event_attendance_event_id_date",
+            "event_id",
+            "event_date",
+            unique=True,
+        ),
+    )
 
     id: int | None = Field(default=None, primary_key=True)
     event_date: date
@@ -431,7 +447,7 @@ class Event(SQLModel, table=True):
 
     @computed_field
     @cached_property
-    def distinct_food_history(self) -> list[EventFood]:
+    def distinct_food_assigned_user_history(self) -> list[EventFood]:
         # get distinct set of people who last brought food
         distinct_food_bringers: dict[str, EventFood] = {}
         for food_event in self.food:
@@ -455,19 +471,22 @@ class Event(SQLModel, table=True):
 
     async def get_next_food_event(self, session: AsyncSession) -> EventFood:
         """Get the next food event."""
-        if len(self.distinct_food_history) > 0 and self.distinct_food_history[0].event_date < date.today():
-            return self.distinct_food_history[0]
-        else:
-            event_food = EventFood(
-                event_id=self.id,
-                event=self,
-                event_date=self.get_event_calendar_interval_trigger().next(),
-            )
+        next_event_date = self.get_event_calendar_interval_trigger().next()
+        for food_event in self.food:
+            if food_event.event_date == next_event_date.date():
+                return food_event
 
-            session.add(event_food)
-            await session.commit()
-            await session.refresh(event_food)
-            return event_food
+        # if nothing has been returned yet, create the next event and return it
+        event_food = EventFood(
+            event_id=self.id,
+            event=self,
+            event_date=self.get_event_calendar_interval_trigger().next(),
+        )
+
+        session.add(event_food)
+        await session.commit()
+        await session.refresh(event_food)
+        return event_food
 
     def get_event_calendar_interval_trigger(self) -> CalendarIntervalTrigger:
         event_schedule_repeat_interval = RepeatInterval(self.event_schedule_repeat_interval.title())

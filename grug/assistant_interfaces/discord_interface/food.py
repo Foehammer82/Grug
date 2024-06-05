@@ -107,7 +107,7 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
 
     # Build the food reminder message
     message_content = "The last people to bring food were:"
-    for brought_food in event.distinct_food_history:
+    for brought_food in event.distinct_food_assigned_user_history:
         message_content += (
             f"\n- [{brought_food.event_date.isoformat()}] {brought_food.user_assigned_food.friendly_name}"
         )
