@@ -138,7 +138,7 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
         else:
             assistant_response = await assistant.send_group_message(
                 message=message.content,
-                user=discord_account,
+                user=discord_account.user,
             )
 
             # Save the assistant thread ID to the database
