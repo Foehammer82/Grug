@@ -26,5 +26,5 @@ ENV API_HOST="0.0.0.0"
 # Run DB migrations and then start the application
 CMD alembic upgrade head && poetry run python grug
 
-HEALTHCHECK --interval=5m --timeout=3s \
-  CMD curl -f http://localhost:9000/health || exit 1
+#HEALTHCHECK --interval=5m --timeout=3s \
+#  CMD curl -f http://localhost:9000/health || exit 1
