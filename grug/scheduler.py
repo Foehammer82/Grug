@@ -1,10 +1,9 @@
 """Scheduler for the Grug bot."""
 
 import asyncio
-from contextlib import suppress
 from datetime import datetime
 
-from apscheduler import AsyncScheduler, ConflictPolicy, Schedule, ScheduleLookupError
+from apscheduler import AsyncScheduler, ConflictPolicy, Schedule
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
 from loguru import logger
@@ -68,12 +67,11 @@ class ScheduleModel(BaseModel):
         return cls._from_schedule(schedule)
 
 
-@event.listens_for(Event, "after_insert")
-def handle_event_model_created(mapper: Mapper, connection: Connection, event_model: Event):
+def handle_event_model_upsert(mapper: Mapper, connection: Connection, event_model: Event):
     from grug.utils.attendance import send_attendance_reminder
     from grug.utils.food import send_food_reminder
 
-    # Create the food reminder schedule for the given event
+    # Upsert the food reminder schedule for the given event
     asyncio.create_task(
         scheduler.add_schedule(
             func_or_task_id=send_food_reminder,
@@ -84,9 +82,9 @@ def handle_event_model_created(mapper: Mapper, connection: Connection, event_mod
             paused=(not event_model.track_food),
         )
     )
-    logger.info(f"Created food reminder job for event {event_model.id} [paused={not event_model.track_food}]")
+    logger.info(f"Upserted food reminder job for event {event_model.id} [paused={not event_model.track_food}]")
 
-    # Create the attendance reminder schedule for the given event
+    # Upsert the attendance reminder schedule for the given event
     asyncio.create_task(
         scheduler.add_schedule(
             func_or_task_id=send_attendance_reminder,
@@ -98,28 +96,12 @@ def handle_event_model_created(mapper: Mapper, connection: Connection, event_mod
         )
     )
     logger.info(
-        f"Created attendance reminder job for event {event_model.id} [paused={not event_model.track_attendance}]"
+        f"Upserted attendance reminder job for event {event_model.id} [paused={not event_model.track_attendance}]"
     )
 
 
-@event.listens_for(Event, "after_update")
-def handle_event_model_updated(mapper: Mapper, connection: Connection, event_model: Event):
-    with suppress(ScheduleLookupError):
-        # Update the food reminder job
-        if event_model.track_food:
-            asyncio.create_task(scheduler.unpause_schedule(id=f"event_{event_model.id}_food_reminder"))
-            logger.info(f"Un-paused food reminder job for event {event_model.id}")
-        else:
-            asyncio.create_task(scheduler.pause_schedule(id=f"event_{event_model.id}_food_reminder"))
-            logger.info(f"Paused food reminder job for event {event_model.id}")
-
-        # Update the attendance reminder job
-        if event_model.track_attendance:
-            asyncio.create_task(scheduler.unpause_schedule(id=f"event_{event_model.id}_attendance_reminder"))
-            logger.info(f"Un-paused attendance reminder job for event {event_model.id}")
-        else:
-            asyncio.create_task(scheduler.pause_schedule(id=f"event_{event_model.id}_attendance_reminder"))
-            logger.info(f"Paused attendance reminder job for event {event_model.id}")
+event.listen(Event, "after_insert", handle_event_model_upsert)
+event.listen(Event, "after_update", handle_event_model_upsert)
 
 
 @event.listens_for(Event, "after_delete")
