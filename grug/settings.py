@@ -11,9 +11,7 @@ _ROOT_DIR = Path(__file__).parent.parent.absolute()
 class DiscordSettings(BaseSettings):
     """Settings for connecting to discord."""
 
-    server_id: int
     bot_token: SecretStr
-    bot_channel_id: int | None = None
     auto_create_users: bool = False
 
 
