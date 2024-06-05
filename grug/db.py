@@ -4,7 +4,7 @@ import subprocess
 
 from loguru import logger
 from pydantic import PostgresDsn
-from sqlalchemy import DDL, NullPool
+from sqlalchemy import DDL
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from grug.settings import settings
@@ -23,7 +23,7 @@ async_engine = create_async_engine(
     ),
     echo=False,
     future=True,
-    poolclass=NullPool,  # TODO: only enable this for functional testing
+    # poolclass=NullPool,  # TODO: may need this for functional tests
 )
 
 # Database session factory singleton

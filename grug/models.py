@@ -119,11 +119,11 @@ class Group(SQLModel, table=True):
     users: list["User"] = Relationship(
         back_populates="groups",
         link_model=UserGroupLink,
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "joined"},
     )
     events: list["Event"] = Relationship(
         back_populates="group",
-        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
+        sa_relationship_kwargs={"lazy": "joined", "cascade": "all, delete"},
     )
     discord_servers: list["DiscordServer"] = Relationship(
         back_populates="group",
@@ -314,7 +314,7 @@ class EventFood(SQLModel, table=True):
     )
 
     def __str__(self):
-        return f"{self.event.name} on {self.event_date.isoformat()}"
+        return f"{self.event.name} food [{self.event_date.isoformat()}]"
 
 
 class EventFoodDiscordMessage(SQLModel, table=True):
@@ -364,6 +364,9 @@ class EventAttendance(SQLModel, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
+    def __str__(self):
+        return f"{self.event.name} attendance [{self.event_date.isoformat()}]"
+
 
 class EventAttendanceDiscordMessage(SQLModel, table=True):
     """Model to track discord messages for food events."""
@@ -401,7 +404,7 @@ class Event(SQLModel, table=True):
     group_id: int | None = Field(default=None, foreign_key="groups.id")
     group: Group | None = Relationship(
         back_populates="events",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "joined"},
     )
 
     # Event Schedule
