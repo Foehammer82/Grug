@@ -7,7 +7,6 @@ from grug.assistant_interfaces.discord_interface.bot import discord_bot
 from grug.assistant_interfaces.discord_interface.utils import wait_for_discord_to_start
 from grug.db import async_session
 from grug.models import Event, EventFood, EventFoodDiscordMessage
-from grug.settings import settings
 
 
 class EventFoodAssignedUserDropDown(discord.ui.Select):
@@ -97,11 +96,9 @@ class DiscordFoodBringerSelectionView(discord.ui.View):
 async def send_discord_food_reminder(event: Event, session: AsyncSession) -> EventFood:
     await wait_for_discord_to_start()
 
-    # Get the default discord channel
-    if settings.discord.bot_channel_id is not None:
-        guild_channel = discord_bot.get_channel(settings.discord.bot_channel_id)
-    else:
-        guild_channel = discord_bot.get_guild(settings.discord.server_id).system_channel
+    # TODO: this will DEFINITELY break if there is more than one discord server assigned to the group.
+    #       instead, we should link events to a specific discord server
+    guild_channel = discord_bot.get_channel(event.group.discord_servers[0].discord_guild_id)
 
     # Build the food reminder message
     message_content = "The last people to bring food were:"

@@ -22,7 +22,6 @@
     - I could also see having dedicated UI's with sessions and logins would make sense too (specifically for user
       settings, like changing a password or linking accounts (i.e. link discord to phone number or something))
 - [ ] Grug is able to handle DnD attendance tracking
-- [ ] Keep record of group chats in a database and create tooling for Grug to be able to search that
 - [ ] Grug is able to read and answer questions from a Google doc (session notes)
 - [ ] Grug is able to generate pictures in discord with DALLE
 - [ ] Grug can listen to a discord voice channel and transcribe the conversation (possibly even respond in it)
@@ -31,7 +30,7 @@
 - [ ] setup mkdocs documentation focused on both deploying and using Grug as is, and for how to fork and extend Grug for
   use in custom applications
 - [ ] ability to export and import a grug database for backups and migrations
-- [ ] ability to backup to a dedicated directory that a user could map to a volume to handle backups and recovery
+- [ ] ability to back up to a dedicated directory that a user could map to a volume to handle backups and recovery
 
 ### Nice To Have One-Day Features
 
