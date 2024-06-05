@@ -44,3 +44,5 @@ def init_logging():
 
     # set logs output, level and format
     logger.configure(handlers=[{"sink": sys.stdout, "level": logging.INFO}])
+
+    # fast_api_app.add_middleware(LoggingMiddleware)

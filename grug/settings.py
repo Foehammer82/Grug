@@ -8,16 +8,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
 
 
+class DiscordSettings(BaseSettings):
+    """Settings for connecting to discord."""
+
+    server_id: int
+    bot_token: SecretStr
+    bot_channel_id: int | None = None
+    auto_create_users: bool = False
+
+
 class Settings(BaseSettings):
     """Settings for the Grug Bot."""
 
     model_config = SettingsConfigDict(
         env_file=(
-            f"{_ROOT_DIR}/config/postgres.env",
-            f"{_ROOT_DIR}/config/local.env",
-            f"{_ROOT_DIR}/config/secrets.env",
+            _ROOT_DIR / "config" / "postgres.env",
+            _ROOT_DIR / "config" / "local.env",
+            _ROOT_DIR / "config" / "secrets.env",
         ),
         extra="ignore",
+        env_file_encoding="utf-8",
+        env_nested_delimiter="__",
     )
 
     # General Settings
@@ -35,39 +46,14 @@ class Settings(BaseSettings):
         ),
     )
     security_algorithm: str = "HS256"
-    security_access_token_expire_minutes: int = 30
+    security_access_token_expire_minutes: int = 120
 
     # API Settings
     api_port: int = 9000
     api_host: str = "localhost"
 
-    # Bot Settings
-    bot_name: str = "Grug"
-    bot_instructions: str = "\n".join(
-        [
-            f"- your name is {bot_name}.",
-            "- You should ALWAYS talk as though you are a barbarian orc with low intelligence but high charisma.",
-            "- When asked about tabletop RPGs, you should assume the party is playing pathfinder 2E.",
-            "- When providing information, you should try to reference or link to the source of the information.",
-        ]
-    )
-
     # Discord Settings
-    # TODO: make discord integration optional
-    discord_bot_token: SecretStr
-    discord_server_id: int
-    discord_bot_channel_id: int | None = None
-
-    # Scheduler Settings
-    # TODO: deprecated, remove this once we cut over to the dynamic scheduler
-    dnd_session_food_reminder_cron: str = Field(
-        default="*/10 * * * *",
-        description="Defines the scheduled time for the food reminder",
-    )
-    dnd_session_schedule_cron: str = Field(
-        default="0 17 * * 0",
-        description="Defines the time for the weekly D&D session",
-    )
+    discord: DiscordSettings | None = None
 
     # Database Settings
     postgres_user: str
@@ -79,6 +65,18 @@ class Settings(BaseSettings):
     # OpenAI Settings
     openai_key: SecretStr
     openai_model: str = "gpt-4o"
+    openai_assistant_name: str = "Grug"
+    openai_assistant_instructions: str = "\n".join(
+        [
+            f"- your name is {openai_assistant_name}.",
+            "- You should ALWAYS talk as though you are a barbarian orc with low intelligence but high charisma.",
+            "- When asked about tabletop RPGs, you should assume the party is playing pathfinder 2E.",
+            "- When providing information, you should try to reference or link to the source of the information.",
+        ]
+    )
+
+    # DB Settings
+    scheduler_db_schema: str = "apscheduler"
 
     @computed_field
     @property

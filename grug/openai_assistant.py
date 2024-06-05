@@ -8,14 +8,22 @@ from loguru import logger
 from openai import AsyncOpenAI, OpenAI
 from openai.types.beta import Thread
 from openai.types.beta.threads import RequiredActionFunctionToolCall
+from pydantic import BaseModel
 
 from grug.assistant_functions import get_assistant_functions
 from grug.db import async_session
-from grug.models import AssistantResponse, Player
+from grug.models import User
 from grug.settings import settings
 
 # TODO: setup monitor/log/handle openai rate limits:
 #       https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers
+
+
+class AssistantResponse(BaseModel):
+    """Pydantic model for an assistant response."""
+
+    response: str
+    thread_id: str
 
 
 class Assistant:
@@ -39,7 +47,7 @@ class Assistant:
 
         # Create, or Update and Retrieve the assistant
         assistants = {a.name: a.id for a in self.sync_client.beta.assistants.list().data}
-        bot_name = settings.bot_name.lower()
+        bot_name = settings.openai_assistant_name.lower()
 
         # Configure tools
         assistant_functions = self._get_assistant_tools()
@@ -47,14 +55,14 @@ class Assistant:
         if bot_name not in assistants:
             self.assistant = self.sync_client.beta.assistants.create(
                 name=bot_name,
-                instructions=settings.bot_instructions,
+                instructions=settings.openai_assistant_instructions,
                 model=settings.openai_model,
                 tools=assistant_functions,
             )
         else:
             self.assistant = self.sync_client.beta.assistants.update(
                 assistant_id=assistants[bot_name],
-                instructions=settings.bot_instructions,
+                instructions=settings.openai_assistant_instructions,
                 model=settings.openai_model,
                 tools=assistant_functions,
             )
@@ -80,28 +88,29 @@ class Assistant:
     async def send_direct_message(
         self,
         message: str,
-        player: Player,
+        user: User,
+        session: async_session,
     ) -> AssistantResponse:
         """
         Send a direct message from a player to the assistant and get the response.
 
         Args:
             message (str): The message to send to the assistant.
-            player (Player): The player sending the message.
+            user (Player): The player sending the message.
+            session (async_session): The session to use for database operations.
 
         Returns:
             AssistantResponse: The response from the assistant.
         """
-        if player.assistant_thread_id is None:
+        if user.assistant_thread_id is None:
             thread = await self.async_client.beta.threads.create()
 
             # Update the user with the thread_id
-            async with async_session() as session:
-                player.assistant_thread_id = thread.id
-                session.add(player)
-                await session.commit()
+            user.assistant_thread_id = thread.id
+            session.add(user)
+            await session.commit()
         else:
-            thread = await self.async_client.beta.threads.retrieve(thread_id=player.assistant_thread_id)
+            thread = await self.async_client.beta.threads.retrieve(thread_id=user.assistant_thread_id)
 
         return await self._send_message(
             thread=thread,
@@ -111,7 +120,7 @@ class Assistant:
     async def send_group_message(
         self,
         message: str,
-        player: Player,
+        user: User,
         thread_id: str | None = None,
     ) -> AssistantResponse:
         """
@@ -120,7 +129,7 @@ class Assistant:
         Args:
             message (str): The message to send to the assistant.
             thread_id (str): The thread_id of the group thread.
-            player (Player): The player sending the message.
+            user (User): The player sending the message.
 
         Returns:
             AssistantResponse: The response from the assistant.
@@ -133,7 +142,7 @@ class Assistant:
                 else await self.async_client.beta.threads.create()
             ),
             message=(
-                f"This message is from {player.friendly_name}.  The following is their message:"
+                f"This message is from {user.friendly_name}.  The following is their message:"
                 f"\n{message}"
                 "\n\n[AI should not factor the person's name into its response.]"
                 "\n[AI should not state that they received a message from the person.]"
@@ -251,8 +260,10 @@ class Assistant:
                     raise ValueError(f"Missing argument: {arg} from function call {tool_callable.__name__}")
 
             if inspect.iscoroutinefunction(tool_callable):
+                # noinspection PyArgumentList
                 tools_response = await tool_callable(**function_args)
             elif inspect.isfunction(tool_callable):
+                # noinspection PyArgumentList
                 tools_response = tool_callable(**function_args)
             else:
                 raise ValueError(
