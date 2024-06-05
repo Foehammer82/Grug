@@ -1,11 +1,12 @@
 """Database setup and initialization."""
 
+import subprocess
+
 from loguru import logger
 from pydantic import PostgresDsn
 from sqlalchemy import DDL, NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from grug import models
 from grug.settings import settings
 
 # Database engine singleton
@@ -30,8 +31,18 @@ async_session = async_sessionmaker(bind=async_engine, class_=AsyncSession, expir
 
 
 async def init_db():
+    # Run the Alembic migrations
+    result = subprocess.run(
+        ["alembic", "upgrade", "head"],
+        cwd=settings.root_dir.as_posix(),
+        capture_output=True,
+        text=True,
+    )
+    logger.info(result.stdout)
+    logger.info(result.stderr)
+
+    # Perform any necessary manual DB init steps
     async with async_engine.begin() as conn:
-        await conn.run_sync(models.SQLModel.metadata.create_all)
         await conn.execute(DDL(f"CREATE SCHEMA IF NOT EXISTS {settings.scheduler_db_schema}"))
 
     logger.info("Database initialized [alembic upgrade head].")

@@ -98,7 +98,12 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
 
     # TODO: this will DEFINITELY break if there is more than one discord server assigned to the group.
     #       instead, we should link events to a specific discord server
-    guild_channel = discord_bot.get_channel(int(event.group.discord_servers[0].discord_guild_id))
+    # Get the default discord channel
+    if event.group.discord_servers[0].discord_bot_channel_id is not None:
+        guild_channel = discord_bot.get_channel(event.group.discord_servers[0].discord_bot_channel_id)
+    else:
+        guild_id = event.group.discord_servers[0].discord_guild_id
+        guild_channel = discord_bot.get_guild(guild_id).system_channel
 
     # Build the food reminder message
     message_content = "The last people to bring food were:"

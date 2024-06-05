@@ -1,8 +1,8 @@
 """init
 
-Revision ID: a656de6af92b
+Revision ID: aa50151fba6c
 Revises: 
-Create Date: 2024-06-02 14:55:52.538078
+Create Date: 2024-06-05 10:52:29.263049
 
 """
 from alembic import op
@@ -11,7 +11,7 @@ import sqlmodel
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision = 'a656de6af92b'
+revision = 'aa50151fba6c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -42,35 +42,40 @@ def upgrade() -> None:
     op.create_table('discord_accounts',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=True),
-    sa.Column('discord_member_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('discord_member_id', sa.BigInteger(), nullable=True),
     sa.Column('discord_member_name', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    with op.batch_alter_table('discord_accounts', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_discord_accounts_discord_member_id'), ['discord_member_id'], unique=False)
+
     op.create_table('discord_servers',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('group_id', sa.Integer(), nullable=False),
-    sa.Column('discord_guild_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('discord_guild_id', sa.BigInteger(), nullable=True),
     sa.Column('discord_guild_name', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    with op.batch_alter_table('discord_servers', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_discord_servers_discord_guild_id'), ['discord_guild_id'], unique=False)
+
     op.create_table('event',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('group_id', sa.Integer(), nullable=True),
-    sa.Column('event_schedule_cron', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('event_schedule_start_date', sa.Date(), nullable=True),
+    sa.Column('event_schedule_start_datetime', sa.DateTime(), nullable=False),
     sa.Column('event_schedule_end_date', sa.Date(), nullable=True),
-    sa.Column('event_schedule_repeat_count', sa.Integer(), nullable=True),
+    sa.Column('event_schedule_repeat_every', sa.Integer(), nullable=True),
     sa.Column('event_schedule_repeat_interval', postgresql.ENUM('DAYS', 'WEEKS', 'MONTHS', 'YEARS', name='repeatinterval', create_type=False), nullable=True),
     sa.Column('track_food', sa.Boolean(), nullable=False),
-    sa.Column('food_reminder_cron', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('food_reminder_days_before_event', sa.Integer(), nullable=True),
+    sa.Column('food_reminder_time', sa.Time(), nullable=False),
+    sa.Column('food_reminder_days_before_event', sa.Integer(), nullable=False),
     sa.Column('track_attendance', sa.Boolean(), nullable=False),
-    sa.Column('attendance_reminder_cron', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('attendance_reminder_days_before_event', sa.Integer(), nullable=True),
+    sa.Column('attendance_reminder_time', sa.Time(), nullable=False),
+    sa.Column('attendance_reminder_days_before_event', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['group_id'], ['groups.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -90,9 +95,9 @@ def upgrade() -> None:
     )
     op.create_table('discordtextchannel',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('discord_channel_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('discord_channel_id', sa.BigInteger(), nullable=True),
     sa.Column('assistant_thread_id', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.Column('discord_server_id', sa.Integer(), nullable=False),
+    sa.Column('discord_server_id', sa.BigInteger(), autoincrement=True, nullable=True),
     sa.ForeignKeyConstraint(['discord_server_id'], ['discord_servers.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -124,7 +129,7 @@ def upgrade() -> None:
         batch_op.create_index(batch_op.f('ix_event_food_event_id'), ['event_id'], unique=False)
 
     op.create_table('event_attendance_discord_messages',
-    sa.Column('discord_message_id', sa.Integer(), nullable=False),
+    sa.Column('discord_message_id', sa.BigInteger(), autoincrement=True, nullable=False),
     sa.Column('event_attendance_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['event_attendance_id'], ['event_attendance.id'], ),
     sa.PrimaryKeyConstraint('discord_message_id')
@@ -178,7 +183,13 @@ def downgrade() -> None:
     op.drop_table('users_secrets')
     op.drop_table('users_groups_link')
     op.drop_table('event')
+    with op.batch_alter_table('discord_servers', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_discord_servers_discord_guild_id'))
+
     op.drop_table('discord_servers')
+    with op.batch_alter_table('discord_accounts', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_discord_accounts_discord_member_id'))
+
     op.drop_table('discord_accounts')
     op.drop_table('users')
     op.drop_table('groups')

@@ -8,7 +8,7 @@ from typing import Optional
 import discord
 from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
 from pydantic import computed_field
-from sqlalchemy import BigInteger, Column
+from sqlalchemy import BigInteger, Column, ForeignKey
 from sqlmodel import Field, Relationship, SQLModel, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -68,13 +68,13 @@ class User(SQLModel, table=True):
     )
     discord_accounts: list["DiscordAccount"] = Relationship(
         back_populates="user",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
     brought_food_for: list["EventFood"] = Relationship(back_populates="user_assigned_food")
     event_attendance: list["EventAttendance"] = Relationship(back_populates="users", link_model=UserEventAttendanceLink)
     secrets: Optional["UserSecrets"] = Relationship(
         back_populates="user",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
 
     @computed_field
@@ -123,11 +123,11 @@ class Group(SQLModel, table=True):
     )
     events: list["Event"] = Relationship(
         back_populates="group",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
     discord_servers: list["DiscordServer"] = Relationship(
         back_populates="group",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
 
     def __str__(self):
@@ -145,7 +145,7 @@ class DiscordAccount(SQLModel, table=True):
         back_populates="discord_accounts",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
-    discord_member_id: str
+    discord_member_id: int = Field(sa_column=Column(BigInteger(), index=True))
     discord_member_name: str | None = None
 
     @classmethod
@@ -156,7 +156,7 @@ class DiscordAccount(SQLModel, table=True):
         db_session: AsyncSession,
     ):
         discord_account: DiscordAccount | None = (
-            (await db_session.execute(select(DiscordAccount).where(DiscordAccount.discord_member_id == str(member.id))))
+            (await db_session.execute(select(DiscordAccount).where(DiscordAccount.discord_member_id == member.id)))
             .scalars()
             .one_or_none()
         )
@@ -172,7 +172,7 @@ class DiscordAccount(SQLModel, table=True):
 
             # create the discord account
             discord_account = DiscordAccount(
-                discord_member_id=str(member.id),
+                discord_member_id=member.id,
                 discord_member_name=member.name,
                 user=user,
             )
@@ -197,17 +197,18 @@ class DiscordServer(SQLModel, table=True):
         back_populates="discord_servers",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
-    discord_guild_id: str
+    discord_guild_id: int = Field(sa_column=Column(BigInteger(), index=True))
     discord_guild_name: str | None = None
+    discord_bot_channel_id: int | None = Field(sa_column=Column(BigInteger(), nullable=True, default=None))
     discord_text_channels: list["DiscordTextChannel"] = Relationship(
         back_populates="discord_server",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
 
     @classmethod
     async def get_or_create(cls, guild: discord.Guild, db_session: AsyncSession):
         discord_server: DiscordServer | None = (
-            (await db_session.execute(select(DiscordServer).where(DiscordServer.discord_guild_id == str(guild.id))))
+            (await db_session.execute(select(DiscordServer).where(DiscordServer.discord_guild_id == guild.id)))
             .scalars()
             .one_or_none()
         )
@@ -221,7 +222,7 @@ class DiscordServer(SQLModel, table=True):
 
             # create the discord server
             discord_server = DiscordServer(
-                discord_guild_id=str(guild.id),
+                discord_guild_id=guild.id,
                 discord_guild_name=guild.name,
                 group=group,
             )
@@ -240,9 +241,12 @@ class DiscordTextChannel(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
 
-    discord_channel_id: str = Field(index=True)
+    discord_channel_id: int = Field(sa_column=Column(BigInteger(), index=True))
     assistant_thread_id: str | None = None
-    discord_server_id: int = Field(default=None, foreign_key="discord_servers.id")
+    discord_server_id: int = Field(
+        default=None,
+        sa_column=Column(BigInteger(), ForeignKey("discord_servers.id"), autoincrement=True),
+    )
     discord_server: DiscordServer | None = Relationship(
         back_populates="discord_text_channels",
         sa_relationship_kwargs={"lazy": "selectin"},
@@ -253,7 +257,7 @@ class DiscordTextChannel(SQLModel, table=True):
         discord_channel: DiscordTextChannel | None = (
             (
                 await session.execute(
-                    select(DiscordTextChannel).where(DiscordTextChannel.discord_channel_id == str(channel.id))
+                    select(DiscordTextChannel).where(DiscordTextChannel.discord_channel_id == channel.id)
                 )
             )
             .scalars()
@@ -262,7 +266,7 @@ class DiscordTextChannel(SQLModel, table=True):
 
         if discord_channel is None:
             discord_channel = DiscordTextChannel(
-                discord_channel_id=str(channel.id),
+                discord_channel_id=channel.id,
                 discord_server=await DiscordServer.get_or_create(channel.guild, session),
             )
             session.add(discord_channel)
@@ -310,8 +314,9 @@ class EventFoodDiscordMessage(SQLModel, table=True):
 
     __tablename__ = "event_food_discord_messages"
 
-    discord_message_id: str | None = Field(
-        default=None, sa_column=Column(BigInteger(), primary_key=True, autoincrement=True)
+    discord_message_id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger(), primary_key=True, autoincrement=True),
     )
     event_food_id: int = Field(default=None, foreign_key="event_food.id", index=True)
     event_food: EventFood = Relationship(
@@ -349,7 +354,10 @@ class EventAttendanceDiscordMessage(SQLModel, table=True):
 
     __tablename__ = "event_attendance_discord_messages"
 
-    discord_message_id: int | None = Field(default=None, primary_key=True)
+    discord_message_id: int | None = Field(
+        default=None,
+        sa_column=Column(BigInteger(), primary_key=True, autoincrement=True),
+    )
     event_attendance_id: int = Field(default=None, foreign_key="event_attendance.id", index=True)
     event_attendance: EventAttendance = Relationship(
         back_populates="discord_messages",
@@ -388,9 +396,9 @@ class Event(SQLModel, table=True):
         ),
     )
     event_schedule_end_date: date | None = Field(default=None, description="latest possible date the event can occur")
-    event_schedule_repeat_count: int | None = Field(default=None, description="number of times to repeat the event")
+    event_schedule_repeat_every: int | None = Field(default=1, description="number of times to repeat the event")
     event_schedule_repeat_interval: RepeatInterval | None = Field(
-        default=None, description="interval to repeat the event"
+        default=RepeatInterval.WEEKS, description="interval to repeat the event"
     )
 
     # Food Tracking
@@ -401,7 +409,7 @@ class Event(SQLModel, table=True):
     )
     food: list[EventFood] = Relationship(
         back_populates="event",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
 
     # Attendance Tracking
@@ -412,7 +420,7 @@ class Event(SQLModel, table=True):
     )
     attendance: list["EventAttendance"] = Relationship(
         back_populates="event",
-        sa_relationship_kwargs={"lazy": "selectin"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
 
     @computed_field
@@ -467,9 +475,9 @@ class Event(SQLModel, table=True):
         return CalendarIntervalTrigger(
             start_date=self.event_schedule_start_datetime,
             end_date=self.event_schedule_end_date,
-            weeks=(self.event_schedule_repeat_count if event_schedule_repeat_interval is RepeatInterval.WEEKS else 0),
-            days=self.event_schedule_repeat_count if event_schedule_repeat_interval is RepeatInterval.DAYS else 0,
-            months=(self.event_schedule_repeat_count if event_schedule_repeat_interval is RepeatInterval.MONTHS else 0),
+            weeks=(self.event_schedule_repeat_every if event_schedule_repeat_interval is RepeatInterval.WEEKS else 0),
+            days=self.event_schedule_repeat_every if event_schedule_repeat_interval is RepeatInterval.DAYS else 0,
+            months=(self.event_schedule_repeat_every if event_schedule_repeat_interval is RepeatInterval.MONTHS else 0),
             minute=self.event_schedule_start_datetime.minute,
             hour=self.event_schedule_start_datetime.hour,
         )
