@@ -462,22 +462,20 @@ class Event(SQLModel, table=True):
             return event_food
 
     def get_event_calendar_interval_trigger(self) -> CalendarIntervalTrigger:
+        event_schedule_repeat_interval = RepeatInterval(self.event_schedule_repeat_interval.title())
+
         return CalendarIntervalTrigger(
             start_date=self.event_schedule_start_datetime,
             end_date=self.event_schedule_end_date,
-            weeks=(
-                self.event_schedule_repeat_count if self.event_schedule_repeat_interval is RepeatInterval.WEEKS else 0
-            ),
-            days=self.event_schedule_repeat_count if self.event_schedule_repeat_interval is RepeatInterval.DAYS else 0,
-            months=(
-                self.event_schedule_repeat_count if self.event_schedule_repeat_interval is RepeatInterval.MONTHS else 0
-            ),
+            weeks=(self.event_schedule_repeat_count if event_schedule_repeat_interval is RepeatInterval.WEEKS else 0),
+            days=self.event_schedule_repeat_count if event_schedule_repeat_interval is RepeatInterval.DAYS else 0,
+            months=(self.event_schedule_repeat_count if event_schedule_repeat_interval is RepeatInterval.MONTHS else 0),
             minute=self.event_schedule_start_datetime.minute,
             hour=self.event_schedule_start_datetime.hour,
         )
 
     def get_food_reminder_calendar_interval_trigger(self) -> CalendarIntervalTrigger:
-        food_reminder_calendar_interval_trigger = self.get_attendance_reminder_calendar_interval_trigger()
+        food_reminder_calendar_interval_trigger = self.get_event_calendar_interval_trigger()
         food_reminder_calendar_interval_trigger.start_date -= timedelta(days=self.food_reminder_days_before_event)
         food_reminder_calendar_interval_trigger.minute = self.food_reminder_time.minute
         food_reminder_calendar_interval_trigger.hour = self.food_reminder_time.hour
