@@ -4,7 +4,6 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
-from loguru import logger
 from starlette.staticfiles import StaticFiles
 
 from grug.admin import init_admin
@@ -25,19 +24,11 @@ from grug.settings import settings
 if settings.sentry_dsn:
     import sentry_sdk
 
-    # https://docs.sentry.io/platforms/python/#configure
     sentry_sdk.init(
         dsn=settings.sentry_dsn.get_secret_value(),
-        # Set traces_sample_rate to 1.0 to capture 100%
-        # of transactions for performance monitoring.
-        traces_sample_rate=1.0,
-        # Set profiles_sample_rate to 1.0 to profile 100%
-        # of sampled transactions.
-        # We recommend adjusting this value in production.
-        profiles_sample_rate=1.0,
+        traces_sample_rate=settings.sentry_traces_sample_rate,
+        profiles_sample_rate=settings.sentry_profiles_sample_rate,
     )
-
-logger.error("This is an error message")
 
 
 @asynccontextmanager

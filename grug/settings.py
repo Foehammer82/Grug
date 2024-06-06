@@ -36,7 +36,21 @@ class Settings(BaseSettings):
     admin_password: SecretStr = SecretStr("password")
     enable_metrics: bool = True
     enable_health_endpoint: bool = True
+
+    # Sentry Settings
+    # https://docs.sentry.io/platforms/python/#configure
     sentry_dsn: SecretStr | None = None
+    sentry_traces_sample_rate: float = Field(
+        default=1.0,
+        description="Set traces_sample_rate to 1.0 to capture 100% of transactions for performance monitoring.",
+    )
+    sentry_profiles_sample_rate: float = Field(
+        default=0.6,
+        description=(
+            "Set profiles_sample_rate to 1.0 to profile 100% of sampled transactions. We recommend adjusting "
+            "this value in production."
+        ),
+    )
 
     # Security Settings
     security_key: SecretStr = Field(
