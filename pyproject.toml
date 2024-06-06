@@ -28,6 +28,7 @@ uvicorn = "^0.30"
 python-jose = {extras = ["cryptography"], version = "^3.3"}
 prometheus-fastapi-instrumentator = "^7.0"
 alembic-postgresql-enum = "^1.2.0"
+sentry-sdk = {extras = ["loguru"], version = "^2.5.0"}
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.1"

@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     admin_password: SecretStr = SecretStr("password")
     enable_metrics: bool = True
     enable_health_endpoint: bool = True
+    sentry_dsn: SecretStr | None = None
 
     # Security Settings
     security_key: SecretStr = Field(

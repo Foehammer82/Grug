@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from loguru import logger
 from starlette.staticfiles import StaticFiles
 
 from grug.admin import init_admin
@@ -20,6 +21,23 @@ from grug.settings import settings
 # TODO: create unit tests to make sure that the food and attendance tracking all works as expected!
 # TODO: make unit tests for good code coverage
 # TODO: evaluate adding this: https://github.com/aminalaee/fastapi-storages
+
+if settings.sentry_dsn:
+    import sentry_sdk
+
+    # https://docs.sentry.io/platforms/python/#configure
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn.get_secret_value(),
+        # Set traces_sample_rate to 1.0 to capture 100%
+        # of transactions for performance monitoring.
+        traces_sample_rate=1.0,
+        # Set profiles_sample_rate to 1.0 to profile 100%
+        # of sampled transactions.
+        # We recommend adjusting this value in production.
+        profiles_sample_rate=1.0,
+    )
+
+logger.error("This is an error message")
 
 
 @asynccontextmanager
