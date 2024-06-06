@@ -111,7 +111,7 @@ async def _respond_to_dm(message: discord.Message, session: async_session):
             assistant_response.response[i : i + _max_discord_message_length]
             for i in range(0, len(assistant_response.response), _max_discord_message_length)
         ]:
-            await message.channel.send(output, suppress_embeds=True)
+            await message.channel.send(output, suppress_embeds=False)
 
 
 async def _respond_to_text_channel_mention(message: discord.Message, session: async_session):
@@ -150,4 +150,4 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
 
         # Send the response back to the channel
         # TODO: handle responses that are too long for a single message
-        await message.reply(assistant_response.response, suppress_embeds=True)
+        await message.reply(assistant_response.response, suppress_embeds=False)

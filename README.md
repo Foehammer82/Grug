@@ -13,6 +13,8 @@
 - [x] embedded FastAPI and admin page
 - [x] migrate legacy Grug models to new models and build more robust food reminder and event system
 - [x] metrics endpoint (i.e. https://github.com/trallnag/prometheus-fastapi-instrumentator)
+- [ ] tie AI assistant to groups so that each group has a dedicated assistant that is aware of the group it responds to
+    - this is necissary to provide ai function tools that are group aware
 - [ ] Grug is able to handle DnD attendance tracking
 - [ ] Grug is able to send and receive texts
 - [ ] Grug is able to read and answer questions from a Google doc (session notes)
@@ -24,3 +26,5 @@
 ### Nice To Have One-Day Features
 
 - [ ] implement discord oauth to enable discord user logins (https://discord.com/developers/docs/topics/oauth2)
+- [ ] implement moderating into Grug so that he can monitor, respond to, and take action against "harmful" text
+    - https://platform.openai.com/docs/guides/moderation
