@@ -245,7 +245,7 @@ class DiscordTextChannel(SQLModel, table=True):
     assistant_thread_id: str | None = None
     discord_server_id: int = Field(
         default=None,
-        sa_column=Column(BigInteger(), ForeignKey("discord_servers.id"), autoincrement=True),
+        sa_column=Column(BigInteger(), ForeignKey("discord_servers.id")),
     )
     discord_server: DiscordServer | None = Relationship(
         back_populates="discord_text_channels",

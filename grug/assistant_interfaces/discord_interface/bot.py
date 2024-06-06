@@ -77,7 +77,9 @@ async def on_message(message: discord.Message):
             await _respond_to_dm(message, session)
 
         # respond to @mentions in channels
-        elif isinstance(message.channel, discord.TextChannel) and discord_bot.user in message.mentions:
+        elif (
+            isinstance(message.channel, discord.TextChannel) or isinstance(message.channel, discord.Thread)
+        ) and discord_bot.user in message.mentions:
             await _respond_to_text_channel_mention(message, session)
 
 
