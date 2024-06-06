@@ -45,4 +45,9 @@ async def generate_ai_image(prompt: str) -> str:
     logger.info(f"Image URL: {response_image.url}")
     logger.info("### Completed Generating AI Image ###")
 
-    return response_image.url
+    return {
+        "image_url": response_image.url,
+        "model": settings.openai_image_default_model,
+        "size": settings.openai_image_default_size,
+        "image_generations_left_today": 25,  # TODO: Implement a way to track this
+    }
