@@ -280,6 +280,7 @@ class Assistant:
             }
 
         except Exception as e:
+            logger.error(f"Error calling tool function: {tool_call.function.name} - {e}")
             return {
                 "tool_call_id": tool_call.id,
                 "output": str(e),

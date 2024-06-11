@@ -8,8 +8,8 @@ from typing import Optional
 import discord
 from apscheduler.triggers.calendarinterval import CalendarIntervalTrigger
 from pydantic import computed_field
-from sqlalchemy import BigInteger, Column, ForeignKey, Index
-from sqlmodel import Field, Relationship, SQLModel, select
+from sqlalchemy import BigInteger, Column, Date, ForeignKey, Index, func
+from sqlmodel import Field, Relationship, SQLModel, cast, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
@@ -522,3 +522,34 @@ class Event(SQLModel, table=True):
 
     def __str__(self):
         return f"{self.name} [{self.group.name}]"
+
+
+class DalleImageRequest(SQLModel, table=True):
+    """Model for tracking image requests to the DALLE API."""
+
+    __tablename__ = "dalle_image_requests"
+
+    id: int | None = Field(default=None, primary_key=True)
+    request_time: datetime = Field(default_factory=datetime.now)
+    prompt: str
+    model: str
+    size: str
+    quality: str
+    revised_prompt: str | None = None
+    image_url: str | None = None
+
+    @classmethod
+    async def image_requests_remaining(cls, session: AsyncSession) -> bool:
+        """Check if the daily limit has been reached."""
+        from grug.settings import settings
+
+        picture_request_count_for_today = (
+            await session.execute(
+                select(func.count("*")).select_from(cls).where(cast(cls.request_time, Date) == date.today())
+            )
+        ).scalar()
+
+        return settings.openai_image_daily_generation_limit - picture_request_count_for_today
+
+    def __str__(self):
+        return f"Dall-E Image {self.id} [{self.request_time}]"

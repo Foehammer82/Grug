@@ -89,7 +89,9 @@ class Settings(BaseSettings):
             "- When providing information, you should try to reference or link to the source of the information.",
         ]
     )
-    openai_image_daily_generation_limit: int = 25
+    openai_image_daily_generation_limit: int | None = Field(
+        default=25, description="The daily limit of image generations. If None, there is no limit."
+    )
     openai_image_default_size: str = "1024x1024"
     openai_image_default_quality: str = "standard"
     openai_image_default_model: str = "dall-e-3"
