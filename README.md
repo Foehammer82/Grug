@@ -28,3 +28,7 @@
 - [ ] implement discord oauth to enable discord user logins (https://discord.com/developers/docs/topics/oauth2)
 - [ ] implement moderating into Grug so that he can monitor, respond to, and take action against "harmful" text
     - https://platform.openai.com/docs/guides/moderation
+
+### Notes
+
+- checkout Dify as a LLM Application Development platform:  https://docs.dify.ai/getting-started/install-self-hosted/docker-compose
