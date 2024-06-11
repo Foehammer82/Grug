@@ -13,12 +13,12 @@
 - [x] embedded FastAPI and admin page
 - [x] migrate legacy Grug models to new models and build more robust food reminder and event system
 - [x] metrics endpoint (i.e. https://github.com/trallnag/prometheus-fastapi-instrumentator)
+- [x] Grug is able to generate pictures in discord with Dall-E
 - [ ] tie AI assistant to groups so that each group has a dedicated assistant that is aware of the group it responds to
-    - this is necissary to provide ai function tools that are group aware
+    - this is necessary to provide AI function tools that are group aware
 - [ ] Grug is able to handle DnD attendance tracking
 - [ ] Grug is able to send and receive texts
 - [ ] Grug is able to read and answer questions from a Google doc (session notes)
-- [ ] Grug is able to generate pictures in discord with DALLE
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
 - [ ] setup mkdocs documentation focused on both deploying for self-hosting and forking for personal use
 - [ ] ability to back up to a dedicated directory that a user could map to a volume to handle backups and recovery
