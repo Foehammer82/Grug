@@ -30,8 +30,8 @@ class UserAdmin(ModelView, model=User):
 
     # Form Options
     form_excluded_columns = [
-        User.brought_food_for,
-        User.event_attendance,
+        "brought_food_for",
+        "event_attendance",
         User.secrets,
         User.assistant_thread_id,
         User.auto_created,

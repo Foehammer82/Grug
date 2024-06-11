@@ -1,4 +1,5 @@
 import discord
+from discord import SelectOption
 from loguru import logger
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -13,15 +14,19 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
     """A dropdown for selecting the user who is assigned to bring food."""
 
     def __init__(self, food_event: EventFood):
-        options = [
-            discord.SelectOption(
-                label=user.friendly_name,
-                description=user.friendly_name,
-                value=str(user.id),
-                emoji=None,
-            )
-            for user in food_event.event.group.users
-        ]
+        options: list[SelectOption] = (
+            [
+                discord.SelectOption(
+                    label=user.friendly_name,
+                    description=user.friendly_name,
+                    value=str(user.id),
+                    emoji=None,
+                )
+                for user in food_event.event.group.users
+            ]
+            if food_event.event.group
+            else []
+        )
         options.append(discord.SelectOption(label="nobody", description="No food this week", value="none"))
 
         super().__init__(
@@ -115,8 +120,11 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
     # Get the next food event
     next_food_event = await event.get_next_food_event(session)
 
+    if not next_food_event:
+        raise ValueError("No food events found for this group.")
+
     # if there is a user assigned to bring food, add that to the message
-    if next_food_event.user_assigned_food is not None:
+    if next_food_event and next_food_event.user_assigned_food is not None:
         message_content += (
             f"\n\n{next_food_event.user_assigned_food.friendly_name} volunteered to bring food next.  "
             "Select from list below to change."

@@ -6,7 +6,7 @@ from grug.models import DalleImageRequest
 from grug.settings import settings
 
 
-async def generate_ai_image(prompt: str) -> str:
+async def generate_ai_image(prompt: str) -> dict[str, str | int]:
     """
     Generate an image using OpenAI's DALL-E model, and returns a URL to the generated image.
 

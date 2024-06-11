@@ -28,7 +28,7 @@ def init_discord_bot():
         logger.info(f"Discord Bot started with task ID {discord_bot_task}")
 
 
-def get_bot_invite_url() -> str:
+def get_bot_invite_url() -> str | None:
     return (
         f"https://discord.com/api/oauth2/authorize?client_id={discord_bot.user.id}&permissions=8&scope=bot"
         if discord_bot.user
@@ -92,7 +92,9 @@ async def _respond_to_dm(message: discord.Message, session: async_session):
     """
     async with message.channel.typing():
         # Get the Discord account for the user
-        discord_server = DiscordServer.get_or_create(guild=message.guild, db_session=session) if message.guild else None
+        discord_server = (
+            await DiscordServer.get_or_create(guild=message.guild, db_session=session) if message.guild else None
+        )
         discord_account = await DiscordAccount.get_or_create(
             member=message.author,
             discord_server=discord_server,

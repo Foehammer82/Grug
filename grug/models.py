@@ -401,8 +401,8 @@ class Event(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str
     description: str | None = None
-    group_id: int | None = Field(default=None, foreign_key="groups.id")
-    group: Group | None = Relationship(
+    group_id: int = Field(default=None, foreign_key="groups.id")
+    group: Group = Relationship(
         back_populates="events",
         sa_relationship_kwargs={"lazy": "joined"},
     )
@@ -446,6 +446,9 @@ class Event(SQLModel, table=True):
     @property
     def users(self) -> list[User]:
         """Get all users tied to the event."""
+        if self.group is None:
+            return []
+
         return self.group.users
 
     @computed_field
@@ -472,9 +475,14 @@ class Event(SQLModel, table=True):
 
         return list(distinct_food_bringers_sorted.values())
 
-    async def get_next_food_event(self, session: AsyncSession) -> EventFood:
+    async def get_next_food_event(self, session: AsyncSession) -> EventFood | None:
         """Get the next food event."""
-        next_event_date = self.get_event_calendar_interval_trigger().next()
+        interval_trigger = self.get_event_calendar_interval_trigger()
+
+        if interval_trigger is None:
+            return None
+
+        next_event_date = interval_trigger.next()
         for food_event in self.food:
             if food_event.event_date == next_event_date.date():
                 return food_event
@@ -483,15 +491,19 @@ class Event(SQLModel, table=True):
         event_food = EventFood(
             event_id=self.id,
             event=self,
-            event_date=self.get_event_calendar_interval_trigger().next(),
+            event_date=next_event_date,
         )
 
         session.add(event_food)
         await session.commit()
         await session.refresh(event_food)
+
         return event_food
 
-    def get_event_calendar_interval_trigger(self) -> CalendarIntervalTrigger:
+    def get_event_calendar_interval_trigger(self) -> CalendarIntervalTrigger | None:
+        if self.event_schedule_repeat_interval is None:
+            return None
+
         event_schedule_repeat_interval = RepeatInterval(self.event_schedule_repeat_interval.title())
 
         return CalendarIntervalTrigger(
@@ -504,15 +516,21 @@ class Event(SQLModel, table=True):
             hour=self.event_schedule_start_datetime.hour,
         )
 
-    def get_food_reminder_calendar_interval_trigger(self) -> CalendarIntervalTrigger:
+    def get_food_reminder_calendar_interval_trigger(self) -> CalendarIntervalTrigger | None:
         food_reminder_calendar_interval_trigger = self.get_event_calendar_interval_trigger()
+        if food_reminder_calendar_interval_trigger is None:
+            return None
+
         food_reminder_calendar_interval_trigger.start_date -= timedelta(days=self.food_reminder_days_before_event)
         food_reminder_calendar_interval_trigger.minute = self.food_reminder_time.minute
         food_reminder_calendar_interval_trigger.hour = self.food_reminder_time.hour
         return food_reminder_calendar_interval_trigger
 
-    def get_attendance_reminder_calendar_interval_trigger(self) -> CalendarIntervalTrigger:
+    def get_attendance_reminder_calendar_interval_trigger(self) -> CalendarIntervalTrigger | None:
         attendance_reminder_calendar_interval_trigger = self.get_event_calendar_interval_trigger()
+        if attendance_reminder_calendar_interval_trigger is None:
+            return None
+
         attendance_reminder_calendar_interval_trigger.start_date -= timedelta(
             days=self.attendance_reminder_days_before_event
         )
