@@ -18,11 +18,11 @@
 - [ ] Grug is able to send and receive texts
 - [ ] Grug is able to read and answer questions from a Google doc (session notes)
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
-- [ ] setup mkdocs documentation focused on both deploying for self-hosting and forking for personal use
 - [ ] ability to back up to a dedicated directory that a user could map to a volume to handle backups and recovery
 
 ### Tech-Debt Tasks
 
+- [ ] setup mkdocs documentation focused on both deploying for self-hosting and forking for personal use
 - [ ] create unit tests (should have started with this, but was having more fun messing around)
 
 ### Nice To Have One-Day Features
