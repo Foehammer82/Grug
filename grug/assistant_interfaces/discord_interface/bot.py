@@ -138,11 +138,13 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
                 message=message.content,
                 thread_id=discord_text_channel.assistant_thread_id,
                 user=discord_account.user,
+                group=discord_text_channel.discord_server.group,
             )
         else:
             assistant_response = await assistant.send_group_message(
                 message=message.content,
                 user=discord_account.user,
+                group=discord_text_channel.discord_server.group,
             )
 
             # Save the assistant thread ID to the database
@@ -151,5 +153,4 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
             await session.commit()
 
         # Send the response back to the channel
-        # TODO: handle responses that are too long for a single message
         await message.reply(assistant_response.response, suppress_embeds=False)

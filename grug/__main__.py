@@ -17,9 +17,6 @@ from grug.metrics import initialize_metrics
 from grug.scheduler import init_scheduler
 from grug.settings import settings
 
-# TODO: create unit tests to make sure that the food and attendance tracking all works as expected!
-# TODO: evaluate adding this: https://github.com/aminalaee/fastapi-storages
-
 if settings.sentry_dsn:
     import sentry_sdk
 

@@ -13,7 +13,7 @@ async def generate_ai_image(prompt: str) -> dict[str, str | int]:
     Args:
         prompt (str): The prompt to generate the image from.
 
-    Note:
+    Notes:
         - as of 6/9/2024, it costs $0.04 per dall-e-3 image, and $0.02 per dall-e-2 image
         - pricing reference: https://openai.com/api/pricing/
         - API reference: https://platform.openai.com/docs/guides/images/usage?context=python

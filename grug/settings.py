@@ -14,7 +14,7 @@ class DiscordSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     bot_token: SecretStr
-    auto_create_users: bool = False
+    auto_create_users: bool = True
 
 
 class Settings(BaseSettings):
