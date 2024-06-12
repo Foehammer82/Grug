@@ -15,9 +15,6 @@ from grug.db import async_session
 from grug.models import Group, User
 from grug.settings import settings
 
-# TODO: reconfigure the app so that there is a distinct assistant for each group.  this way we can have funciton tools
-#       be aware of group specific information.
-
 # TODO: setup monitor/log/handle openai rate limits:
 #       https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers
 

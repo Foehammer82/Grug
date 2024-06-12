@@ -101,14 +101,8 @@ class DiscordFoodBringerSelectionView(discord.ui.View):
 async def send_discord_food_reminder(event: Event, session: AsyncSession) -> EventFood:
     await wait_for_discord_to_start()
 
-    # TODO: this will DEFINITELY break if there is more than one discord server assigned to the group.
-    #       instead, we should link events to a specific discord server
-    # Get the default discord channel
-    if event.group.discord_servers[0].discord_bot_channel_id is not None:
-        guild_channel = discord_bot.get_channel(event.group.discord_servers[0].discord_bot_channel_id)
-    else:
-        guild_id = event.group.discord_servers[0].discord_guild_id
-        guild_channel = discord_bot.get_guild(guild_id).system_channel
+    # Get the next food event
+    next_food_event = await event.get_next_food_event(session)
 
     # Build the food reminder message
     message_content = "The last people to bring food were:"
@@ -116,9 +110,6 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
         message_content += (
             f"\n- [{brought_food.event_date.isoformat()}] {brought_food.user_assigned_food.friendly_name}"
         )
-
-    # Get the next food event
-    next_food_event = await event.get_next_food_event(session)
 
     if not next_food_event:
         raise ValueError("No food events found for this group.")
@@ -132,22 +123,30 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
     else:
         message_content += f"\n\nGrug want know, who bring food {next_food_event.event_date.isoformat()}?"
 
-    discord_bot.add_view(DiscordFoodBringerSelectionView(next_food_event))
+    for discord_server in event.group.discord_servers:
+        # Get the default discord channel
+        if discord_server.discord_bot_channel_id is not None:
+            guild_channel = discord_bot.get_channel(event.group.discord_servers[0].discord_bot_channel_id)
+        else:
+            guild_id = discord_server.discord_guild_id
+            guild_channel = discord_bot.get_guild(guild_id).system_channel
 
-    # Send the message to discord
-    message = await guild_channel.send(
-        content=message_content,
-        view=DiscordFoodBringerSelectionView(food_event=next_food_event),
-    )
+        discord_bot.add_view(DiscordFoodBringerSelectionView(next_food_event))
 
-    # Update the food_event with the message_id
-    session.add(
-        EventFoodDiscordMessage(
-            discord_message_id=message.id,
-            event_food_id=next_food_event.id,
-            event_food=next_food_event,
+        # Send the message to discord
+        message = await guild_channel.send(
+            content=message_content,
+            view=DiscordFoodBringerSelectionView(food_event=next_food_event),
         )
-    )
-    await session.commit()
+
+        # Update the food_event with the message_id
+        session.add(
+            EventFoodDiscordMessage(
+                discord_message_id=message.id,
+                event_food_id=next_food_event.id,
+                event_food=next_food_event,
+            )
+        )
+        await session.commit()
 
     return next_food_event
