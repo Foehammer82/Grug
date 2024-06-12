@@ -12,7 +12,7 @@ from pydantic import BaseModel
 
 from grug.assistant_functions import get_assistant_functions
 from grug.db import async_session
-from grug.models import User
+from grug.models import Group, User
 from grug.settings import settings
 
 # TODO: reconfigure the app so that there is a distinct assistant for each group.  this way we can have funciton tools
@@ -118,12 +118,14 @@ class Assistant:
         return await self._send_message(
             thread=thread,
             message=message,
+            user=user,
         )
 
     async def send_group_message(
         self,
         message: str,
         user: User,
+        group: Group,
         thread_id: str | None = None,
     ) -> AssistantResponse:
         """
@@ -133,6 +135,7 @@ class Assistant:
             message (str): The message to send to the assistant.
             thread_id (str): The thread_id of the group thread.
             user (User): The player sending the message.
+            group (Group): The group the player is in.
 
         Returns:
             AssistantResponse: The response from the assistant.
@@ -150,9 +153,17 @@ class Assistant:
                 "\n\n[AI should not factor the person's name into its response.]"
                 "\n[AI should not state that they received a message from the person.]"
             ),
+            user=user,
+            group=group,
         )
 
-    async def _send_message(self, thread: Thread, message: str):
+    async def _send_message(
+        self,
+        thread: Thread,
+        message: str,
+        user: User | None = None,
+        group: Group | None = None,
+    ) -> AssistantResponse:
         """
         Send a message to the assistant and get the response.
 
@@ -189,7 +200,9 @@ class Assistant:
                     run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=run.id,
-                        tool_outputs=[await self._call_tool_function(tool_call) for tool_call in tool_calls],
+                        tool_outputs=[
+                            await self._call_tool_function(tool_call, user, group) for tool_call in tool_calls
+                        ],
                     )
 
             elif run.status == "completed":
@@ -223,6 +236,8 @@ class Assistant:
             bool: "boolean",
         }
 
+        ignored_args = ["user", "group"]
+
         for function_name, function in self._tools.items():
             function_arg_spec = inspect.getfullargspec(function)
 
@@ -237,9 +252,14 @@ class Assistant:
                             "properties": {
                                 arg: {"type": openai_type_map[function_arg_spec.annotations[arg]]}
                                 for arg in function_arg_spec.args
+                                if arg not in ignored_args
                             },
                             "required": (
-                                function_arg_spec.args[: -len(function_arg_spec.defaults)]
+                                [
+                                    arg
+                                    for arg in function_arg_spec.args[: -len(function_arg_spec.defaults)]
+                                    if arg not in ignored_args
+                                ]
                                 if function_arg_spec.defaults
                                 else []
                             ),
@@ -250,15 +270,36 @@ class Assistant:
 
         return tools
 
-    async def _call_tool_function(self, tool_call: RequiredActionFunctionToolCall):
+    async def _call_tool_function(
+        self,
+        tool_call: RequiredActionFunctionToolCall,
+        user: User | None = None,
+        group: Group | None = None,
+    ):
         """Call the tool function and return the output."""
+        # TODO: evaluate running tools from as a distributed job using apschedulers job capabilities.
+        #       - evaluate how much additional time this takes
+        #       - evaluate if this will work well for scaling (the idea is to put as little computational overhead on
+        #         the main app(s) as possible)
+        # TODO: setup auditing on tool calls to track when the tools were called and if they raised errors or not, and
+        #       details around what was passed to the tool and received back from the tool.
+
         logger.info(f"Calling tool function: {tool_call.function.name}")
 
         try:
             tool_callable = self._tools[tool_call.function.name]
             function_args = json.loads(tool_call.function.arguments)
+            tool_args: list[str] = inspect.getfullargspec(self._tools[tool_call.function.name]).args
 
-            for arg in inspect.getfullargspec(self._tools[tool_call.function.name]).args:
+            # pass in the user object to the function if it's in the function's arguments
+            if "user" in tool_args:
+                function_args["user"] = user
+
+            # pass in the group object to the function if it's in the function's arguments
+            if "group" in tool_args:
+                function_args["group"] = group
+
+            for arg in tool_args:
                 if arg not in function_args:
                     raise ValueError(f"Missing argument: {arg} from function call {tool_callable.__name__}")
 

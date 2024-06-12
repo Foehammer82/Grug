@@ -119,11 +119,11 @@ class Group(SQLModel, table=True):
     users: list["User"] = Relationship(
         back_populates="groups",
         link_model=UserGroupLink,
-        sa_relationship_kwargs={"lazy": "joined"},
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
     events: list["Event"] = Relationship(
         back_populates="group",
-        sa_relationship_kwargs={"lazy": "joined", "cascade": "all, delete"},
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
     discord_servers: list["DiscordServer"] = Relationship(
         back_populates="group",
@@ -297,7 +297,7 @@ class EventFood(SQLModel, table=True):
     event_id: int = Field(default=None, foreign_key="event.id", index=True)
     event: "Event" = Relationship(
         back_populates="food",
-        sa_relationship_kwargs={"lazy": "joined"},
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
     user_assigned_food_id: int | None = Field(default=None, foreign_key="users.id")
     user_assigned_food: User | None = Relationship(
@@ -351,7 +351,7 @@ class EventAttendance(SQLModel, table=True):
     event_id: int = Field(default=None, foreign_key="event.id", index=True)
     event: "Event" = Relationship(
         back_populates="attendance",
-        sa_relationship_kwargs={"lazy": "joined"},
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
     users: list[User] = Relationship(
         back_populates="event_attendance",
@@ -404,7 +404,7 @@ class Event(SQLModel, table=True):
     group_id: int = Field(default=None, foreign_key="groups.id")
     group: Group = Relationship(
         back_populates="events",
-        sa_relationship_kwargs={"lazy": "joined"},
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
 
     # Event Schedule

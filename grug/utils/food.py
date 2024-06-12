@@ -16,7 +16,7 @@ async def send_food_reminder(event_id: int, session: async_session = None):
         close_session_at_end = True
         session = async_session()
 
-    event = (await session.execute(select(Event).where(Event.id == event_id))).scalars().unique().one_or_none()
+    event = (await session.execute(select(Event).where(Event.id == event_id))).scalars().one_or_none()
     if event is None:
         logger.error(f"Event {event_id} not found.")
         return

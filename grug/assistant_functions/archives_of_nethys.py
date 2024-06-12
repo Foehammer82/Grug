@@ -4,7 +4,7 @@ from elasticsearch import Elasticsearch
 from loguru import logger
 
 
-def search_archives_of_nethys(search_string: str):
+def search_archives_of_nethys(search_string: str) -> list[dict]:
     """
     Searches the Elasticsearch index for entries matching the given search string within the
     [AON](https://2e.aonprd.com/) (Archives of Nethys) dataset.

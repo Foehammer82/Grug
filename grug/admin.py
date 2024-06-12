@@ -176,7 +176,7 @@ class EventAdmin(ModelView, model=Event):
     }
 
     # Detail Page Options
-    column_details_exclude_list = ["id", "group_id"]
+    column_details_exclude_list = ["id", "group_id", "food", "attendance"]
 
 
 class EventFoodAdmin(ModelView, model=EventFood):
