@@ -198,7 +198,13 @@ class EventFoodAdmin(ModelView, model=EventFood):
     category = "Events"
 
     # List Page
-    column_list = [EventFood.id, EventFood.event_date, "user_assigned_food.friendly_name", "food_name"]
+    column_list = [
+        EventFood.id,
+        EventFood.event_date,
+        EventFood.event,
+        EventFood.user_assigned_food,
+        EventFood.food_name,
+    ]
     column_sortable_list = [EventFood.event_date]
     can_create = False
     can_delete = False
@@ -246,7 +252,12 @@ class EventAttendanceAdmin(ModelView, model=EventAttendance):
     category = "Events"
 
     # List Page
-    column_list = [EventAttendance.id, EventAttendance.event_date]
+    column_list = [
+        EventAttendance.id,
+        EventAttendance.event_date,
+        EventAttendance.event,
+        EventAttendance.users_attended,
+    ]
     column_sortable_list = [EventAttendance.event_date]
     can_create = False
     can_delete = False

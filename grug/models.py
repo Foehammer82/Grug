@@ -395,6 +395,10 @@ class RepeatInterval(StrEnum):
 class Event(SQLModel, table=True):
     """Model for an event."""
 
+    # TODO: setup an event_instance table that tracks each even date and ties the food and attendance to that to track
+    #       and edit explicit dates.  the idea is to add the capability of modifying discrete dates for events that
+    #       are one-off changes
+
     __tablename__ = "event"
 
     id: int | None = Field(default=None, primary_key=True)
