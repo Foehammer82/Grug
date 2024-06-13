@@ -13,15 +13,6 @@ from sqlmodel import Field, Relationship, SQLModel, cast, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 
-class Rsvp(StrEnum):
-    """Enum for RSVP status."""
-
-    YES = "yes"
-    NO = "no"
-    MAYBE = "maybe"
-    NO_RESPONSE = "no_response"
-
-
 class UserGroupLink(SQLModel, table=True):
     __tablename__ = "users_groups_link"
     group_id: int | None = Field(default=None, foreign_key="users.id", primary_key=True)
@@ -32,7 +23,6 @@ class UserEventAttendanceLink(SQLModel, table=True):
     __tablename__ = "users_events_attendance_link"
     user_id: int | None = Field(default=None, foreign_key="users.id", primary_key=True)
     event_attendance_id: int | None = Field(default=None, foreign_key="event_attendance.id", primary_key=True)
-    rsvp: Rsvp = Field(default=Rsvp.NO_RESPONSE)
 
 
 class User(SQLModel, table=True):
@@ -71,7 +61,9 @@ class User(SQLModel, table=True):
         sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
     )
     brought_food_for: list["EventFood"] = Relationship(back_populates="user_assigned_food")
-    event_attendance: list["EventAttendance"] = Relationship(back_populates="users", link_model=UserEventAttendanceLink)
+    event_attendance: list["EventAttendance"] = Relationship(
+        back_populates="users_attended", link_model=UserEventAttendanceLink
+    )
     secrets: Optional["UserSecrets"] = Relationship(
         back_populates="user",
         sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
@@ -353,7 +345,7 @@ class EventAttendance(SQLModel, table=True):
         back_populates="attendance",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
-    users: list[User] = Relationship(
+    users_attended: list[User] = Relationship(
         back_populates="event_attendance",
         link_model=UserEventAttendanceLink,
         sa_relationship_kwargs={"lazy": "selectin"},
@@ -363,6 +355,13 @@ class EventAttendance(SQLModel, table=True):
         back_populates="event_attendance",
         sa_relationship_kwargs={"lazy": "selectin"},
     )
+
+    @computed_field
+    @property
+    def user_attendance_summary_md(self) -> str:
+        summary_md = f"**{self.event.name}** attendance for {self.event_date.isoformat()}\n"
+        summary_md += "\n".join([f"- {user.friendly_name}" for user in self.users_attended])
+        return summary_md
 
     def __str__(self):
         return f"{self.event.name} attendance [{self.event_date.isoformat()}]"
@@ -499,6 +498,31 @@ class Event(SQLModel, table=True):
         await session.refresh(event_food)
 
         return event_food
+
+    async def get_next_attendance_event(self, session: AsyncSession) -> EventAttendance | None:
+        """Get the next attendance event."""
+        interval_trigger = self.get_event_calendar_interval_trigger()
+
+        if interval_trigger is None:
+            return None
+
+        next_event_date = interval_trigger.next()
+        for attendance_event in self.attendance:
+            if attendance_event.event_date == next_event_date.date():
+                return attendance_event
+
+        # if nothing has been returned yet, create the next event and return it
+        event_attendance = EventAttendance(
+            event_id=self.id,
+            event=self,
+            event_date=next_event_date,
+        )
+
+        session.add(event_attendance)
+        await session.commit()
+        await session.refresh(event_attendance)
+
+        return event_attendance
 
     def get_event_calendar_interval_trigger(self) -> CalendarIntervalTrigger | None:
         if self.event_schedule_repeat_interval is None:

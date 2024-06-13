@@ -1,9 +1,6 @@
 from fastapi import FastAPI
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
-from prometheus_fastapi_instrumentator import (
-    Instrumentator,
-    PrometheusFastApiInstrumentator,
-)
+from prometheus_fastapi_instrumentator import Instrumentator, PrometheusFastApiInstrumentator
 from starlette.responses import Response
 
 instrumentor: PrometheusFastApiInstrumentator | None = None
