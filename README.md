@@ -19,6 +19,7 @@
 - [ ] Grug is able to read and answer questions from a Google doc (session notes)
 - [ ] deploy Grug to dockerhub (or make image available in public repo) and include instructions for use
 - [ ] ability to back up to a dedicated directory that a user could map to a volume to handle backups and recovery
+- [ ] add ability for Grug to moderate a discord server
 
 ### Tech-Debt Tasks
 

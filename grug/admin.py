@@ -1,20 +1,17 @@
+import inspect
+
 from fastapi import FastAPI
-from sqladmin import Admin, ModelView
-from sqladmin.models import ModelViewMeta
+from sqladmin import Admin, ModelView, action
+from starlette.requests import Request
+from starlette.responses import RedirectResponse
 
 from grug.assistant_interfaces.discord_interface.bot import get_bot_invite_url
 from grug.auth import AdminAuth
 from grug.db import async_engine
-from grug.models import (
-    DiscordAccount,
-    DiscordServer,
-    Event,
-    EventAttendance,
-    EventFood,
-    Group,
-    User,
-)
+from grug.models import DiscordAccount, DiscordServer, Event, EventAttendance, EventFood, Group, User
 from grug.settings import settings
+from grug.utils.attendance import send_attendance_reminder
+from grug.utils.food import send_food_reminder
 
 # TODO: use the grug favicon for the admin if possible.
 
@@ -96,6 +93,8 @@ class DiscordAccountAdmin(ModelView, model=DiscordAccount):
     name = "Discord Account"
     name_plural = "Discord Accounts"
     category = "Discord"
+    can_create = False
+    can_delete = False
 
     # Column Options
     column_list = [
@@ -126,9 +125,12 @@ class DiscordAccountAdmin(ModelView, model=DiscordAccount):
 class DiscordServerAdmin(ModelView, model=DiscordServer):
     """Admin interface for the DiscordAccount model."""
 
+    # TODO: evaluate how to handle on_delete (if a server is deleted, should the bot be removed from that server?)
+
     name = "Discord Server"
     name_plural = "Discord Servers"
     category = "Discord"
+    can_create = False
 
     # Column Options
     column_list = [
@@ -153,6 +155,16 @@ class DiscordServerAdmin(ModelView, model=DiscordServer):
 
     # Detail Page Options
     column_details_exclude_list = ["id", "discord_text_channels", "group_id"]
+
+    # noinspection PyUnusedLocal
+    @action(
+        name="invite_to_discord_server",
+        label="Invite to Server",
+        add_in_detail=False,
+        add_in_list=True,
+    )
+    async def invite_to_discord_server(self, request: Request):
+        return RedirectResponse(get_bot_invite_url())
 
 
 class EventAdmin(ModelView, model=Event):
@@ -188,6 +200,8 @@ class EventFoodAdmin(ModelView, model=EventFood):
     # List Page
     column_list = [EventFood.id, EventFood.event_date, "user_assigned_food.friendly_name", "food_name"]
     column_sortable_list = [EventFood.event_date]
+    can_create = False
+    can_delete = False
 
     # Form Options
     form_excluded_columns = ["discord_messages"]
@@ -205,6 +219,25 @@ class EventFoodAdmin(ModelView, model=EventFood):
     # Detail Page Options
     column_details_exclude_list = ["id", "user_assigned_food_id", "event_id", "discord_messages"]
 
+    @action(
+        name="send_food_reminder",
+        label="Send Reminder",
+        add_in_detail=True,
+        add_in_list=True,
+    )
+    async def send_food_reminder(self, request: Request):
+        pks = request.query_params.get("pks", "").split(",")
+        if pks[0] != "":
+            for pk in pks:
+                model: EventFood = await self.get_object_for_details(pk)
+                await send_food_reminder(event_id=model.event_id)
+
+        referer = request.headers.get("Referer")
+        if referer:
+            return RedirectResponse(referer)
+        else:
+            return RedirectResponse(request.url_for("admin:list", identity=self.identity))
+
 
 class EventAttendanceAdmin(ModelView, model=EventAttendance):
     # Metadata
@@ -215,6 +248,8 @@ class EventAttendanceAdmin(ModelView, model=EventAttendance):
     # List Page
     column_list = [EventAttendance.id, EventAttendance.event_date]
     column_sortable_list = [EventAttendance.event_date]
+    can_create = False
+    can_delete = False
 
     # Form Options
     form_excluded_columns = ["discord_messages"]
@@ -223,7 +258,7 @@ class EventAttendanceAdmin(ModelView, model=EventAttendance):
             "fields": ("name",),
             "order_by": "name",
         },
-        "users": {
+        "users_attended": {
             "fields": ("username",),
             "order_by": "username",
         },
@@ -231,6 +266,25 @@ class EventAttendanceAdmin(ModelView, model=EventAttendance):
 
     # Detail Page Options
     column_details_exclude_list = ["id", "user_assigned_food_id", "event_id", "discord_messages"]
+
+    @action(
+        name="send_attendance_reminder",
+        label="Send Reminder",
+        add_in_detail=True,
+        add_in_list=True,
+    )
+    async def send_attendance_reminder(self, request: Request):
+        pks = request.query_params.get("pks", "").split(",")
+        if pks[0] != "":
+            for pk in pks:
+                model: EventAttendance = await self.get_object_for_details(pk)
+                await send_attendance_reminder(event_id=model.event_id)
+
+        referer = request.headers.get("Referer")
+        if referer:
+            return RedirectResponse(referer)
+        else:
+            return RedirectResponse(request.url_for("admin:list", identity=self.identity))
 
 
 def init_admin(app: FastAPI):
@@ -256,5 +310,5 @@ def init_admin(app: FastAPI):
 
     # Add all model views to the admin interface
     for model_view in list(globals().values()):
-        if isinstance(model_view, ModelViewMeta) and model_view.name != "":
+        if inspect.isclass(model_view) and issubclass(model_view, ModelView) and model_view.name != "":
             admin.add_view(model_view)

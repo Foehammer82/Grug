@@ -1,13 +1,14 @@
 from venv import logger
 
 from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from grug.assistant_interfaces import discord_interface
 from grug.db import async_session
 from grug.models import Event
 
 
-async def send_food_reminder(event_id: int, session: async_session = None):
+async def send_food_reminder(event_id: int, session: AsyncSession = None):
     logger.info(f"Sending food reminder for {event_id}")
 
     # If a session is not provided, create one and close it at the end

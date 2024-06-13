@@ -81,6 +81,7 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
                     f"No player selected to bring food for event {event_food.event.id} " f"on {event_food.event_date}"
                 )
 
+                # https://discordpy.readthedocs.io/en/latest/interactions/api.html#discord.InteractionResponse.send_message
                 # noinspection PyUnresolvedReferences
                 await interaction.response.send_message(
                     f"No player selected to bring food for {event_food.event.name} "
@@ -99,10 +100,19 @@ class DiscordFoodBringerSelectionView(discord.ui.View):
 
 
 async def send_discord_food_reminder(event: Event, session: AsyncSession) -> EventFood:
+    # TODO: create a function that will let the assistant form the questions and responses below so they fit the
+    #       theme of the bot
+
     await wait_for_discord_to_start()
 
     # Get the next food event
     next_food_event = await event.get_next_food_event(session)
+
+    if next_food_event is None:
+        raise ValueError("No food events found for this group.")
+
+    # Add the view to the bot
+    discord_bot.add_view(DiscordFoodBringerSelectionView(next_food_event))
 
     # Build the food reminder message
     message_content = "The last people to bring food were:"
@@ -130,8 +140,6 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
         else:
             guild_id = discord_server.discord_guild_id
             guild_channel = discord_bot.get_guild(guild_id).system_channel
-
-        discord_bot.add_view(DiscordFoodBringerSelectionView(next_food_event))
 
         # Send the message to discord
         message = await guild_channel.send(

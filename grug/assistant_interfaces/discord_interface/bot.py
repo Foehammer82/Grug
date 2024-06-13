@@ -6,6 +6,7 @@ import discord
 import discord.utils
 from loguru import logger
 
+from grug.assistant_interfaces.discord_interface.attendance import DiscordAttendanceCheckView
 from grug.db import async_session
 from grug.log_config import InterceptHandler
 from grug.models import DiscordAccount, DiscordServer, DiscordTextChannel
@@ -52,6 +53,7 @@ async def on_ready():
             discord_server = await DiscordServer.get_or_create(guild=guild, db_session=session)
 
             # Create Discord accounts for all members in the guild
+            # TODO: setup as a background task so it doesn't slow down startup
             if settings.discord.auto_create_users:
                 for member in guild.members:
                     if not member.bot:
@@ -59,6 +61,9 @@ async def on_ready():
                         await DiscordAccount.get_or_create(
                             member=member, discord_server=discord_server, db_session=session
                         )
+
+    discord_bot.add_view(view=DiscordAttendanceCheckView())
+    logger.info(f"Persistent Views: {discord_bot.persistent_views}")
 
     logger.info(f"Logged in as {discord_bot.user} (ID: {discord_bot.user.id})")
 
