@@ -1,7 +1,7 @@
 """Scheduler for the Grug bot."""
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from apscheduler import AsyncScheduler, ConflictPolicy, Schedule
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
@@ -80,6 +80,7 @@ def handle_event_model_upsert(mapper: Mapper, connection: Connection, event_mode
             conflict_policy=ConflictPolicy.replace,
             kwargs={"event_id": event_model.id},
             paused=(not event_model.track_food),
+            misfire_grace_time=timedelta(minutes=5),
         )
     )
     logger.info(f"Upserted food reminder job for event {event_model.id} [paused={not event_model.track_food}]")
@@ -93,6 +94,7 @@ def handle_event_model_upsert(mapper: Mapper, connection: Connection, event_mode
             conflict_policy=ConflictPolicy.replace,
             kwargs={"event_id": event_model.id},
             paused=(not event_model.track_attendance),
+            misfire_grace_time=timedelta(minutes=5),
         )
     )
     logger.info(

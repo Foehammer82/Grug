@@ -9,7 +9,7 @@ from grug.models import Event
 
 
 async def send_food_reminder(event_id: int, session: AsyncSession = None):
-    logger.info(f"Sending food reminder for {event_id}")
+    logger.info(f"Sending food reminder for Event_ID: {event_id}")
 
     # If a session is not provided, create one and close it at the end
     close_session_at_end = False
