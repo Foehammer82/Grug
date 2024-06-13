@@ -4,29 +4,24 @@ from loguru import logger
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grug.assistant_interfaces.discord_interface.bot import discord_bot
 from grug.assistant_interfaces.discord_interface.utils import wait_for_discord_to_start
 from grug.db import async_session
-from grug.models import Event, EventFood, EventFoodDiscordMessage
+from grug.models import Event, EventFood, EventFoodDiscordMessage, Group
 
 
 class EventFoodAssignedUserDropDown(discord.ui.Select):
     """A dropdown for selecting the user who is assigned to bring food."""
 
-    def __init__(self, food_event: EventFood):
-        options: list[SelectOption] = (
-            [
-                discord.SelectOption(
-                    label=user.friendly_name,
-                    description=user.friendly_name,
-                    value=str(user.id),
-                    emoji=None,
-                )
-                for user in food_event.event.group.users
-            ]
-            if food_event.event.group
-            else []
-        )
+    def __init__(self, group: Group):
+        options: list[SelectOption] = [
+            discord.SelectOption(
+                label=user.friendly_name,
+                description=user.friendly_name,
+                value=str(user.id),
+                emoji=None,
+            )
+            for user in group.users
+        ]
         options.append(discord.SelectOption(label="nobody", description="No food this week", value="none"))
 
         super().__init__(
@@ -92,14 +87,16 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
 class DiscordFoodBringerSelectionView(discord.ui.View):
     """A view for selecting the player who is bringing food."""
 
-    def __init__(self, food_event: EventFood):
+    def __init__(self, group: Group):
         super().__init__()
 
         self.timeout = None
-        self.add_item(EventFoodAssignedUserDropDown(food_event))
+        self.add_item(EventFoodAssignedUserDropDown(group))
 
 
 async def send_discord_food_reminder(event: Event, session: AsyncSession) -> EventFood:
+    from grug.assistant_interfaces.discord_interface.bot import discord_bot
+
     # TODO: create a function that will let the assistant form the questions and responses below so they fit the
     #       theme of the bot
 
@@ -110,9 +107,6 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
 
     if next_food_event is None:
         raise ValueError("No food events found for this group.")
-
-    # Add the view to the bot
-    discord_bot.add_view(DiscordFoodBringerSelectionView(next_food_event))
 
     # Build the food reminder message
     message_content = "The last people to bring food were:"
@@ -144,7 +138,7 @@ async def send_discord_food_reminder(event: Event, session: AsyncSession) -> Eve
         # Send the message to discord
         message = await guild_channel.send(
             content=message_content,
-            view=DiscordFoodBringerSelectionView(food_event=next_food_event),
+            view=DiscordFoodBringerSelectionView(group=next_food_event.event.group),
         )
 
         # Update the food_event with the message_id

@@ -80,7 +80,7 @@ class GroupAdmin(ModelView, model=Group):
     }
 
     # Detail Page Options
-    column_details_exclude_list = ["id", "auto_created"]
+    column_details_exclude_list = ["id", "auto_created", "events"]
 
 
 class DiscordAccountAdmin(ModelView, model=DiscordAccount):

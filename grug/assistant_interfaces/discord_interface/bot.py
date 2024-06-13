@@ -7,6 +7,7 @@ import discord.utils
 from loguru import logger
 
 from grug.assistant_interfaces.discord_interface.attendance import DiscordAttendanceCheckView
+from grug.assistant_interfaces.discord_interface.food import DiscordFoodBringerSelectionView
 from grug.db import async_session
 from grug.log_config import InterceptHandler
 from grug.models import DiscordAccount, DiscordServer, DiscordTextChannel
@@ -53,17 +54,21 @@ async def on_ready():
             discord_server = await DiscordServer.get_or_create(guild=guild, db_session=session)
 
             # Create Discord accounts for all members in the guild
-            # TODO: setup as a background task so it doesn't slow down startup
             if settings.discord.auto_create_users:
                 for member in guild.members:
-                    if not member.bot:
+                    if not member.bot and member.id not in [
+                        discord_account.discord_member_id
+                        for user in discord_server.group.users
+                        for discord_account in user.discord_accounts
+                    ]:
                         logger.info(f"Initializing guild member {member.name} (ID: {member.id})")
                         await DiscordAccount.get_or_create(
                             member=member, discord_server=discord_server, db_session=session
                         )
 
+    # Add persistent views to the discord bot
     discord_bot.add_view(view=DiscordAttendanceCheckView())
-    logger.info(f"Persistent Views: {discord_bot.persistent_views}")
+    discord_bot.add_view(view=DiscordFoodBringerSelectionView(discord_server.group))
 
     logger.info(f"Logged in as {discord_bot.user} (ID: {discord_bot.user.id})")
 
