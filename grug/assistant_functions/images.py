@@ -1,5 +1,9 @@
+from datetime import date
+
 from loguru import logger
 from openai.types import Image
+from sqlalchemy import Date, func
+from sqlmodel import cast, select
 
 from grug.db import async_session
 from grug.models import DalleImageRequest
@@ -31,8 +35,18 @@ async def generate_ai_image(prompt: str) -> dict[str, str | int]:
 
     async with async_session() as session:
 
+        # Get the image requests remaining for the day
+        picture_request_count_for_today = (
+            await session.execute(
+                select(func.count("*"))
+                .select_from(DalleImageRequest)
+                .where(cast(DalleImageRequest.request_time, Date) == date.today())
+            )
+        ).scalar()
+
+        remaining_image_requests = settings.openai_image_daily_generation_limit - picture_request_count_for_today
+
         # Check if the user has exceeded the daily image generation limit
-        remaining_image_requests = await DalleImageRequest.image_requests_remaining(session)
         if remaining_image_requests and remaining_image_requests <= 0:
             raise ValueError("You have exceeded the daily image generation limit.")
         logger.info(f"Remaining Dall-E image requests: {remaining_image_requests}")

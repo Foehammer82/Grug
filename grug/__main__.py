@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI
+from starlette.middleware import Middleware
+from starlette.middleware.sessions import SessionMiddleware
 from starlette.staticfiles import StaticFiles
 
 from grug.admin import init_admin
@@ -39,8 +41,18 @@ async def lifespan(fast_api_app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan, title=f"{settings.openai_assistant_name} API")
-app.mount("/static", StaticFiles(directory=settings.root_dir / "grug" / "static"), name="static")
+app = FastAPI(
+    lifespan=lifespan,
+    title=f"{settings.openai_assistant_name} API",
+    docs_url="/api",
+    redoc_url=None,
+    middleware=[Middleware(SessionMiddleware, secret_key=settings.security_key.get_secret_value())],
+)
+app.mount(
+    "/static",
+    StaticFiles(directory=settings.root_dir / "grug" / "static"),
+    name="static",
+)
 
 # Include all API routers
 for router in routers:
@@ -55,4 +67,9 @@ if settings.enable_health_endpoint:
     initialize_health_endpoints(app)
 
 if __name__ == "__main__":
-    uvicorn.run(app, port=settings.api_port, host=settings.api_host, log_level="info")
+    uvicorn.run(
+        app,
+        port=settings.api_port,
+        host=settings.api_host,
+        log_level="info",
+    )

@@ -1,17 +1,22 @@
-# Welcome to MkDocs
+# Home
 
-For full documentation visit [mkdocs.org](https://www.mkdocs.org).
+Your personal OpenAI bot.
 
-## Commands
+- Self-Hosted
+    - can be self-hosted with Docker anywhere from a Raspberry Pi to a dedicated cloud server
+- Customizable
+    - ability to write custom python functions your bot can have access to ([check it out!]())
+- Common Integrations
+    - [x] Discord
+    - [ ] SMS
+    - [ ] Email
+    - more planned...
 
-* `mkdocs new [dir-name]` - Create a new project.
-* `mkdocs serve` - Start the live-reloading docs server.
-* `mkdocs build` - Build the documentation site.
-* `mkdocs -h` - Print help message and exit.
+> put screenshots an give a good overview of what Grug is and how it can be used.
 
-## Project layout
+## Motivation
 
-    mkdocs.yml    # The configuration file.
-    docs/
-        index.md  # The documentation homepage.
-        ...       # Other markdown pages, images and other files.
+The motivation for this project started from looking for a tool to help manage attendance tracking and food schedules
+for me and the people I play DnD with. We have a few different groups that meet on different days and different
+cadences. One group meets weekly over the dinner hour, so each week a different person is responsible for providing
+food.  So, between food and attendance
