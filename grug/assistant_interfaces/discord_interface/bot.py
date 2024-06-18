@@ -108,7 +108,7 @@ async def _respond_to_dm(message: discord.Message, session: async_session):
         discord_server = (
             await get_or_create_discord_server(guild=message.guild, db_session=session) if message.guild else None
         )
-        discord_account = await upsert_discord_user_account(
+        user = await upsert_discord_user_account(
             member=message.author,
             discord_server=discord_server,
             db_session=session,
@@ -117,7 +117,7 @@ async def _respond_to_dm(message: discord.Message, session: async_session):
         # Send the message to the assistant and get the response
         assistant_response = await assistant.send_direct_message(
             message=message.content,
-            user=discord_account.user,
+            user=user,
             session=session,
         )
 
@@ -139,7 +139,7 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
     async with message.channel.typing():
         # Get the Discord account for the user
         discord_text_channel = await get_or_create_discord_text_channel(channel=message.channel, session=session)
-        discord_account = await upsert_discord_user_account(
+        user = await upsert_discord_user_account(
             member=message.author,
             discord_server=discord_text_channel.discord_server,
             db_session=session,
@@ -150,13 +150,13 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
             assistant_response = await assistant.send_group_message(
                 message=message.content,
                 thread_id=discord_text_channel.assistant_thread_id,
-                user=discord_account.user,
+                user=user,
                 group=discord_text_channel.discord_server.group,
             )
         else:
             assistant_response = await assistant.send_group_message(
                 message=message.content,
-                user=discord_account.user,
+                user=user,
                 group=discord_text_channel.discord_server.group,
             )
 

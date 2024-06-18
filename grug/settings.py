@@ -50,13 +50,7 @@ class Settings(BaseSettings):
     enable_health_endpoint: bool = True
     timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
     log_level: str = "info"
-    proxy_headers: bool = Field(
-        default=False,
-        description=(
-            "Enable proxy headers for the FastAPI app.  Set this to `True` if the app is behind a proxy and "
-            "exposed on HTTPS."
-        ),
-    )
+    reachable_on_https: bool = False
 
     # Metrics Settings
     enable_metrics_endpoint: bool = True

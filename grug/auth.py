@@ -13,6 +13,7 @@ from sqladmin.authentication import AuthenticationBackend
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 from starlette import status
+from starlette.datastructures import URL
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, Response
 
@@ -250,7 +251,13 @@ if settings.discord and settings.discord.enable_oauth:
 
     @auth_router.get("/oauth/discord-redirect")
     async def oauth_login_server_redirect(request: Request):
-        return await _discord_oauth.authorize_redirect(request, request.url_for("oauth_login_discord"))
+        # TODO: there has got to be a better way... but this solved my problem for now...
+        redirect_url = request.url_for("oauth_login_discord")
+        redirect_url_https = URL(str(redirect_url).replace("http://", "https://"))
+
+        return await _discord_oauth.authorize_redirect(
+            request, redirect_url_https if settings.reachable_on_https else redirect_url
+        )
 
     @auth_router.get("/oauth/discord")
     async def oauth_login_discord(
