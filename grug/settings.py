@@ -20,6 +20,7 @@ class DiscordSettings(BaseSettings):
     client_id: str
     client_secret: SecretStr
     enable_oauth: bool = True
+    log_level: str = "info"
     admin_user_id: int | None = Field(
         default=None,
         description=(
@@ -49,6 +50,13 @@ class Settings(BaseSettings):
     enable_metrics: bool = True
     enable_health_endpoint: bool = True
     timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
+    proxy_headers: bool = Field(
+        default=False,
+        description=(
+            "Enable proxy headers for the FastAPI app.  Set this to `True` if the app is behind a proxy and "
+            "exposed on HTTPS."
+        ),
+    )
 
     # Metrics Settings
     enable_metrics_endpoint: bool = True

@@ -71,5 +71,6 @@ if __name__ == "__main__":
         app,
         port=settings.api_port,
         host=settings.api_host,
-        log_level="info",
+        log_level=settings.log_level,
+        proxy_headers=settings.proxy_headers,
     )
