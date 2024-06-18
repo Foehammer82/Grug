@@ -72,5 +72,5 @@ if __name__ == "__main__":
         port=settings.api_port,
         host=settings.api_host,
         log_level=settings.log_level,
-        proxy_headers=settings.reachable_on_https,
+        proxy_headers=settings.proxy_headers,
     )

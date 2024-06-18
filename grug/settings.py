@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     enable_health_endpoint: bool = True
     timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
     log_level: str = "info"
-    reachable_on_https: bool = False
+    proxy_headers: bool = False
 
     # Metrics Settings
     enable_metrics_endpoint: bool = True
