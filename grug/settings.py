@@ -20,7 +20,6 @@ class DiscordSettings(BaseSettings):
     client_id: str
     client_secret: SecretStr
     enable_oauth: bool = True
-    log_level: str = "info"
     admin_user_id: int | None = Field(
         default=None,
         description=(
@@ -50,6 +49,7 @@ class Settings(BaseSettings):
     enable_metrics: bool = True
     enable_health_endpoint: bool = True
     timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
+    log_level: str = "info"
     proxy_headers: bool = Field(
         default=False,
         description=(
