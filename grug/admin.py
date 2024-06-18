@@ -198,7 +198,13 @@ class EventOccurrenceAdmin(ModelView, model=EventOccurrence):
     category = "Events"
 
     # List Page
-    column_list = [EventOccurrence.id, EventOccurrence.event_date, EventOccurrence.event]
+    column_list = [
+        EventOccurrence.id,
+        EventOccurrence.event_date,
+        EventOccurrence.event,
+        EventOccurrence.user_assigned_food,
+        EventOccurrence.users_attended,
+    ]
     column_sortable_list = [EventOccurrence.event_date]
     column_searchable_list = [EventOccurrence.event_date, EventOccurrence.event]
 
