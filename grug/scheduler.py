@@ -45,24 +45,24 @@ def handle_event_model_upsert(mapper, connection, event_model: Event):
 
     else:
         # Upsert the event occurrence manager job
-        task = asyncio.create_task(
-            scheduler.add_schedule(
-                id=f"event_{event_model.id}_occurrence_manager",
-                func_or_task_id=sync_next_event_occurrence_to_event,
-                trigger=event_model.schedule_trigger,
-                conflict_policy=ConflictPolicy.replace,
-                kwargs={"event_id": event_model.id},
+        track_background_task(
+            asyncio.create_task(
+                scheduler.add_schedule(
+                    id=f"event_{event_model.id}_occurrence_manager",
+                    func_or_task_id=sync_next_event_occurrence_to_event,
+                    trigger=event_model.schedule_trigger,
+                    conflict_policy=ConflictPolicy.replace,
+                    kwargs={"event_id": event_model.id},
+                )
             )
         )
-        track_background_task(task)
 
         logger.info(f"Added event occurrence manager job for event_id: {event_model.id}")
 
     # Always trigger the event occurrence manager job after an event is updated
     if event_model.id is None:
         raise ValueError("Event model must have an ID to trigger the event occurrence manager job")
-    task = asyncio.create_task(sync_next_event_occurrence_to_event(event_model.id))
-    track_background_task(task)
+    track_background_task(asyncio.create_task(sync_next_event_occurrence_to_event(event_model.id)))
 
 
 event.listen(Event, "after_insert", handle_event_model_upsert)
@@ -72,8 +72,9 @@ event.listen(Event, "after_update", handle_event_model_upsert)
 @event.listens_for(Event, "after_delete")
 def handle_event_model_delete(mapper, connection, event_model: Event):
     # Remove the occurrence manager job for the given event
-    task = asyncio.create_task(scheduler.remove_schedule(id=f"event_{event_model.id}_occurrence_manager"))
-    track_background_task(task)
+    track_background_task(
+        asyncio.create_task(scheduler.remove_schedule(id=f"event_{event_model.id}_occurrence_manager"))
+    )
     logger.info(f"Removed event occurrence manager job for event_id: {event_model.id}")
 
 
@@ -164,7 +165,3 @@ def handle_event_occurrence_model_delete(mapper, connection, event_model: EventO
         f"Removed event occurrence attendance reminder job for event: {event_model.event_id} "
         f"[{event_model.timestamp.isoformat()}]"
     )
-
-    # always trigger the sync_next_event_occurrence_to_event job after an event occurrence is deleted.  This way if the
-    # event occurrence was the last one, a new one will be created.
-    track_background_task(asyncio.create_task(sync_next_event_occurrence_to_event(event_id=event_model.event_id)))
