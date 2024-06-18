@@ -1,7 +1,9 @@
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException
 
 from grug.auth import AdminAuth, create_access_token
 
@@ -55,12 +57,16 @@ async def test_admin_auth_authenticate_expected_failure(admin_auth, settings):
 
 @pytest.mark.asyncio
 async def test_admin_auth_authenticate_expired_token(admin_auth, settings):
+    mock_session = MagicMock(spec=AsyncSession)
     mock_expired_authenticate_request = MagicMock()
     mock_expired_authenticate_request.session = {
         "token": create_access_token(settings.admin_user, expires_delta=timedelta(seconds=-1))
     }
 
-    assert await admin_auth.authenticate(mock_expired_authenticate_request) is False
+    # Use patch to replace async_session with the mock during the test
+    with patch("grug.db.async_session", return_value=mock_session):
+        with pytest.raises(HTTPException, match="401: Token has expired"):
+            assert await admin_auth.authenticate(mock_expired_authenticate_request) is False
 
 
 @pytest.mark.asyncio

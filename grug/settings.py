@@ -1,11 +1,14 @@
 import secrets
 import string
+from enum import StrEnum
 from pathlib import Path
 
-from pydantic import Field, SecretStr, computed_field
+import pytz
+from pydantic import AliasChoices, Field, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
+TimeZone = StrEnum("TimeZone", tuple((tz, tz) for tz in pytz.common_timezones))
 
 
 class DiscordSettings(BaseSettings):
@@ -14,7 +17,16 @@ class DiscordSettings(BaseSettings):
     model_config = SettingsConfigDict(extra="ignore")
 
     bot_token: SecretStr
-    auto_create_users: bool = True
+    client_id: str
+    client_secret: SecretStr
+    enable_oauth: bool = True
+    admin_user_id: int | None = Field(
+        default=None,
+        description=(
+            "The Discord user ID of the admin user.  Any user set here will be given admin "
+            "permissions and cannot be removed from the admin role."
+        ),
+    )
 
 
 class Settings(BaseSettings):
@@ -36,6 +48,11 @@ class Settings(BaseSettings):
     admin_password: SecretStr = SecretStr("password")
     enable_metrics: bool = True
     enable_health_endpoint: bool = True
+    timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
+
+    # Metrics Settings
+    enable_metrics_endpoint: bool = True
+    metrics_key: SecretStr | None = None
 
     # Sentry Settings
     # https://docs.sentry.io/platforms/python/#configure
@@ -76,6 +93,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
     postgres_db: str = "postgres"
+    postgres_apscheduler_schema: str = "apscheduler"
 
     # OpenAI Settings
     openai_key: SecretStr
@@ -95,9 +113,6 @@ class Settings(BaseSettings):
     openai_image_default_size: str = "1024x1024"
     openai_image_default_quality: str = "standard"
     openai_image_default_model: str = "dall-e-3"
-
-    # DB Settings
-    scheduler_db_schema: str = "apscheduler"
 
     @computed_field
     @property

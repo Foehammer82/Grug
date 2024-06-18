@@ -107,4 +107,5 @@ def search_archives_of_nethys(search_string: str) -> list[dict]:
 
 
 if __name__ == "__main__":
-    t0 = search_archives_of_nethys("wizard")
+    wizard_search_results = search_archives_of_nethys("wizard")
+    print(wizard_search_results)

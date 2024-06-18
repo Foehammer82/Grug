@@ -8,9 +8,14 @@ from loguru import logger
 
 from grug.assistant_interfaces.discord_interface.attendance import DiscordAttendanceCheckView
 from grug.assistant_interfaces.discord_interface.food import DiscordFoodBringerSelectionView
+from grug.bg_task_manager import track_background_task
 from grug.db import async_session
 from grug.log_config import InterceptHandler
-from grug.models import DiscordAccount, DiscordServer, DiscordTextChannel
+from grug.models_crud import (
+    get_or_create_discord_server,
+    get_or_create_discord_text_channel,
+    upsert_discord_user_account,
+)
 from grug.openai_assistant import assistant
 from grug.settings import settings
 
@@ -22,11 +27,16 @@ _max_discord_message_length = 2000
 discord_bot = discord.Client(intents=_intents)
 discord.utils.setup_logging(handler=InterceptHandler())
 
+# TODO: add event listener to add users to grug when they are added to the discord server
+# TODO: add event listener to remove the discord server from grug when the bot is removed from the server in discord
+# TODO: make it so that when grug deletes a discord server model, the bot leaves the discord server too
+
 
 def init_discord_bot():
     """Start the Discord bot."""
     if settings.discord:
         discord_bot_task = asyncio.create_task(discord_bot.start(settings.discord.bot_token.get_secret_value()))
+        track_background_task(task=discord_bot_task, on_error_callback=init_discord_bot)
         logger.info(f"Discord Bot started with task ID {discord_bot_task}")
 
 
@@ -51,20 +61,13 @@ async def on_ready():
     async with async_session() as session:
         for guild in discord_bot.guilds:
             logger.info(f"Initializing guild {guild.name} (ID: {guild.id})")
-            discord_server = await DiscordServer.get_or_create(guild=guild, db_session=session)
+            discord_server = await get_or_create_discord_server(guild=guild, db_session=session)
 
             # Create Discord accounts for all members in the guild
-            if settings.discord.auto_create_users:
-                for member in guild.members:
-                    if not member.bot and member.id not in [
-                        discord_account.discord_member_id
-                        for user in discord_server.group.users
-                        for discord_account in user.discord_accounts
-                    ]:
-                        logger.info(f"Initializing guild member {member.name} (ID: {member.id})")
-                        await DiscordAccount.get_or_create(
-                            member=member, discord_server=discord_server, db_session=session
-                        )
+            for member in guild.members:
+                if not member.bot and member.id not in [user.discord_member_id for user in discord_server.group.users]:
+                    logger.info(f"Initializing guild member {member.name} (ID: {member.id})")
+                    await upsert_discord_user_account(member=member, discord_server=discord_server, db_session=session)
 
     # Add persistent views to the discord bot
     discord_bot.add_view(view=DiscordAttendanceCheckView())
@@ -103,9 +106,9 @@ async def _respond_to_dm(message: discord.Message, session: async_session):
     async with message.channel.typing():
         # Get the Discord account for the user
         discord_server = (
-            await DiscordServer.get_or_create(guild=message.guild, db_session=session) if message.guild else None
+            await get_or_create_discord_server(guild=message.guild, db_session=session) if message.guild else None
         )
-        discord_account = await DiscordAccount.get_or_create(
+        discord_account = await upsert_discord_user_account(
             member=message.author,
             discord_server=discord_server,
             db_session=session,
@@ -135,8 +138,8 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
     """
     async with message.channel.typing():
         # Get the Discord account for the user
-        discord_text_channel = await DiscordTextChannel.get_or_create(channel=message.channel, session=session)
-        discord_account = await DiscordAccount.get_or_create(
+        discord_text_channel = await get_or_create_discord_text_channel(channel=message.channel, session=session)
+        discord_account = await upsert_discord_user_account(
             member=message.author,
             discord_server=discord_text_channel.discord_server,
             db_session=session,

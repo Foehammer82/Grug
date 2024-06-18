@@ -1,0 +1,17 @@
+{% extends "sqladmin/layout.html" %}
+{% block body %}
+    <div class="page page-center">
+        <div class="container-tight py-4">
+            <div class="card" style="width: 18rem">
+                <div class="card-body">
+                    <div class="card-title text-center">{{ status_code }} - {{ message }}</div>
+                    <a href="{{ url_for('admin:login') }}"
+                       class="w-100 btn btn-outline-primary btn-block"
+                       role="button">
+                        Back to Login
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% endblock %}

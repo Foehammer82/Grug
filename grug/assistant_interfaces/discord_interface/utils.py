@@ -4,7 +4,7 @@ import discord
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grug.models import DiscordAccount
+from grug.models import User
 
 
 async def wait_for_discord_to_start(timeout: int = 10) -> None:
@@ -20,17 +20,15 @@ async def wait_for_discord_to_start(timeout: int = 10) -> None:
     )
 
 
-async def get_discord_account_given_interaction(
-    interaction: discord.Interaction, session: AsyncSession
-) -> DiscordAccount:
+async def get_user_given_interaction(interaction: discord.Interaction, session: AsyncSession) -> User:
     """Get the DiscordAccount for the interaction."""
-    discord_account: DiscordAccount = (
-        (await session.execute(select(DiscordAccount).where(DiscordAccount.discord_member_id == interaction.user.id)))
+    user: User = (
+        (await session.execute(select(User).where(User.discord_member_id == interaction.user.id)))
         .scalars()
         .one_or_none()
     )
 
-    if discord_account is None:
+    if user is None:
         raise ValueError("No discord_account found for this interaction.")
 
-    return discord_account
+    return user

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel, computed_field
 
 from grug.assistant_interfaces.discord_interface.bot import discord_bot
+from grug.db import check_db_connection
 from grug.scheduler import scheduler
 
 
@@ -22,8 +23,7 @@ class Health(BaseModel):
     @computed_field
     @property
     def postgres(self) -> str:
-        # TODO: implement this by running select 1=1 or something
-        return "NOT IMPLEMENTED"
+        return "OK" if check_db_connection() else "DOWN"
 
 
 def initialize_health_endpoints(app: FastAPI):

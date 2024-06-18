@@ -1,7 +1,7 @@
 from datetime import date
 
 from grug.models import Group
-from grug.utils.food import send_food_reminder
+from grug.utils.food import get_distinct_event_occurrence_food_history, send_food_reminder
 
 
 async def send_food_reminder_assistant_tool(group: Group) -> str:
@@ -55,13 +55,16 @@ async def get_food_history_assistant_tool(group: Group) -> dict[str, list[tuple[
 
     food_history = {}
     for event in events_with_food:
+        if event.id is None:
+            raise ValueError("Event occurrence ID is required to get food history.")
+
         food_history[event.name] = [
             (
                 event_food_history.user_assigned_food.friendly_name if event_food_history.user_assigned_food else None,
-                event_food_history.event_date,
+                event_food_history.event_occurrence.event_date,
             )
-            for event_food_history in event.distinct_food_assigned_user_history
-            if event_food_history.event_date <= date.today()
+            for event_food_history in await get_distinct_event_occurrence_food_history(event.id)
+            if event_food_history.event_occurrence.event_date <= date.today()
         ]
 
     return food_history
