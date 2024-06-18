@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated
 
 import requests
+from authlib.integrations.base_client import MismatchingStateError
 from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -265,7 +266,16 @@ if settings.discord and settings.discord.enable_oauth:
         db_session: AsyncSession = Depends(get_db_session_dependency),
     ) -> Response:
         # Validate oauth returned user is known in the app and log them by providing a jwt
-        token = await _discord_oauth.authorize_access_token(request)
+        try:
+            token = await _discord_oauth.authorize_access_token(request)
+        except MismatchingStateError as e:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Invalid state error.  Most likely, it's an issue with cookies and the user having the issue "
+                    "just needs to reset their cached cookies in their browser."
+                ),
+            ) from e
 
         # Get the user info from the discord api
         user_info_response = requests.get(
