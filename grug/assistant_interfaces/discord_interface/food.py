@@ -37,7 +37,7 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
         selected_user_id = int(self.values[0]) if self.values[0] != "none" else None
 
         async with async_session() as session:
-            event_food = (
+            event_food_reminder_discord_message = (
                 (
                     await session.execute(
                         select(EventFoodReminderDiscordMessage).where(
@@ -47,42 +47,46 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
                 )
                 .scalars()
                 .one_or_none()
-            ).event_food
+            )
+            if event_food_reminder_discord_message is None:
+                raise ValueError("EventFoodReminderDiscordMessage not found")
+
+            event_occurrence = event_food_reminder_discord_message.event_occurrence
 
             # Handle when a user is selected
             if selected_user_id:
-                event_food.user_assigned_food_id = selected_user_id
-                session.add(event_food)
+                event_occurrence.user_assigned_food_id = selected_user_id
+                session.add(event_occurrence)
                 await session.commit()
-                await session.refresh(event_food)
+                await session.refresh(event_occurrence)
 
                 logger.info(
-                    f"Player {event_food.user_assigned_food.friendly_name} selected to bring food for "
-                    f"event {event_food.event.id} on {event_food.event_occurrences.event_date}"
+                    f"Player {event_occurrence.user_assigned_food.friendly_name} selected to bring food for "
+                    f"event {event_occurrence.event.id} on {event_occurrence.event_date}"
                 )
 
                 # noinspection PyUnresolvedReferences
                 await interaction.response.send_message(
-                    f"{event_food.user_assigned_food.friendly_name} scheduled to bring food for "
-                    f"{event_food.event.name} on {event_food.event_occurrences.event_date.isoformat()}",
+                    f"{event_occurrence.user_assigned_food.friendly_name} scheduled to bring food for "
+                    f"{event_occurrence.event.name} on {event_occurrence.event_date.isoformat()}",
                 )
 
             # Handle when no user is selected
             else:
-                event_food.user_assigned_food_id = None
-                session.add(event_food)
+                event_occurrence.user_assigned_food_id = None
+                session.add(event_occurrence)
                 await session.commit()
 
                 logger.info(
-                    f"No player selected to bring food for event {event_food.event.id} "
-                    f"on {event_food.event_occurrences.event_date}"
+                    f"No player selected to bring food for event {event_occurrence.event.id} "
+                    f"on {event_occurrence.event_date}"
                 )
 
                 # https://discordpy.readthedocs.io/en/latest/interactions/api.html#discord.InteractionResponse.send_message
                 # noinspection PyUnresolvedReferences
                 await interaction.response.send_message(
-                    f"No player selected to bring food for {event_food.event.name} "
-                    f"on {event_food.event_occurrences.event_date.isoformat()}",
+                    f"No player selected to bring food for {event_occurrence.event.name} "
+                    f"on {event_occurrence.event_date.isoformat()}",
                 )
 
 

@@ -30,7 +30,7 @@ async def send_food_reminder(event_occurrence_id: int, session: AsyncSession = N
         logger.info(f"Event {event_occurrence_id} has already passed, skipping reminders")
         return
 
-    if event_occurrence.event.enable_attendance_discord_reminders:
+    if event_occurrence.event.enable_food_discord_reminders:
         await discord_interface.send_discord_food_reminder(
             event_occurrence=event_occurrence,
             session=session,
@@ -59,15 +59,14 @@ async def get_distinct_event_occurrence_food_history(event_id: int, session: Asy
                 user_friendly_name = event_occurrence.user_assigned_food.friendly_name
                 if (
                     user_friendly_name not in distinct_food_bringers
-                    or event_occurrence.event_occurrence.event_date
-                    > distinct_food_bringers[user_friendly_name].event_occurrence.event_date
+                    or event_occurrence.event_date > distinct_food_bringers[user_friendly_name].event_date
                 ):
                     distinct_food_bringers[user_friendly_name] = event_occurrence
 
         distinct_food_bringers_sorted = dict(
             sorted(
                 distinct_food_bringers.items(),
-                key=lambda item: item[1].event_occurrences.event_date,
+                key=lambda item: item[1].event_date,
                 reverse=True,
             )
         )
