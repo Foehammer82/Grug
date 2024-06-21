@@ -8,6 +8,7 @@ from apscheduler import AsyncScheduler, ConflictPolicy, ScheduleLookupError
 from apscheduler.abc import Trigger
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
+from apscheduler.triggers.date import DateTrigger
 from loguru import logger
 from sqlalchemy import event
 
@@ -126,7 +127,9 @@ def handle_event_occurrence_model_upsert(mapper, connection, event_occurrence: E
                 schedule_id=event_occurrence.food_reminder_schedule_id,
                 event_occurrence=event_occurrence,
                 reminder_func=send_food_reminder,
-                reminder_trigger=event_occurrence.food_reminder_trigger,
+                reminder_trigger=(
+                    DateTrigger(run_time=event_occurrence.food_reminder) if event_occurrence.food_reminder else None
+                ),
             )
         )
     )
@@ -138,7 +141,11 @@ def handle_event_occurrence_model_upsert(mapper, connection, event_occurrence: E
                 schedule_id=event_occurrence.attendance_reminder_schedule_id,
                 event_occurrence=event_occurrence,
                 reminder_func=send_attendance_reminder,
-                reminder_trigger=event_occurrence.attendance_reminder_trigger,
+                reminder_trigger=(
+                    DateTrigger(run_time=event_occurrence.attendance_reminder)
+                    if event_occurrence.attendance_reminder
+                    else None
+                ),
             )
         )
     )

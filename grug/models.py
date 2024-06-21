@@ -7,7 +7,6 @@ import pytz
 import sqlalchemy as sa
 from apscheduler.abc import Trigger
 from apscheduler.triggers.cron import CronTrigger
-from apscheduler.triggers.date import DateTrigger
 from pydantic import computed_field
 from sqlalchemy import Index, event
 from sqlmodel import Field, Relationship, SQLModel
@@ -21,8 +20,14 @@ class UserGroupLink(SQLModel, table=True):
     user_id: int | None = Field(default=None, foreign_key="groups.id", primary_key=True)
 
 
-class UserEventAttendanceLink(SQLModel, table=True):
-    __tablename__ = "users_events_attendance_link"
+class UserEventOccurrenceRsvpYesLink(SQLModel, table=True):
+    __tablename__ = "user_event_occurrence_rsvp_yes_link"
+    user_id: int | None = Field(default=None, foreign_key="users.id", primary_key=True)
+    event_attendance_id: int | None = Field(default=None, foreign_key="event_occurrence.id", primary_key=True)
+
+
+class UserEventOccurrenceRsvpNoLink(SQLModel, table=True):
+    __tablename__ = "user_event_occurrence_rsvp_no_link"
     user_id: int | None = Field(default=None, foreign_key="users.id", primary_key=True)
     event_attendance_id: int | None = Field(default=None, foreign_key="event_occurrence.id", primary_key=True)
 
@@ -63,8 +68,11 @@ class User(SQLModel, table=True):
 
     # Event Tracking
     brought_food_for: list["EventOccurrence"] = Relationship(back_populates="user_assigned_food")
-    event_attendance: list["EventOccurrence"] = Relationship(
-        back_populates="users_attended", link_model=UserEventAttendanceLink
+    event_occurrence_rsvp_yes: list["EventOccurrence"] = Relationship(
+        back_populates="users_rsvp_yes", link_model=UserEventOccurrenceRsvpYesLink
+    )
+    event_occurrence_rsvp_no: list["EventOccurrence"] = Relationship(
+        back_populates="users_rsvp_no", link_model=UserEventOccurrenceRsvpNoLink
     )
 
     # User Secrets
@@ -212,11 +220,6 @@ class EventOccurrence(SQLModel, table=True):
     )
 
     # Food Tracking
-    food_reminder: datetime | None = Field(
-        default=None,
-        description="The scheduled timestamp to send the food reminder.  If null, no reminder is scheduled.",
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
-    )
     food_name: str | None
     food_description: str | None
     user_assigned_food_id: int | None = Field(default=None, foreign_key="users.id")
@@ -230,14 +233,14 @@ class EventOccurrence(SQLModel, table=True):
     )
 
     # Attendance Tracking
-    attendance_reminder: datetime | None = Field(
-        default=None,
-        description="The scheduled timestamp to send the attendance reminder.  If null, no reminder is scheduled.",
-        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=True),
+    users_rsvp_yes: list[User] = Relationship(
+        back_populates="event_occurrence_rsvp_yes",
+        link_model=UserEventOccurrenceRsvpYesLink,
+        sa_relationship_kwargs={"lazy": "selectin", "cascade": "save-update, merge"},
     )
-    users_attended: list[User] = Relationship(
-        back_populates="event_attendance",
-        link_model=UserEventAttendanceLink,
+    users_rsvp_no: list[User] = Relationship(
+        back_populates="event_occurrence_rsvp_no",
+        link_model=UserEventOccurrenceRsvpNoLink,
         sa_relationship_kwargs={"lazy": "selectin", "cascade": "save-update, merge"},
     )
     attendance_reminder_discord_messages: list["EventAttendanceReminderDiscordMessage"] = Relationship(
@@ -253,15 +256,30 @@ class EventOccurrence(SQLModel, table=True):
 
     @computed_field
     @property
-    def localized_food_reminder(self) -> datetime | None:
-        return self.food_reminder.astimezone(pytz.timezone(self.event.timezone)) if self.food_reminder else None
+    def food_reminder(self) -> datetime | None:
+        return (
+            datetime.combine(
+                self.event_date - timedelta(days=self.event.food_reminder_days_before_event),
+                self.event.food_reminder_time,
+            ).astimezone(pytz.timezone(self.event.timezone))
+            if self.event.track_food
+            else None
+        )
 
     @computed_field
     @property
-    def localized_attendance_reminder(self) -> datetime | None:
+    def food_reminder_schedule_id(self) -> str:
+        return f"event_occurrence_{self.id}_food_reminder"
+
+    @computed_field
+    @property
+    def attendance_reminder(self) -> datetime | None:
         return (
-            self.attendance_reminder.astimezone(pytz.timezone(self.event.timezone))
-            if self.attendance_reminder
+            datetime.combine(
+                self.event_date - timedelta(days=self.event.attendance_reminder_days_before_event),
+                self.event.attendance_reminder_time,
+            ).astimezone(pytz.timezone(self.event.timezone))
+            if self.event.track_attendance
             else None
         )
 
@@ -269,26 +287,13 @@ class EventOccurrence(SQLModel, table=True):
     @property
     def user_attendance_summary_md(self) -> str:
         summary_md = f"**{self.event.name}** attendance for {self.event_date.isoformat()}\n"
-        summary_md += "\n".join([f"- {user.friendly_name}" for user in self.users_attended])
+        summary_md += "\n".join([f"- {user.friendly_name}" for user in self.users_rsvp_yes])
         return summary_md
-
-    @computed_field
-    @property
-    def food_reminder_schedule_id(self) -> str:
-        return f"event_occurrence_{self.id}_food_reminder"
-
-    @property
-    def food_reminder_trigger(self) -> Trigger | None:
-        return DateTrigger(run_time=self.food_reminder) if self.food_reminder else None
 
     @computed_field
     @property
     def attendance_reminder_schedule_id(self) -> str:
         return f"event_occurrence_{self.id}_attendance_reminder"
-
-    @property
-    def attendance_reminder_trigger(self) -> Trigger | None:
-        return DateTrigger(run_time=self.attendance_reminder) if self.attendance_reminder else None
 
     def __str__(self):
         return f"{self.event.name} food [{self.timestamp.isoformat()}]"

@@ -203,28 +203,34 @@ class EventOccurrenceAdmin(ModelView, model=EventOccurrence):
         EventOccurrence.event_date,
         EventOccurrence.event,
         EventOccurrence.user_assigned_food,
-        EventOccurrence.users_attended,
+        EventOccurrence.users_rsvp_yes,
+        EventOccurrence.users_rsvp_no,
     ]
     column_sortable_list = [EventOccurrence.event_date]
     column_searchable_list = [EventOccurrence.event_date, EventOccurrence.event]
 
     # Form Options
     form_columns = [
-        "event_date",
-        "event_time",
+        EventOccurrence.event_date,
+        EventOccurrence.event_time,
         "food_reminder",
-        "user_assigned_food",
-        "food_name",
-        "food_description",
+        EventOccurrence.user_assigned_food,
+        EventOccurrence.food_name,
+        EventOccurrence.food_description,
         "attendance_reminder",
-        "users_attended",
+        EventOccurrence.users_rsvp_yes,
+        EventOccurrence.users_rsvp_no,
     ]
     form_ajax_refs = {
         "user_assigned_food": {
             "fields": ("username",),
             "order_by": "username",
         },
-        "users_attended": {
+        "users_rsvp_yes": {
+            "fields": ("username",),
+            "order_by": "username",
+        },
+        "users_rsvp_no": {
             "fields": ("username",),
             "order_by": "username",
         },
@@ -232,21 +238,18 @@ class EventOccurrenceAdmin(ModelView, model=EventOccurrence):
 
     # Detail Page Options
     column_details_list = [
-        "event",
+        EventOccurrence.event,
         "event.timezone",
-        "event_date",
-        "event_time",
+        EventOccurrence.event_date,
+        EventOccurrence.event_time,
         "food_reminder",
-        "user_assigned_food",
-        "food_name",
-        "food_description",
+        EventOccurrence.user_assigned_food,
+        EventOccurrence.food_name,
+        EventOccurrence.food_description,
         "attendance_reminder",
-        "users_attended",
+        EventOccurrence.users_rsvp_yes,
+        EventOccurrence.users_rsvp_no,
     ]
-    column_formatters_detail = {
-        "food_reminder": lambda m, a: m.localized_food_reminder,
-        "attendance_reminder": lambda m, a: m.localized_attendance_reminder,
-    }
 
     @action(
         name="send_food_reminder",

@@ -30,6 +30,8 @@ discord.utils.setup_logging(handler=InterceptHandler())
 # TODO: add event listener to add users to grug when they are added to the discord server
 # TODO: add event listener to remove the discord server from grug when the bot is removed from the server in discord
 # TODO: make it so that when grug deletes a discord server model, the bot leaves the discord server too
+# TODO: create a modal that allows users to adjust when the next scheduled event is.  in case something is different
+#       for the next coming session.
 
 
 def init_discord_bot():

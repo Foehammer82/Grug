@@ -129,8 +129,6 @@ async def get_or_create_next_event_occurrence(event_id: int, session: AsyncSessi
             event_id=event_id,
             event_date=event.next_event_datetime.date(),
             event_time=event.next_event_datetime.time(),
-            food_reminder=event.food_reminder_timestamp,
-            attendance_reminder=event.attendance_reminder_timestamp,
         )
 
         session.add(event_occurrence)
@@ -155,18 +153,8 @@ async def sync_next_event_occurrence_to_event(event_id: int, session: AsyncSessi
         close_session_at_end = True
         session = async_session()
 
-    event_occurrence = await get_or_create_next_event_occurrence(event_id, session)
-
-    if (
-        event_occurrence.food_reminder != event_occurrence.event.food_reminder_timestamp
-        or event_occurrence.attendance_reminder != event_occurrence.event.attendance_reminder_timestamp
-    ):
-        event_occurrence.food_reminder = event_occurrence.event.food_reminder_timestamp
-        event_occurrence.attendance_reminder = event_occurrence.event.attendance_reminder_timestamp
-
-        session.add(event_occurrence)
-        await session.commit()
-        await session.refresh(event_occurrence)
+    # Get or create the next event occurrence
+    await get_or_create_next_event_occurrence(event_id, session)
 
     # Close the session if it was created in this function
     if close_session_at_end:
