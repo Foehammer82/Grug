@@ -9,6 +9,7 @@ from authlib.integrations.starlette_client import OAuth
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import ExpiredSignatureError, JWTError, jwt
+from loguru import logger
 from pydantic import BaseModel
 from sqladmin.authentication import AuthenticationBackend
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -262,6 +263,7 @@ if settings.discord and settings.discord.enable_oauth:
         try:
             token = await _discord_oauth.authorize_access_token(request)
         except MismatchingStateError as e:
+            logger.error(f"Invalid state error: {e}")
             raise HTTPException(
                 status_code=400,
                 detail=(
@@ -271,6 +273,7 @@ if settings.discord and settings.discord.enable_oauth:
             ) from e
 
         # Get the user info from the discord api
+        logger.info("Successfully authenticated with discord, getting user info")
         user_info_response = requests.get(
             "https://discord.com/api/users/@me",
             headers={"Authorization": f"Bearer {token['access_token']}"},
