@@ -25,7 +25,12 @@ class EventAttendanceConfirmButton(discord.ui.Button):
             if user not in event_occurrence.users_rsvp_yes:
                 event_occurrence.users_rsvp_yes.append(user)
                 session.add(event_occurrence)
-                await session.commit()
+
+            if user in event_occurrence.users_rsvp_no:
+                event_occurrence.users_rsvp_no.remove(user)
+                session.add(event_occurrence)
+
+            await session.commit()
 
         logger.info(
             f"{event_occurrence.event.name} ({event_occurrence.event_date.isoformat()}): "
@@ -52,11 +57,15 @@ class EventAttendanceDenyButton(discord.ui.Button):
             user = await get_user_given_interaction(interaction, session)
             event_occurrence = await _get_event_attendance_given_interaction(interaction, session)
 
-            # mark the user as not attending the event
+            if user not in event_occurrence.users_rsvp_no:
+                event_occurrence.users_rsvp_no.append(user)
+                session.add(event_occurrence)
+
             if user in event_occurrence.users_rsvp_yes:
                 event_occurrence.users_rsvp_yes.remove(user)
                 session.add(event_occurrence)
-                await session.commit()
+
+            await session.commit()
 
         logger.info(
             f"{event_occurrence.event.name} ({event_occurrence.event_date.isoformat()}): "

@@ -287,7 +287,11 @@ class EventOccurrence(SQLModel, table=True):
     @property
     def user_attendance_summary_md(self) -> str:
         summary_md = f"**{self.event.name}** attendance for {self.event_date.isoformat()}\n"
+        summary_md += "**RSVP Yes**\n"
         summary_md += "\n".join([f"- {user.friendly_name}" for user in self.users_rsvp_yes])
+        summary_md += "\n\n"
+        summary_md += "**RSVP No**\n"
+        summary_md += "\n".join([f"- {user.friendly_name}" for user in self.users_rsvp_no])
         return summary_md
 
     @computed_field
