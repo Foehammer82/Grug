@@ -34,6 +34,15 @@
 - [ ] Email Integration
     - Grug is able to send Emails
 - [ ] create unit tests
+- [ ] add metrics
+    - track token/openai usage
+    - track discord usage (incoming messages, outgoing messages)
+    - track event data (attendance, food reminders, etc. for each event instance)
+    - high level, want to track anything that has a cost, or potential cost, associated with it
+    - track errors or issues that occur (i.e. logged errors, failed requests, etc.)
+    - track image generation requests and usage
+    - track user logins and admin actions
+    - track the scheduler
 
 ### Tasks that must be complete before Grug can be used publicly
 
