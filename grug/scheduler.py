@@ -1,7 +1,7 @@
 """Scheduler for the Grug bot."""
 
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import pytz
@@ -11,9 +11,9 @@ from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
 from apscheduler.triggers.date import DateTrigger
 from loguru import logger
-from sqlalchemy import event, Connection
+from sqlalchemy import Connection, event
 from sqlalchemy.orm import Mapper
-from sqlmodel import select, Session
+from sqlmodel import Session, select
 
 from grug.bg_task_manager import track_background_task
 from grug.db import async_engine
@@ -137,10 +137,12 @@ def handle_event_occurrence_model_upsert(mapper: Mapper, connection: Connection,
                 event_occurrence=event_occurrence,
                 reminder_func=send_food_reminder,
                 reminder_trigger=(
-                    DateTrigger(datetime.combine(
-                        event_occurrence.event_date - timedelta(days=event_model.food_reminder_days_before_event),
-                        event_model.food_reminder_time,
-                    ).astimezone(pytz.timezone(event_model.timezone)))
+                    DateTrigger(
+                        datetime.combine(
+                            event_occurrence.event_date - timedelta(days=event_model.food_reminder_days_before_event),
+                            event_model.food_reminder_time,
+                        ).astimezone(pytz.timezone(event_model.timezone))
+                    )
                     if event_model.track_food
                     else None
                 ),
@@ -156,10 +158,13 @@ def handle_event_occurrence_model_upsert(mapper: Mapper, connection: Connection,
                 event_occurrence=event_occurrence,
                 reminder_func=send_attendance_reminder,
                 reminder_trigger=(
-                    DateTrigger(datetime.combine(
-                        event_occurrence.event_date - timedelta(days=event_model.attendance_reminder_days_before_event),
-                        event_model.attendance_reminder_time,
-                    ).astimezone(pytz.timezone(event_model.timezone)))
+                    DateTrigger(
+                        datetime.combine(
+                            event_occurrence.event_date
+                            - timedelta(days=event_model.attendance_reminder_days_before_event),
+                            event_model.attendance_reminder_time,
+                        ).astimezone(pytz.timezone(event_model.timezone))
+                    )
                     if event_model.track_attendance
                     else None
                 ),
