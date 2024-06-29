@@ -107,8 +107,7 @@ async def get_or_create_next_event_occurrence(event_id: int, session: AsyncSessi
 
     event: Event = (await session.execute(select(Event).where(Event.id == event_id))).scalars().one_or_none()
     if event is None:
-        logger.error(f"Event {event_id} not found.")
-        return
+        raise ValueError(f"Event {event_id} not found.")
 
     # Search through the event occurrences and see if any exist after current datetime, if more than one, return just
     # the next one
