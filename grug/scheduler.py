@@ -1,16 +1,19 @@
 """Scheduler for the Grug bot."""
 
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Callable
 
+import pytz
 from apscheduler import AsyncScheduler, ConflictPolicy, ScheduleLookupError
 from apscheduler.abc import Trigger
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
 from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
 from apscheduler.triggers.date import DateTrigger
 from loguru import logger
-from sqlalchemy import event
+from sqlalchemy import event, Connection
+from sqlalchemy.orm import Mapper
+from sqlmodel import select, Session
 
 from grug.bg_task_manager import track_background_task
 from grug.db import async_engine
@@ -119,7 +122,13 @@ async def _upsert_reminder_scheduled_task(
         logger.info(f"Paused scheduled task {schedule_id}")
 
 
-def handle_event_occurrence_model_upsert(mapper, connection, event_occurrence: EventOccurrence):
+def handle_event_occurrence_model_upsert(mapper: Mapper, connection: Connection, event_occurrence: EventOccurrence):
+    session = Session(bind=connection)
+    event_model = session.execute(select(Event).where(Event.id == event_occurrence.event_id)).scalars().one_or_none()
+
+    if event_model is None:
+        raise ValueError(f"Event {event_occurrence.event_id} not found.")
+
     # Schedule the food reminder job for the given event occurrence
     track_background_task(
         asyncio.create_task(
@@ -128,7 +137,12 @@ def handle_event_occurrence_model_upsert(mapper, connection, event_occurrence: E
                 event_occurrence=event_occurrence,
                 reminder_func=send_food_reminder,
                 reminder_trigger=(
-                    DateTrigger(run_time=event_occurrence.food_reminder) if event_occurrence.food_reminder else None
+                    DateTrigger(datetime.combine(
+                        event_occurrence.event_date - timedelta(days=event_model.food_reminder_days_before_event),
+                        event_model.food_reminder_time,
+                    ).astimezone(pytz.timezone(event_model.timezone)))
+                    if event_model.track_food
+                    else None
                 ),
             )
         )
@@ -142,8 +156,11 @@ def handle_event_occurrence_model_upsert(mapper, connection, event_occurrence: E
                 event_occurrence=event_occurrence,
                 reminder_func=send_attendance_reminder,
                 reminder_trigger=(
-                    DateTrigger(run_time=event_occurrence.attendance_reminder)
-                    if event_occurrence.attendance_reminder
+                    DateTrigger(datetime.combine(
+                        event_occurrence.event_date - timedelta(days=event_model.attendance_reminder_days_before_event),
+                        event_model.attendance_reminder_time,
+                    ).astimezone(pytz.timezone(event_model.timezone)))
+                    if event_model.track_attendance
                     else None
                 ),
             )

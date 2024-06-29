@@ -213,7 +213,7 @@ class EventOccurrence(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     event_date: date
     event_time: time
-    event_id: int = Field(default=None, foreign_key="event.id", index=True)
+    event_id: int = Field(foreign_key="event.id", index=True)
     event: "Event" = Relationship(
         back_populates="event_occurrences",
         sa_relationship_kwargs={"lazy": "selectin"},
@@ -256,32 +256,8 @@ class EventOccurrence(SQLModel, table=True):
 
     @computed_field
     @property
-    def food_reminder(self) -> datetime | None:
-        return (
-            datetime.combine(
-                self.event_date - timedelta(days=self.event.food_reminder_days_before_event),
-                self.event.food_reminder_time,
-            ).astimezone(pytz.timezone(self.event.timezone))
-            if self.event.track_food
-            else None
-        )
-
-    @computed_field
-    @property
     def food_reminder_schedule_id(self) -> str:
         return f"event_occurrence_{self.id}_food_reminder"
-
-    @computed_field
-    @property
-    def attendance_reminder(self) -> datetime | None:
-        return (
-            datetime.combine(
-                self.event_date - timedelta(days=self.event.attendance_reminder_days_before_event),
-                self.event.attendance_reminder_time,
-            ).astimezone(pytz.timezone(self.event.timezone))
-            if self.event.track_attendance
-            else None
-        )
 
     @computed_field
     @property

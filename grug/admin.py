@@ -211,13 +211,12 @@ class EventOccurrenceAdmin(ModelView, model=EventOccurrence):
 
     # Form Options
     form_columns = [
+        EventOccurrence.event,
         EventOccurrence.event_date,
         EventOccurrence.event_time,
-        "food_reminder",
         EventOccurrence.user_assigned_food,
         EventOccurrence.food_name,
         EventOccurrence.food_description,
-        "attendance_reminder",
         EventOccurrence.users_rsvp_yes,
         EventOccurrence.users_rsvp_no,
     ]
@@ -242,11 +241,9 @@ class EventOccurrenceAdmin(ModelView, model=EventOccurrence):
         "event.timezone",
         EventOccurrence.event_date,
         EventOccurrence.event_time,
-        "food_reminder",
         EventOccurrence.user_assigned_food,
         EventOccurrence.food_name,
         EventOccurrence.food_description,
-        "attendance_reminder",
         EventOccurrence.users_rsvp_yes,
         EventOccurrence.users_rsvp_no,
     ]
