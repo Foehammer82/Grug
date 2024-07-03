@@ -63,7 +63,8 @@ on the relevant platform. You are advised to review this Privacy Policy periodic
 #### 9. Contact Us
 
 If you have any questions about this Privacy Policy, please contact us by starting or participating in a discussion
-on GitHub: https://github.com/Foehammer82/Grug/discussions/categories/general.
+on [GitHub](https://github.com/Foehammer82/Grug/discussions/categories/general) or, reach out directly at
+foehammer828@gmail.com.
 
 ---
 

@@ -109,6 +109,16 @@ class Settings(BaseSettings):
             "- When providing information, you should try to reference or link to the source of the information.",
         ]
     )
+    openai_assistant_about: str | None = Field(
+        default=(
+            "Grug be a charming yet simple-minded barbarian orc who love to help humans, goblins, and all in between. "
+            "Grug provide aid with Pathfinder 2E rules, give advice, and make art of homes and dreams. With low brain "
+            "power but big heart, Grug strive to make everyone’s day better, one orcish word at a time!\n\n"
+            "Documentation: https://foehammer82.github.io/Grug/\n"
+            "Privacy Policy: https://github.com/Foehammer82/Grug/blob/main/docs/about/privacy_policy.md\n"
+        ),
+        description="The about message for the assistant.",
+    )
     openai_image_daily_generation_limit: int | None = Field(
         default=25, description="The daily limit of image generations. If None, there is no limit."
     )

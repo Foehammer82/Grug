@@ -58,7 +58,8 @@ service provider is based, without regard to its conflict of law principles.
 #### 9. Contact Information
 
 If you have any questions about these Terms of Service, please contact us by starting or participating in a discussion
-on GitHub: https://github.com/Foehammer82/Grug/discussions/categories/general.
+on [GitHub](https://github.com/Foehammer82/Grug/discussions/categories/general) or, reach out directly at
+foehammer828@gmail.com.
 
 #### Conclusion
 

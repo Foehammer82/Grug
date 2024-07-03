@@ -4,6 +4,7 @@ import asyncio
 
 import discord
 import discord.utils
+from discord import app_commands
 from loguru import logger
 
 from grug.assistant_interfaces.discord_interface.attendance import DiscordAttendanceCheckView
@@ -26,6 +27,7 @@ _max_discord_message_length = 2000
 
 discord_bot = discord.Client(intents=_intents)
 discord.utils.setup_logging(handler=InterceptHandler())
+tree = app_commands.CommandTree(discord_bot)
 
 # TODO: add event listener to add users to grug when they are added to the discord server
 # TODO: add event listener to remove the discord server from grug when the bot is removed from the server in discord
@@ -76,6 +78,15 @@ async def on_ready():
     discord_bot.add_view(view=DiscordFoodBringerSelectionView(discord_server.group))
 
     logger.info(f"Logged in as {discord_bot.user} (ID: {discord_bot.user.id})")
+
+
+@tree.command(
+    name=f"about_{settings.openai_assistant_name.lower().replace(' ', '_')}",
+    description=f"Get information about the {settings.openai_assistant_name} assistant.",
+)
+async def about_command(interaction: discord.Interaction):
+    # noinspection PyUnresolvedReferences
+    await interaction.response.send_message(settings.openai_assistant_about)
 
 
 @discord_bot.event
