@@ -6,6 +6,8 @@
 [![security: bandit](https://img.shields.io/badge/security-bandit-yellow.svg)](https://github.com/PyCQA/bandit)
 [![mypy](https://img.shields.io/badge/mypy-checked-blue)](https://github.com/python/mypy)
 
+[**Documentation**](https://foehammer82.github.io/Grug)
+
 ## Project Roadmap / ToDo List
 
 ### MVP Tasks
@@ -25,6 +27,12 @@
 
 ### Post-MVP Tasks
 
+- [ ] alternative attendance tracking (by user poll)
+    - as a user I expect to see a notification in discord that asks what day in the next n days work, I select all the
+      ones that work. later, after other users have done the same I expect to get a poll with the days that work for
+      everyone, I vote for 1, the winning date is picked and announced to everyone. or could possibly save a step if
+      everyone picks a day that is the same, it just auto-selects the first day that everyone votes for Or just start
+      with a discord poll tagging everyone with an option for every tuesday that month.
 - [ ] backup and recovery functionality
     - ability to back up to a dedicated directory that a user could map to a volume to handle backups and recovery
 - [ ] SMS Integration
