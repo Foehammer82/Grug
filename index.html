@@ -368,11 +368,53 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#motivation" class="md-nav__link">
+  <a href="#key-features" class="md-nav__link">
     <span class="md-ellipsis">
-      Motivation
+      Key Features
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="Key Features">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#attendance-tracking" class="md-nav__link">
+    <span class="md-ellipsis">
+      Attendance Tracking
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#food-scheduling" class="md-nav__link">
+    <span class="md-ellipsis">
+      Food Scheduling
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#image-generation" class="md-nav__link">
+    <span class="md-ellipsis">
+      Image Generation
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#question-answering" class="md-nav__link">
+    <span class="md-ellipsis">
+      Question Answering
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -496,30 +538,36 @@
 
 <h1 id="grug-bot">Grug Bot</h1>
 <p><strong>Documentation</strong>:
-<a href="https://github.com/Foehammer82/Grug" target="_blank">https://github.com/Foehammer82/Grug</a></p>
+<a href="https://foehammer82.github.io/Grug" target="_blank">https://foehammer82.github.io/Grug</a></p>
 <p><strong>Source Code</strong>:
 <a href="https://github.com/Foehammer82/Grug" target="_blank">https://github.com/Foehammer82/Grug</a></p>
-<p>Your personal OpenAI bot.</p>
-<ul>
-<li>Self-Hosted<ul>
-<li>can be self-hosted with Docker anywhere from a Raspberry Pi to a dedicated cloud server</li>
-</ul>
-</li>
-<li>Common Integrations<ul class="task-list">
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled checked/><span class="task-list-indicator"></span></label> Discord</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> SMS</li>
-<li class="task-list-item"><label class="task-list-control"><input type="checkbox" disabled/><span class="task-list-indicator"></span></label> Email</li>
-</ul>
-</li>
-</ul>
-<blockquote>
-<p>put screenshots and give a good overview of what Grug is and how it can be used.</p>
-</blockquote>
-<h2 id="motivation">Motivation</h2>
-<p>The motivation for this project started from looking for a tool to help manage attendance tracking and food schedules
-for the group I play DnD/Pathfinder with. I wanted to create a bot that could handle these tasks, and also be able to
-generate images and answer questions from the group. I also wanted to be able to have a way to interact with the bot
-outside of Discord, so I created a FastAPI application that can be used to interact with the bot.</p>
+<p>The Grug app is a Discord bot designed to assist groups of people who play tabletop RPGs, such as Dungeons and Dragons
+(DnD) or Pathfinder. It offers a variety of features aimed at enhancing the gaming experience and managing group
+activities. The project was initiated to streamline the management of attendance and food schedules for tabletop RPG
+groups, but has since expanded to include capabilities like image generation and answering questions.</p>
+<h2 id="key-features">Key Features</h2>
+<h3 id="attendance-tracking">Attendance Tracking</h3>
+<p>Grug provides a simple and intuitive way to track attendance for your tabletop RPG group. You can create events, add
+players, and have Grug send attendance reminders.</p>
+<p><img alt="Attendance Tracking" src="assets/screenshots/attendance_tracking.png" /></p>
+<h3 id="food-scheduling">Food Scheduling</h3>
+<p>Grug can help you schedule food for your group. You can create food events, add players, and have Grug send food
+reminders.</p>
+<p><img alt="Food Reminders" src="assets/screenshots/food_reminders.png" /></p>
+<h3 id="image-generation">Image Generation</h3>
+<p>Grug can generate images for your group. Just ask Grug to generate an image and he will create one for you.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>All images are generated using the OpenAI API Dall-E.</p>
+</div>
+<p><img alt="Answering Questions" src="assets/screenshots/image_generation_1.png" /></p>
+<h3 id="question-answering">Question Answering</h3>
+<p>Grug can answer questions for your group. Just ask Grug a question and he will do his best to answer it.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>All responses are generated using the OpenAI API.</p>
+</div>
+<p><img alt="Answering Questions" src="assets/screenshots/answering_questions_2.png" /></p>
 
 
 
