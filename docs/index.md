@@ -12,7 +12,7 @@ Your personal OpenAI bot.
     - [ ] Email
     - more planned...
 
-> put screenshots an give a good overview of what Grug is and how it can be used.
+> put screenshots and give a good overview of what Grug is and how it can be used.
 
 ## Motivation
 
