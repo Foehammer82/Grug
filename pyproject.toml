@@ -45,7 +45,6 @@ jupyter = "^1.0.0"
 
 [tool.poetry.group.docs.dependencies]
 mkdocs-material = "^9.5"
-mkdocstrings = {extras = ["python"], version = "^0.25"}
 
 [build-system]
 requires = ["poetry-core"]

@@ -1,9 +1,10 @@
-site_name: "Grug Docs"
+site_name: "Grug"
 repo_url: https://github.com/Foehammer82/Grug
 repo_name: Foehammer82/Grug
 
 theme:
   name: material
+  favicon: /assets/favicon.ico
   icon:
     repo: fontawesome/brands/github
   palette:
@@ -61,4 +62,3 @@ markdown_extensions:
 
 plugins:
   - search
-  - mkdocstrings
