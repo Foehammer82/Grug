@@ -1,4 +1,4 @@
-### Privacy Policy - Grug
+### Privacy Policy
 
 #### Introduction
 

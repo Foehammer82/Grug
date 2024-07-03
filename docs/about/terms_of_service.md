@@ -1,4 +1,4 @@
-### Terms of Service - Grug
+### Terms of Service
 
 #### Introduction
 
