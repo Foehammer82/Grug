@@ -28,5 +28,5 @@ ENV API_HOST="0.0.0.0"
 # Start the application
 CMD poetry run python grug
 
-HEALTHCHECK --start-period=20s --interval=60s --timeout=10s \
-  CMD curl -f http://localhost:9000/health/ || exit 1
+HEALTHCHECK --interval=5s --timeout=5s --retries=5 \
+  CMD curl --include --request GET http://localhost:9000/health || exit 1
