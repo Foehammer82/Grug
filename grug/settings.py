@@ -4,7 +4,7 @@ from enum import StrEnum
 from pathlib import Path
 
 import pytz
-from pydantic import AliasChoices, Field, SecretStr, computed_field
+from pydantic import AliasChoices, Field, PostgresDsn, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
@@ -131,6 +131,21 @@ class Settings(BaseSettings):
     def root_dir(self) -> Path:
         """Get the root directory of the project."""
         return _ROOT_DIR
+
+    @computed_field
+    @property
+    def postgres_dsn(self) -> str:
+        """Get the Postgres DSN."""
+        return str(
+            PostgresDsn.build(
+                scheme="postgresql+psycopg",
+                host=self.postgres_host,
+                port=self.postgres_port,
+                username=self.postgres_user,
+                password=self.postgres_password.get_secret_value(),
+                path=self.postgres_db,
+            )
+        )
 
 
 settings = Settings()

@@ -8,7 +8,7 @@ import pytz
 from apscheduler import AsyncScheduler, ConflictPolicy, ScheduleLookupError
 from apscheduler.abc import Trigger
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
-from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
+from apscheduler.eventbrokers.psycopg import PsycopgEventBroker
 from apscheduler.triggers.date import DateTrigger
 from loguru import logger
 from sqlalchemy import Connection, event
@@ -26,7 +26,7 @@ from grug.utils.food import send_food_reminder
 _scheduler_data_store = SQLAlchemyDataStore(engine_or_url=async_engine, schema=settings.postgres_apscheduler_schema)
 scheduler = AsyncScheduler(
     data_store=_scheduler_data_store,
-    event_broker=AsyncpgEventBroker.from_async_sqla_engine(engine=async_engine),
+    event_broker=PsycopgEventBroker.from_async_sqla_engine(engine=async_engine),
 )
 
 

@@ -1,9 +1,9 @@
 import asyncio
 import logging.config
+import sys
 
 # noinspection PyUnresolvedReferences
 import alembic_postgresql_enum
-from pydantic import PostgresDsn
 from sqlalchemy.engine import Connection
 
 from alembic import context
@@ -16,16 +16,7 @@ logging.config.fileConfig(context.config.config_file_name)
 
 def run_migrations_offline() -> None:
     context.configure(
-        url=str(
-            PostgresDsn.build(
-                scheme="postgresql",
-                host=settings.postgres_host,
-                port=settings.postgres_port,
-                username=settings.postgres_user,
-                password=settings.postgres_password.get_secret_value(),
-                path=settings.postgres_db,
-            )
-        ),
+        url=settings.postgres_dsn,
         target_metadata=models.SQLModel.metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},

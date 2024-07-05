@@ -1,26 +1,22 @@
 """Database setup and initialization."""
 
+import asyncio
 import subprocess  # nosec B404
+import sys
 
 from loguru import logger
-from pydantic import PostgresDsn
 from sqlalchemy import DDL, create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from grug.settings import settings
 
+# Set the event loop policy for Windows
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 # Database engine singleton
 async_engine = create_async_engine(
-    url=str(
-        PostgresDsn.build(
-            scheme="postgresql+asyncpg",
-            host=settings.postgres_host,
-            port=settings.postgres_port,
-            username=settings.postgres_user,
-            password=settings.postgres_password.get_secret_value(),
-            path=settings.postgres_db,
-        )
-    ),
+    url=settings.postgres_dsn,
     echo=False,
     future=True,
 )
@@ -55,16 +51,7 @@ async def init_db():
 def check_db_connection():
     try:
         with create_engine(
-            url=str(
-                PostgresDsn.build(
-                    scheme="postgresql",
-                    host=settings.postgres_host,
-                    port=settings.postgres_port,
-                    username=settings.postgres_user,
-                    password=settings.postgres_password.get_secret_value(),
-                    path=settings.postgres_db,
-                )
-            ),
+            url=settings.postgres_dsn,
             echo=False,
             future=True,
         ).connect() as conn:
