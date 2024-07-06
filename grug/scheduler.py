@@ -8,25 +8,42 @@ import pytz
 from apscheduler import AsyncScheduler, ConflictPolicy, ScheduleLookupError
 from apscheduler.abc import Trigger
 from apscheduler.datastores.sqlalchemy import SQLAlchemyDataStore
-from apscheduler.eventbrokers.psycopg import PsycopgEventBroker
+from apscheduler.eventbrokers.asyncpg import AsyncpgEventBroker
 from apscheduler.triggers.date import DateTrigger
 from loguru import logger
+from pydantic import PostgresDsn
 from sqlalchemy import Connection, event
+from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.orm import Mapper
 from sqlmodel import Session, select
 
 from grug.bg_task_manager import track_background_task
-from grug.db import async_engine
 from grug.models import Event, EventOccurrence
 from grug.models_crud import sync_next_event_occurrence_to_event
 from grug.settings import settings
 from grug.utils.attendance import send_attendance_reminder
 from grug.utils.food import send_food_reminder
 
+# TODO: deprecated! as soon as ApScheduler releases next we can switch to psycopg for everything.
+async_engine = create_async_engine(
+    url=str(
+        PostgresDsn.build(
+            scheme="postgresql+asyncpg",
+            host=settings.postgres_host,
+            port=settings.postgres_port,
+            username=settings.postgres_user,
+            password=settings.postgres_password.get_secret_value(),
+            path=settings.postgres_db,
+        )
+    ),
+    echo=False,
+    future=True,
+)
+
 _scheduler_data_store = SQLAlchemyDataStore(engine_or_url=async_engine, schema=settings.postgres_apscheduler_schema)
 scheduler = AsyncScheduler(
     data_store=_scheduler_data_store,
-    event_broker=PsycopgEventBroker.from_async_sqla_engine(engine=async_engine),
+    event_broker=AsyncpgEventBroker.from_async_sqla_engine(engine=async_engine),
 )
 
 
