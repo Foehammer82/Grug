@@ -188,6 +188,8 @@ class Assistant:
 
             if run.status == "failed":
                 if run.last_error.code == "rate_limit_exceeded":
+                    logger.warning("Rate limit exceeded. Retrying with a smaller model.")
+
                     # If the rate limit is exceeded, retry with a smaller model
                     run = await self.async_client.beta.threads.runs.create(
                         thread_id=thread.id,
