@@ -42,10 +42,10 @@ _intents = discord.Intents.default()
 _intents.members = True
 _max_discord_message_length = 2000
 
-
 discord_bot = discord.Client(intents=_intents)
 discord.utils.setup_logging(handler=InterceptHandler())
 tree = app_commands.CommandTree(discord_bot)
+
 
 # TODO: add event listener to add users to grug when they are added to the discord server
 # TODO: add event listener to remove the discord server from grug when the bot is removed from the server in discord
@@ -197,4 +197,8 @@ async def _respond_to_text_channel_mention(message: discord.Message, session: as
             await session.commit()
 
         # Send the response back to the channel
-        await message.reply(assistant_response.response, suppress_embeds=False)
+        for output in [
+            assistant_response.response[i : i + _max_discord_message_length]
+            for i in range(0, len(assistant_response.response), _max_discord_message_length)
+        ]:
+            message = await message.reply(output, suppress_embeds=False)
