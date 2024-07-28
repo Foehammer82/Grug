@@ -187,7 +187,16 @@ class Assistant:
             run = await self.async_client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
 
             if run.status == "failed":
-                raise Exception(f"Run failed with message: {run.last_error.code}: {run.last_error.message}")
+                if run.last_error.code == "rate_limit_exceeded":
+                    # If the rate limit is exceeded, retry with a smaller model
+                    run = await self.async_client.beta.threads.runs.create(
+                        thread_id=thread.id,
+                        assistant_id=self.assistant.id,
+                        model="gpt-4o-mini",
+                    )
+
+                else:
+                    raise Exception(f"Run failed with message: {run.last_error.code}: {run.last_error.message}")
 
             elif run.status == "in_progress" or run.status == "queued":
                 await asyncio.sleep(self.response_wait_seconds)
