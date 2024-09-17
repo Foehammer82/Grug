@@ -1,11 +1,10 @@
 import discord
 from loguru import logger
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
-from grug.assistant_interfaces.discord_interface.utils import get_user_given_interaction
 from grug.db import async_session
-from grug.models import EventAttendanceReminderDiscordMessage, EventOccurrence
+from grug.models import EventAttendanceReminderDiscordMessage, GameSessionEvent
 
 
 class EventAttendanceConfirmButton(discord.ui.Button):
@@ -17,6 +16,8 @@ class EventAttendanceConfirmButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        from grug.models_crud import get_user_given_interaction
+
         async with async_session() as session:
             user = await get_user_given_interaction(interaction, session)
             event_occurrence = await _get_event_attendance_given_interaction(interaction, session)
@@ -33,7 +34,7 @@ class EventAttendanceConfirmButton(discord.ui.Button):
             await session.commit()
 
         logger.info(
-            f"{event_occurrence.event.name} ({event_occurrence.event_date.isoformat()}): "
+            f"{event_occurrence} ({event_occurrence.timestamp.date().isoformat()}): "
             f"{user.friendly_name} will attend."
         )
 
@@ -53,6 +54,8 @@ class EventAttendanceDenyButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
+        from grug.models_crud import get_user_given_interaction
+
         async with async_session() as session:
             user = await get_user_given_interaction(interaction, session)
             event_occurrence = await _get_event_attendance_given_interaction(interaction, session)
@@ -68,8 +71,7 @@ class EventAttendanceDenyButton(discord.ui.Button):
             await session.commit()
 
         logger.info(
-            f"{event_occurrence.event.name} ({event_occurrence.event_date.isoformat()}): "
-            f"{user.friendly_name} will not attend."
+            f"{event_occurrence} ({event_occurrence.timestamp.isoformat()}): " f"{user.friendly_name} will not attend."
         )
 
         # https://discordpy.readthedocs.io/en/latest/interactions/api.html#discord.InteractionResponse.send_message
@@ -88,41 +90,11 @@ class DiscordAttendanceCheckView(discord.ui.View):
         self.add_item(EventAttendanceDenyButton())
 
 
-async def send_discord_attendance_reminder(event_occurrence: EventOccurrence, session: AsyncSession) -> None:
-    from grug.assistant_interfaces.discord_interface import wait_for_discord_to_start
-    from grug.assistant_interfaces.discord_interface.bot import discord_bot
-
-    await wait_for_discord_to_start()
-
-    for discord_server in event_occurrence.event.group.discord_servers:
-        # Get the default discord channel
-        if discord_server.discord_bot_channel_id is not None:
-            guild_channel = discord_bot.get_channel(
-                event_occurrence.event.group.discord_servers[0].discord_bot_channel_id
-            )
-        else:
-            guild_id = discord_server.discord_guild_id
-            guild_channel = discord_bot.get_guild(guild_id).system_channel
-
-        # Send the message to discord
-        message = await guild_channel.send(
-            content=f"{event_occurrence.user_attendance_summary_md}\n\nWill you be attending?\n",
-            view=DiscordAttendanceCheckView(),
-        )
-
-        session.add(
-            EventAttendanceReminderDiscordMessage(
-                discord_message_id=message.id,
-                event_occurrence=event_occurrence,
-            )
-        )
-        await session.commit()
-
-
 async def _get_event_attendance_given_interaction(
     interaction: discord.Interaction, session: AsyncSession
-) -> EventOccurrence:
+) -> GameSessionEvent:
     """Get the EventAttendance for the interaction."""
+    # noinspection Pydantic
     event_attendance_discord_message: EventAttendanceReminderDiscordMessage = (
         (
             await session.execute(
@@ -138,4 +110,4 @@ async def _get_event_attendance_given_interaction(
     if event_attendance_discord_message is None:
         raise ValueError("No attendance message found for this interaction.")
 
-    return event_attendance_discord_message.event_occurrence
+    return event_attendance_discord_message.game_session_event

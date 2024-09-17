@@ -6,78 +6,70 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from grug.db import async_session
-from grug.models import DiscordServer, DiscordTextChannel, Event, EventOccurrence, Group, User
+from grug.models import DiscordTextChannel, GameSessionEvent, Group, User
 
 
-async def upsert_discord_user_account(
-    member: discord.Member,
-    discord_server: DiscordServer | None,
+async def get_or_create_discord_user(
+    discord_member: discord.Member,
+    group: Group | None,
     db_session: AsyncSession,
 ) -> User:
+    # noinspection Pydantic
     user: User | None = (
-        (await db_session.execute(select(User).where(User.discord_member_id == member.id))).scalars().one_or_none()
+        (await db_session.execute(select(User).where(User.discord_member_id == discord_member.id)))
+        .scalars()
+        .one_or_none()
     )
 
     if user is None:
         # Create a user to assign to the discord account
         user = User(
-            username=member.name,
-            auto_created=True,
-            discord_member_id=member.id,
-            discord_username=member.name,
+            discord_member_id=discord_member.id,
+            username=discord_member.name,
         )
-        if discord_server and discord_server.group and discord_server.group not in user.groups:
-            user.groups.append(discord_server.group)
+        if group and group not in user.groups:
+            user.groups.append(group)
 
         db_session.add(user)
         await db_session.commit()
         await db_session.refresh(user)
-    else:
-        if discord_server and discord_server.group and discord_server.group not in user.groups:
-            user.groups.append(discord_server.group)
 
-            db_session.add(user)
-            await db_session.commit()
-            await db_session.refresh(user)
+    elif group and group not in user.groups:
+        user.groups.append(group)
+
+        db_session.add(user)
+        await db_session.commit()
+        await db_session.refresh(user)
 
     return user
 
 
-async def get_or_create_discord_server(
+async def get_or_create_discord_server_group(
     guild: discord.Guild,
     db_session: AsyncSession,
-) -> DiscordServer:
-    discord_server: DiscordServer | None = (
-        (await db_session.execute(select(DiscordServer).where(DiscordServer.discord_guild_id == guild.id)))
-        .scalars()
-        .one_or_none()
+) -> Group:
+    # noinspection Pydantic
+    discord_server_group: Group | None = (
+        (await db_session.execute(select(Group).where(Group.discord_guild_id == guild.id))).scalars().one_or_none()
     )
 
-    if discord_server is None:
-        # Create a group to assign to the discord server
-        group = Group(name=guild.name, auto_created=True)
-        db_session.add(group)
-        await db_session.commit()
-        await db_session.refresh(group)
-
-        # create the discord server
-        discord_server = DiscordServer(
+    if discord_server_group is None:
+        discord_server_group = Group(
+            name=guild.name,
             discord_guild_id=guild.id,
-            discord_guild_name=guild.name,
-            group_id=group.id,
         )
-        db_session.add(discord_server)
+        db_session.add(discord_server_group)
         await db_session.commit()
-        await db_session.refresh(discord_server)
+        await db_session.refresh(discord_server_group)
 
-    return discord_server
+    return discord_server_group
 
 
 async def get_or_create_discord_text_channel(
     channel: discord.TextChannel,
     session: AsyncSession,
 ) -> DiscordTextChannel:
+    # noinspection Pydantic
     discord_channel: DiscordTextChannel | None = (
         (await session.execute(select(DiscordTextChannel).where(DiscordTextChannel.discord_channel_id == channel.id)))
         .scalars()
@@ -87,7 +79,7 @@ async def get_or_create_discord_text_channel(
     if discord_channel is None:
         discord_channel = DiscordTextChannel(
             discord_channel_id=channel.id,
-            discord_server_id=(await get_or_create_discord_server(channel.guild, session)).id,
+            group_id=(await get_or_create_discord_server_group(channel.guild, session)).id,
         )
         session.add(discord_channel)
         await session.commit()
@@ -96,40 +88,35 @@ async def get_or_create_discord_text_channel(
     return discord_channel
 
 
-async def get_or_create_next_event_occurrence(event_id: int, session: AsyncSession = None) -> EventOccurrence:
-    logger.info(f"Creating next event if it does not exist for Event_ID: {event_id}")
+async def get_or_create_next_game_session_event(group_id: int, session: AsyncSession) -> GameSessionEvent | None:
+    logger.info(f"Creating next event if it does not exist for Event_ID: {group_id}")
 
-    # If a session is not provided, create one and close it at the end
-    close_session_at_end = False
-    if session is None:
-        close_session_at_end = True
-        session = async_session()
-
-    event: Event = (await session.execute(select(Event).where(Event.id == event_id))).scalars().one_or_none()
-    if event is None:
-        raise ValueError(f"Event {event_id} not found.")
+    # noinspection Pydantic
+    group: Group = (await session.execute(select(Group).where(Group.id == group_id))).scalars().one_or_none()
+    if group is None:
+        raise ValueError(f"Event {group_id} not found.")
 
     # Search through the event occurrences and see if any exist after current datetime, if more than one, return just
     # the next one
-    current_datetime = datetime.now(pytz.timezone(event.timezone))
     query = (
-        select(EventOccurrence)
-        .where(EventOccurrence.event_id == event_id)
-        .where(EventOccurrence.event_date >= current_datetime.date())
-        .order_by(EventOccurrence.event_date, EventOccurrence.event_time)
+        select(GameSessionEvent)
+        .where(GameSessionEvent.group_id == group_id)
+        .where(GameSessionEvent.timestamp >= datetime.now(pytz.timezone(group.timezone)))
+        .order_by(GameSessionEvent.timestamp)
     )
-    future_event_occurrences: list[EventOccurrence] = (await session.execute(query)).scalars().all()
+    future_event_occurrences: list[GameSessionEvent] = list((await session.execute(query)).scalars().all())
 
     # If none exist, create a new event occurrence for the next event
     if len(future_event_occurrences) == 0:
-        logger.info(f"No future event occurrences found for Event_ID: {event_id}, creating one now.")
+        if not group.next_game_session_event:
+            logger.info(f"No future event occurrences found for Event_ID: {group_id}, and no next event datetime set.")
+            return None
 
-        event_occurrence = EventOccurrence(
-            event_id=event_id,
-            event_date=event.next_event_datetime.date(),
-            event_time=event.next_event_datetime.time(),
+        logger.info(f"No future event occurrences found for Event_ID: {group_id}, creating one now.")
+        event_occurrence = GameSessionEvent(
+            group_id=group_id,
+            timestamp=group.next_game_session_event,
         )
-
         session.add(event_occurrence)
         await session.commit()
         await session.refresh(event_occurrence)
@@ -137,24 +124,54 @@ async def get_or_create_next_event_occurrence(event_id: int, session: AsyncSessi
     else:
         event_occurrence = future_event_occurrences[0]
 
-    # Close the session if it was created in this function
-    if close_session_at_end:
-        await session.close()
-
     return event_occurrence
 
 
-async def sync_next_event_occurrence_to_event(event_id: int, session: AsyncSession = None) -> None:
-    """Syncs the next event occurrence to the event's food and attendance reminder timestamps."""
-    # If a session is not provided, create one and close it at the end
-    close_session_at_end = False
-    if session is None:
-        close_session_at_end = True
-        session = async_session()
+async def get_distinct_users_who_last_brought_food(
+    group_id: int,
+    session: AsyncSession,
+    max_lookback: int = 15,
+) -> list[tuple[User, datetime]]:
+    # noinspection Pydantic
+    group: Group = (await session.execute(select(Group).where(Group.id == group_id))).scalars().one_or_none()
+    if group is None:
+        raise ValueError(f"Event {group_id} not found.")
 
-    # Get or create the next event occurrence
-    await get_or_create_next_event_occurrence(event_id, session)
+    # get distinct set of people who last brought food
+    distinct_food_bringers: dict[str, GameSessionEvent] = {}
+    for i, game_session_event in enumerate(group.game_session_events):
+        if i > max_lookback:
+            break
 
-    # Close the session if it was created in this function
-    if close_session_at_end:
-        await session.close()
+        if game_session_event.user_assigned_food:
+            user_friendly_name = game_session_event.user_assigned_food.friendly_name
+            if (
+                user_friendly_name not in distinct_food_bringers
+                or game_session_event.timestamp > distinct_food_bringers[user_friendly_name].timestamp
+            ):
+                distinct_food_bringers[user_friendly_name] = game_session_event
+
+    distinct_food_bringers_sorted = dict(
+        sorted(
+            distinct_food_bringers.items(),
+            key=lambda item: item[1].timestamp,
+            reverse=True,
+        )
+    )
+
+    return [(event.user_assigned_food, event.timestamp) for event in list(distinct_food_bringers_sorted.values())]
+
+
+async def get_user_given_interaction(interaction: discord.Interaction, session: AsyncSession) -> User:
+    """Get the DiscordAccount for the interaction."""
+    # noinspection Pydantic
+    user: User = (
+        (await session.execute(select(User).where(User.discord_member_id == interaction.user.id)))
+        .scalars()
+        .one_or_none()
+    )
+
+    if user is None:
+        raise ValueError("No discord_account found for this interaction.")
+
+    return user

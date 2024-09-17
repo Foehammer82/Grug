@@ -10,23 +10,6 @@
 
 ## Project Roadmap / ToDo List
 
-### MVP Tasks
-
-- [x] Grug is able to respond to discord messages
-- [x] Grug is aware of DnD schedules and handles food reminders and who's on for food
-- [x] Admin web-ui for managing the Grug app
-- [x] embedded FastAPI application at `/api`
-- [x] metrics endpoint
-    - instrumented with prometheus https://github.com/trallnag/prometheus-fastapi-instrumentator
-- [x] Grug is able to generate pictures in discord with Dall-E
-- [x] Grug is able to handle DnD attendance tracking
-- [x] secure the metrics endpoint so that it requires a key passed as an HTTP query parameter
-- [x] implement discord oauth to enable discord user logins for the API and admin interface
-    - https://discord.com/developers/docs/topics/oauth2
-    - this will allow for users to be made admins, so they can log in to the admin interface
-
-### Post-MVP Tasks
-
 - [ ] alternative attendance tracking (by user poll)
     - as a user I expect to see a notification in discord that asks what day in the next n days work, I select all the
       ones that work. later, after other users have done the same I expect to get a poll with the days that work for
@@ -66,7 +49,3 @@
     - otherwise, have a way to map a directory that has `.py` files with functions, that are again, parsed and
       toggleable through the admin interface would work
     - (maybe both solutions above are good? "por que no los dos?")
-- [ ] add ability for Grug to moderate a discord server
-    - I'm thinking of having levels of moderation, from sending warning about inappropriate messages to full on
-      blocking or banning players
-    - for reference: https://platform.openai.com/docs/guides/moderation

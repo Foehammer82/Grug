@@ -1,6 +1,5 @@
 import asyncio
 import logging.config
-import sys
 
 # noinspection PyUnresolvedReferences
 import alembic_postgresql_enum

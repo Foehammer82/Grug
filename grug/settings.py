@@ -1,32 +1,15 @@
-import secrets
-import string
 from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 import pytz
 from pydantic import AliasChoices, Field, PostgresDsn, SecretStr, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-_ROOT_DIR = Path(__file__).parent.parent.absolute()
 TimeZone = StrEnum("TimeZone", tuple((tz, tz) for tz in pytz.common_timezones))
+_ROOT_DIR = Path(__file__).parent.parent.absolute()
 
-
-class DiscordSettings(BaseSettings):
-    """Settings for connecting to discord."""
-
-    model_config = SettingsConfigDict(extra="ignore")
-
-    bot_token: SecretStr
-    client_id: str
-    client_secret: SecretStr
-    enable_oauth: bool = True
-    admin_user_id: int | None = Field(
-        default=None,
-        description=(
-            "The Discord user ID of the admin user.  Any user set here will be given admin "
-            "permissions and cannot be removed from the admin role."
-        ),
-    )
+# TODO: enable secrets loading from text files as an option
 
 
 class Settings(BaseSettings):
@@ -44,17 +27,13 @@ class Settings(BaseSettings):
     )
 
     # General Settings
-    admin_user: str = "admin"
-    admin_password: SecretStr = SecretStr("password")
-    enable_metrics: bool = True
-    enable_health_endpoint: bool = True
+    environment: Literal["dev", "prd"] = "dev"
+    dev_guild_id: int | None = None
     timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
-    log_level: str = "info"
-    proxy_headers: bool = False
 
-    # Metrics Settings
-    enable_metrics_endpoint: bool = True
-    metrics_key: SecretStr | None = None
+    # Discord Settings
+    discord_bot_token: SecretStr | None = None
+    discord_bot_channel_id: int | None = None
 
     # Sentry Settings
     # https://docs.sentry.io/platforms/python/#configure
@@ -71,34 +50,16 @@ class Settings(BaseSettings):
         ),
     )
 
-    # Security Settings
-    security_key: SecretStr = Field(
-        default=SecretStr("".join(secrets.choice(string.ascii_letters + string.digits) for _ in range(16))),
-        description=(
-            "The secret key used for security.  If not set, a random key will be generated, however this means that "
-            "sessions will not be maintained between restarts."
-        ),
-    )
-    security_algorithm: str = "HS256"
-    security_access_token_expire_minutes: int = 120
-
-    # API Settings
-    api_port: int = 9000
-    api_host: str = "localhost"
-
-    # Discord Settings
-    discord: DiscordSettings | None = None
-
     # Database Settings
     postgres_user: str
     postgres_password: SecretStr
-    postgres_host: str = "localhost"
+    postgres_host: str
     postgres_port: int = 5432
     postgres_db: str = "postgres"
     postgres_apscheduler_schema: str = "apscheduler"
 
     # OpenAI Settings
-    openai_key: SecretStr
+    openai_key: SecretStr | None = None
     openai_model: str = "gpt-4o"
     openai_assistant_name: str = "Grug"
     openai_assistant_instructions: str = "\n".join(
@@ -111,11 +72,9 @@ class Settings(BaseSettings):
     )
     openai_assistant_about: str | None = Field(
         default=(
-            "Grug be a charming yet simple-minded barbarian orc who love to help humans, goblins, and all in between. "
-            "Grug provide aid with Pathfinder 2E rules, give advice, and make art of homes and dreams. With low brain "
-            "power but big heart, Grug strive to make everyone’s day better, one orcish word at a time!\n\n"
-            "Documentation: https://foehammer82.github.io/Grug/\n"
-            "Privacy Policy: https://github.com/Foehammer82/Grug/blob/main/docs/about/privacy_policy.md\n"
+            "Grug be a charming yet simple-minded barbarian orc who love to help humans, goblins, and all in between! "
+            "If want to know more about Grug, just ask! Grug always happy to help!  Or, checkout my documentation at "
+            "https://foehammer82.github.io/Grug/"
         ),
         description="The about message for the assistant.",
     )
@@ -148,4 +107,5 @@ class Settings(BaseSettings):
         )
 
 
+# Create the settings singleton object
 settings = Settings()
