@@ -1,23 +1,15 @@
 """Main entry point for the grug package."""
 
-from contextlib import asynccontextmanager
+import anyio
+from loguru import logger
 
-import uvicorn
-from fastapi import FastAPI
-from starlette.middleware import Middleware
-from starlette.middleware.sessions import SessionMiddleware
-from starlette.staticfiles import StaticFiles
-
-from grug.admin import init_admin
-from grug.api_routers import routers
-from grug.assistant_interfaces.discord_interface import init_discord_bot
-from grug.auth import init_auth
+from grug import bot_discord
 from grug.db import init_db
-from grug.health import initialize_health_endpoints
-from grug.log_config import init_logging
-from grug.metrics import initialize_metrics
-from grug.scheduler import init_scheduler
+from grug.scheduler import start_scheduler
 from grug.settings import settings
+
+# TODO: stand-alone CLI tool to accomplish admin tasks such as:
+#       - export/import db data
 
 if settings.sentry_dsn:
     import sentry_sdk
@@ -29,48 +21,25 @@ if settings.sentry_dsn:
     )
 
 
-@asynccontextmanager
-async def lifespan(fast_api_app: FastAPI):
-    """Lifespan event handler for the FastAPI app."""
-    init_logging()
-    await init_db()
-    init_auth(fast_api_app)
-    init_admin(fast_api_app)
-    init_discord_bot()
-    init_scheduler()
-    yield
+# noinspection PyTypeChecker
+async def main():
+    """Main application entrypoint."""
+    if not settings.discord_bot_token:
+        raise ValueError("`DISCORD_BOT_TOKEN` env variable is required to run the Grug bot.")
+    if not settings.openai_key:
+        raise ValueError("`OPENAI_KEY` env variable is required to run the Grug bot.")
 
+    init_db()
 
-app = FastAPI(
-    lifespan=lifespan,
-    title=f"{settings.openai_assistant_name} API",
-    docs_url="/api",
-    redoc_url=None,
-    middleware=[Middleware(SessionMiddleware, secret_key=settings.security_key.get_secret_value())],
-)
-app.mount(
-    "/static",
-    StaticFiles(directory=settings.root_dir / "grug" / "static"),
-    name="static",
-)
+    logger.info("Starting Grug...")
+    try:
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(bot_discord.client.start, settings.discord_bot_token.get_secret_value())
+            tg.start_soon(start_scheduler)
+    except KeyboardInterrupt:
+        pass
+    logger.info("Grug has shut down...")
 
-# Include all API routers
-for router in routers:
-    app.include_router(router)
-
-# Initialize metrics if enabled
-if settings.enable_metrics:
-    initialize_metrics(app)
-
-# Initialize health endpoints if enabled
-if settings.enable_health_endpoint:
-    initialize_health_endpoints(app)
 
 if __name__ == "__main__":
-    uvicorn.run(
-        app,
-        port=settings.api_port,
-        host=settings.api_host,
-        log_level=settings.log_level,
-        proxy_headers=settings.proxy_headers,
-    )
+    anyio.run(main)

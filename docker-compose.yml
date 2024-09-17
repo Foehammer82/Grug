@@ -4,10 +4,8 @@ services:
     image: ${CI_REGISTRY_IMAGE:-grug}:latest
     restart: unless-stopped
     env_file:
-      - path: config/postgres.env
-        required: true
-      - path: ${SECRETS_ENV_FILE:-config/secrets.env}
-        required: true
+      - config/postgres.env
+      - ${SECRETS_ENV_FILE:-config/secrets.env}
     ports:
       - "9089:9000"
 
@@ -17,8 +15,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     env_file:
-      - path: ./config/postgres.env
-        required: true
+      - ./config/postgres.env
     ports:
       - "5432:5432"
     healthcheck:

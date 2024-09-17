@@ -10,13 +10,16 @@ from openai.types.beta import Thread
 from openai.types.beta.threads import RequiredActionFunctionToolCall
 from pydantic import BaseModel
 
-from grug.assistant_functions import get_assistant_functions
 from grug.db import async_session
 from grug.models import Group, User
 from grug.settings import settings
 
 # TODO: setup monitor/log/handle openai rate limits:
 #       https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers
+# TODO: configure file uploading for the assistant and load useful files for the assistant to use.
+#       - pathfinder wonderful items list
+#       - pathfinder spells list
+#       - pathfinder wizard class information
 
 
 class AssistantResponse(BaseModel):
@@ -24,6 +27,7 @@ class AssistantResponse(BaseModel):
 
     response: str
     thread_id: str
+    tools_used: set[str] = set()
 
 
 class Assistant:
@@ -40,31 +44,33 @@ class Assistant:
             response_wait_seconds (float, optional): The number of seconds to wait between checking the assistant's
                                                      response. Defaults to 0.5.
         """
+        from grug.ai_functions import assistant_functions
+
+        if not settings.openai_key:
+            raise ValueError("OpenAI API key is required to use the Assistant class.")
+
         self.response_wait_seconds = response_wait_seconds
         self.async_client = AsyncOpenAI(api_key=settings.openai_key.get_secret_value())
         self.sync_client = OpenAI(api_key=settings.openai_key.get_secret_value())
-        self._tools = {str(tool.__name__): tool for tool in get_assistant_functions()}
+        self._tools = {str(tool.__name__): tool for tool in assistant_functions}
 
         # Create, or Update and Retrieve the assistant
         assistants = {a.name: a.id for a in self.sync_client.beta.assistants.list().data}
-        bot_name = settings.openai_assistant_name.lower()
-
-        # Configure tools
-        assistant_functions = self._get_assistant_tools()
+        bot_name = settings.openai_assistant_name.lower() + "-" + settings.environment.lower()
 
         if bot_name not in assistants:
             self.assistant = self.sync_client.beta.assistants.create(
                 name=bot_name,
                 instructions=settings.openai_assistant_instructions,
                 model=settings.openai_model,
-                tools=assistant_functions,
+                tools=self._get_assistant_tools(),
             )
         else:
             self.assistant = self.sync_client.beta.assistants.update(
                 assistant_id=assistants[bot_name],
                 instructions=settings.openai_assistant_instructions,
                 model=settings.openai_model,
-                tools=assistant_functions,
+                tools=self._get_assistant_tools(),
             )
 
     async def send_anonymous_message(
@@ -171,6 +177,8 @@ class Assistant:
         Returns:
             AssistantResponse: The response from the assistant.
         """
+        tools_used: set[str] = set()
+
         await self.async_client.beta.threads.messages.create(
             thread_id=thread.id,
             role="user",
@@ -184,6 +192,7 @@ class Assistant:
         )
 
         while run.status != "completed":
+            # noinspection PyUnresolvedReferences
             run = await self.async_client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
 
             if run.status == "failed":
@@ -205,6 +214,9 @@ class Assistant:
 
             elif run.status == "requires_action":
                 if (tool_calls := run.required_action.submit_tool_outputs.tool_calls) is not None:
+                    for tool_call in tool_calls:
+                        tools_used.add(tool_call.function.name)
+
                     run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=run.id,
@@ -229,8 +241,7 @@ class Assistant:
         ).data[0]
 
         return AssistantResponse(
-            response=response_message.content[0].text.value,
-            thread_id=thread.id,
+            response=response_message.content[0].text.value, thread_id=thread.id, tools_used=tools_used
         )
 
     def _get_assistant_tools(self) -> list[dict]:
@@ -285,10 +296,6 @@ class Assistant:
         group: Group | None = None,
     ):
         """Call the tool function and return the output."""
-        # TODO: evaluate running tools from as a distributed job using apschedulers job capabilities.
-        #       - evaluate how much additional time this takes
-        #       - evaluate if this will work well for scaling (the idea is to put as little computational overhead on
-        #         the main app(s) as possible)
         # TODO: setup auditing on tool calls to track when the tools were called and if they raised errors or not, and
         #       details around what was passed to the tool and received back from the tool.
 
@@ -337,4 +344,4 @@ class Assistant:
 
 
 # Instantiate the assistant singleton for use in the application
-assistant = Assistant()
+assistant = Assistant() if settings.openai_key else None

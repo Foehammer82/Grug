@@ -12,7 +12,7 @@ pre-commit:
     - pip install pre-commit
     - pre-commit run --all-files
 
-unit-tests:
+test:
   stage: test
   image: python:3.11
   tags:
@@ -20,7 +20,7 @@ unit-tests:
   script:
     - pip install poetry
     - poetry install
-    - poetry run python -m pytest --cov grug --cov-report term --cov-report xml:coverage.xml --junitxml=report.xml tests/unit
+    - poetry run python -m pytest --cov grug --cov-report term --cov-report xml:coverage.xml --junitxml=report.xml tests
   artifacts:
     when: always
     reports:
