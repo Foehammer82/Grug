@@ -207,12 +207,12 @@ async def on_message(message: discord.Message):
             return
 
         # Send the response back to the user
+        assistant_response.response += f"\n\n-# AI Tools Used: {assistant_response.tools_used}"
         for output in [
             assistant_response.response[i : i + _max_discord_message_length]
             for i in range(0, len(assistant_response.response), _max_discord_message_length)
         ]:
             await message.channel.send(output, suppress_embeds=False)
-        await message.channel.send(f"-# AI Tools Used: {assistant_response.tools_used}")
 
 
 @client.tree.command()
