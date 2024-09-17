@@ -12,7 +12,9 @@ from grug.ai import assistant
 from grug.db import async_session
 from grug.discord_views.attendance import DiscordAttendanceCheckView
 from grug.discord_views.food import DiscordFoodBringerSelectionView
+from grug.models import Group
 from grug.models_crud import (
+    get_distinct_users_who_last_brought_food,
     get_or_create_discord_server_group,
     get_or_create_discord_text_channel,
     get_or_create_discord_user,
@@ -248,6 +250,27 @@ async def trigger_game_session_reminder(interaction: discord.Interaction):
         content="Game session reminder triggered",
         ephemeral=True,
     )
+
+
+@client.tree.command()
+async def food_log(interaction: discord.Interaction):
+    """Get the food log for the group."""
+    async with async_session() as session:
+        group: Group = await get_or_create_discord_server_group(interaction.guild, session)
+        message = "\n".join(
+            [
+                f"{user.friendly_name} - {event.isoformat()}"
+                for user, event in await get_distinct_users_who_last_brought_food(group.id, session)
+            ]
+        )
+
+        if message == "":
+            message = "No food history found."
+
+        await get_interaction_response(interaction).send_message(
+            content=message,
+            ephemeral=True,
+        )
 
 
 def get_interaction_response(interaction: discord.Interaction) -> discord.InteractionResponse:
