@@ -29,5 +29,5 @@ ENV ENVIRONMENT="prd"
 # Start the application
 CMD poetry run python grug
 
-HEALTHCHECK --interval=5s --timeout=5s --retries=5 \
-  CMD curl --include --request GET http://localhost:9000/health || exit 1
+#HEALTHCHECK --interval=5s --timeout=5s --retries=5 \
+#  CMD curl --include --request GET http://localhost:9000/health || exit 1
