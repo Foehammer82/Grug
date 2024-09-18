@@ -1,5 +1,6 @@
 import logging
 
+import discord
 from loguru import logger
 
 
@@ -25,3 +26,11 @@ class InterceptLogHandler(logging.Handler):
                 depth += 1
 
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+
+def get_interaction_response(interaction: discord.Interaction) -> discord.InteractionResponse:
+    """
+    Get the interaction response object from the interaction object.  Used to help with type hinting.
+    """
+    # noinspection PyTypeChecker
+    return interaction.response

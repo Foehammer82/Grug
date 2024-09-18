@@ -1,13 +1,15 @@
 """SQLModel classes for the bot's database."""
 
 from datetime import datetime, time, timedelta, timezone
-from enum import StrEnum, auto
 
+import discord
+import phonenumbers
 import pytz
 import sqlalchemy as sa
 from apscheduler.triggers.cron import CronTrigger
 from pydantic import computed_field, field_validator
 from sqlalchemy import Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
 from sqlmodel._compat import SQLModelConfig
 
@@ -20,11 +22,6 @@ class SQLModelValidation(SQLModel):
     """
 
     model_config = SQLModelConfig(from_attributes=True, validate_assignment=True)
-
-
-class RepeatInterval(StrEnum):
-    WEEKLY = auto()
-    MONTHLY = auto()
 
 
 class UserGroupLink(SQLModelValidation, table=True):
@@ -63,8 +60,6 @@ class User(SQLModelValidation, table=True):
     first_name: str | None = None
     last_name: str | None = None
     phone: str | None = None
-    disabled: bool = False
-    is_admin: bool = False
 
     assistant_thread_id: str | None = None
 
@@ -91,6 +86,40 @@ class User(SQLModelValidation, table=True):
             return self.first_name
         else:
             return self.username
+
+    @computed_field
+    @property
+    def user_info_summary(self) -> str:
+        return (
+            "# User Info\n"
+            f"**Username:** {self.username}\n"
+            f"**First Name:** {self.first_name}\n"
+            f"**Last Name:** {self.last_name}\n"
+            f"**Phone Number:** {self.phone}\n"
+        )
+
+    # noinspection PyNestedDecorators
+    @field_validator("phone")
+    @classmethod
+    def phone_must_be_valid(cls, phone_number: str | None) -> str | None:
+        parsed_phone_number = phonenumbers.parse(phone_number, region="US")
+        return f"+{parsed_phone_number.country_code}{parsed_phone_number.national_number}"
+
+    # noinspection PyNestedDecorators
+    @field_validator("first_name")
+    @classmethod
+    def validate_first_name_format(cls, first_name: str | None) -> str | None:
+        if first_name:
+            first_name = first_name.strip().title()
+        return first_name
+
+    # noinspection PyNestedDecorators
+    @field_validator("last_name")
+    @classmethod
+    def validate_last_name_format(cls, last_name: str | None) -> str | None:
+        if last_name:
+            last_name = last_name.strip().title()
+        return last_name
 
     def __str__(self):
         return self.friendly_name
@@ -169,6 +198,8 @@ class Group(SQLModelValidation, table=True):
 
 class DiscordTextChannel(SQLModelValidation, table=True):
     """SQLModel class for a Discord text channel."""
+
+    __tablename__ = "discord_text_channels"
 
     id: int | None = Field(default=None, primary_key=True)
 
@@ -257,6 +288,9 @@ class GameSessionEvent(SQLModelValidation, table=True):
                 time=self.group.game_session_reminder_time,
             ).astimezone(pytz.timezone(self.group.timezone))
 
+        else:
+            return None
+
     def __str__(self):
         return f"group-{self.group_id} game session event [{self.timestamp.isoformat()}]"
 
@@ -311,3 +345,30 @@ class DalleImageRequest(SQLModelValidation, table=True):
 
     def __str__(self):
         return f"Dall-E Image {self.id} [{self.request_time}]"
+
+
+class DiscordInteractionAudit(SQLModelValidation, table=True):
+    """Model for tracking discord interactions."""
+
+    __tablename__ = "discord_interaction_audits"
+
+    id: int | None = Field(default=None, primary_key=True)
+    interaction_id: int = Field(sa_column=sa.Column(sa.BigInteger(), index=True))
+    interaction_type: str
+    channel_id: int | None = Field(default=None, sa_column=sa.Column(sa.BigInteger()))
+    guild_id: int | None = Field(default=None, sa_column=sa.Column(sa.BigInteger()))
+    interaction_data: dict | None = Field(default=None, sa_type=JSONB, nullable=False)
+    created_at: datetime = Field(
+        default_factory=datetime.utcnow,
+        sa_column=sa.Column(sa.DateTime(timezone=True), nullable=False),
+    )
+
+    @classmethod
+    def from_interaction(cls, interaction: discord.Interaction):
+        return cls(
+            interaction_id=interaction.id,
+            interaction_type=str(interaction.type),
+            channel_id=interaction.channel.id if interaction.channel else None,
+            guild_id=interaction.guild.id if interaction.guild else None,
+            interaction_data=interaction.data,
+        )
