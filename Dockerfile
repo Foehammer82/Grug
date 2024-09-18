@@ -27,7 +27,8 @@ ENV API_HOST="0.0.0.0"
 ENV ENVIRONMENT="prd"
 
 # Start the application
-CMD poetry run python grug
+CMD poetry run python grug start
 
-#HEALTHCHECK --interval=5s --timeout=5s --retries=5 \
-#  CMD curl --include --request GET http://localhost:9000/health || exit 1
+# Container Healthcheck
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+  CMD poetry run python grug health || exit 1

@@ -11,8 +11,8 @@ from grug.models import DiscordTextChannel, GameSessionEvent, Group, User
 
 async def get_or_create_discord_user(
     discord_member: discord.Member,
-    group: Group | None,
     db_session: AsyncSession,
+    group: Group | None = None,
 ) -> User:
     # noinspection Pydantic
     user: User | None = (
@@ -42,6 +42,19 @@ async def get_or_create_discord_user(
         await db_session.refresh(user)
 
     return user
+
+
+async def get_or_create_discord_user_given_interaction(
+    interaction: discord.Interaction,
+    db_session: AsyncSession,
+) -> User:
+    """Get a User for the given discord interaction."""
+
+    return await get_or_create_discord_user(
+        discord_member=interaction.user,
+        group=await get_or_create_discord_server_group(interaction.guild, db_session) if interaction.guild else None,
+        db_session=db_session,
+    )
 
 
 async def get_or_create_discord_server_group(
@@ -160,18 +173,3 @@ async def get_distinct_users_who_last_brought_food(
     )
 
     return [(event.user_assigned_food, event.timestamp) for event in list(distinct_food_bringers_sorted.values())]
-
-
-async def get_user_given_interaction(interaction: discord.Interaction, session: AsyncSession) -> User:
-    """Get the DiscordAccount for the interaction."""
-    # noinspection Pydantic
-    user: User = (
-        (await session.execute(select(User).where(User.discord_member_id == interaction.user.id)))
-        .scalars()
-        .one_or_none()
-    )
-
-    if user is None:
-        raise ValueError("No discord_account found for this interaction.")
-
-    return user

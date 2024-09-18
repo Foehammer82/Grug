@@ -9,21 +9,18 @@ from sqlmodel import cast, select
 
 from grug.db import async_session
 from grug.models import DalleImageRequest, Group
-from grug.models_crud import get_distinct_users_who_last_brought_food
-from grug.reminders import game_session_reminder
+from grug.models_crud import get_distinct_users_who_last_brought_food, get_or_create_next_game_session_event
 from grug.settings import settings
 
 # TODO: create a grug function to automatically create polls for the group
 # TODO: create a grug tool to shift the next session date
-# TODO: create a grug tool to trigger a session reminder
-# TODO: create a grug tool to provide information on who will be at the next session
-# TODO: create a grug tool to give information on who last brought food and who might be up next
+# TODO: log/track cost/usage of openai to a table to track costs and usage (having a TTL based chat history log would
+#       be nice too, to help with debugging and whatnot)
+
+assistant_functions: Set[Callable[[...], Any]] = set()
 
 
-assistant_functions: Set[Callable[[], Any]] = set()
-
-
-def register_function(function: Callable[[], Any]):
+def register_function(function: Callable[[...], Any]) -> Callable[[...], Any]:
     """Register a function as an assistant function."""
     assistant_functions.add(function)
     return function
@@ -60,6 +57,7 @@ async def generate_ai_image(prompt: str) -> dict[str, str | int] | None:
     async with async_session() as session:
 
         # Get the image requests remaining for the day
+        # noinspection PyTypeChecker,Pydantic
         picture_request_count_for_today = (
             await session.execute(
                 select(func.count("*"))
@@ -130,7 +128,7 @@ async def get_food_schedule(group: Group) -> dict[str, Any]:
               and whether the date is in the future.
             - todays_date (datetime): The current date.
     """
-    if not group:
+    if not group or not group.id:
         raise ValueError("Group not found.")
     if not group.game_session_track_food:
         raise ValueError(f"Food tracking disabled for the group {group.name}.")
@@ -149,25 +147,25 @@ async def get_food_schedule(group: Group) -> dict[str, Any]:
 
 
 @register_function
-async def send_session_reminder(group: Group) -> str:
+async def get_next_session_attendance(group: Group) -> str:
     """
-    Send a reminder for the next scheduled game session.
-
-    Args:
-        group (Group): The group to send the reminder for.
+    Get information about who is scheduled to attend the next game session.
 
     Returns:
-        str: The message indicating if the reminder was sent.
+        Markdown-formatted string: A string containing the names of the users who RSVP'd to the next session.
     """
-    if not group:
-        return "No group found to send reminder to."
-    elif not group.game_session_cron_schedule:
-        return "Session tracking disabled for the group."
+    if not group or not group.id:
+        raise ValueError("Group not found.")
+    if not group.game_session_track_food:
+        raise ValueError(f"Food tracking disabled for the group {group.name}.")
 
     async with async_session() as session:
-        await game_session_reminder(group.id, session)
+        next_game_session_event = await get_or_create_next_game_session_event(group.id, session)
 
-    return f"Session reminder sent for {group.name}."
+    if next_game_session_event:
+        return next_game_session_event.user_attendance_summary_md
+    else:
+        return "No upcoming game session found."
 
 
 @register_function

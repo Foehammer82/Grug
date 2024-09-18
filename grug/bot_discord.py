@@ -12,14 +12,11 @@ from grug.ai import assistant
 from grug.db import async_session
 from grug.discord_views.attendance import DiscordAttendanceCheckView
 from grug.discord_views.food import DiscordFoodBringerSelectionView
-from grug.models import Group
 from grug.models_crud import (
-    get_distinct_users_who_last_brought_food,
     get_or_create_discord_server_group,
     get_or_create_discord_text_channel,
     get_or_create_discord_user,
 )
-from grug.reminders import game_session_reminder
 from grug.scheduler import scheduler, update_group_schedules
 from grug.settings import settings
 from grug.utils import InterceptLogHandler
@@ -206,76 +203,13 @@ async def on_message(message: discord.Message):
         else:
             return
 
+        # note if the assistant used any AI tools
+        if len(assistant_response.tools_used) > 0:
+            assistant_response.response += f"\n\n-# AI Tools Used: {assistant_response.tools_used}\n"
+
         # Send the response back to the user
-        assistant_response.response += f"\n\n-# AI Tools Used: {assistant_response.tools_used}"
         for output in [
             assistant_response.response[i : i + _max_discord_message_length]
             for i in range(0, len(assistant_response.response), _max_discord_message_length)
         ]:
             await message.channel.send(output, suppress_embeds=False)
-
-
-@client.tree.command()
-@app_commands.checks.has_permissions(manage_guild=True)
-async def update_game_session_schedule(interaction: discord.Interaction, cron: str):
-    """
-    Update the game session event schedule for the group.
-
-    Args:
-        interaction (discord.Interaction): The interaction object.
-        cron (str): The cron schedule string. (hint: https://crontab.guru/#0_17_*_*_0)
-    """
-    async with async_session() as session:
-        group = await get_or_create_discord_server_group(interaction.guild, session)
-
-        group.game_session_cron_schedule = cron
-        session.add(group)
-        await session.commit()
-
-    await get_interaction_response(interaction).send_message(
-        content=f"Updated event schedule to: {cron}",
-        ephemeral=True,
-    )
-
-
-@client.tree.command()
-@app_commands.checks.has_permissions(manage_guild=True)
-async def trigger_game_session_reminder(interaction: discord.Interaction):
-    """Trigger a game session reminder for the group."""
-    async with async_session() as session:
-        group = await get_or_create_discord_server_group(interaction.guild, session)
-        await game_session_reminder(group.id, session)
-
-    await get_interaction_response(interaction).send_message(
-        content="Game session reminder triggered",
-        ephemeral=True,
-    )
-
-
-@client.tree.command()
-async def food_log(interaction: discord.Interaction):
-    """Get the food log for the group."""
-    async with async_session() as session:
-        group: Group = await get_or_create_discord_server_group(interaction.guild, session)
-        message = "\n".join(
-            [
-                f"{user.friendly_name} - {event.isoformat()}"
-                for user, event in await get_distinct_users_who_last_brought_food(group.id, session)
-            ]
-        )
-
-        if message == "":
-            message = "No food history found."
-
-        await get_interaction_response(interaction).send_message(
-            content=message,
-            ephemeral=True,
-        )
-
-
-def get_interaction_response(interaction: discord.Interaction) -> discord.InteractionResponse:
-    """
-    Get the interaction response object from the interaction object.
-    """
-    # noinspection PyTypeChecker
-    return interaction.response

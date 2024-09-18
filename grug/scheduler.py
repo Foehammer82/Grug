@@ -92,6 +92,9 @@ async def update_group_schedules(group_id: int | None = None, group: Group | Non
 
         # Update the game session schedules for each group
         for group in groups:
+            if not group or not group.id:
+                raise ValueError("Group not found.")
+
             game_session_schedule_id = f"group_{group.id}_game_session_schedule"
             game_session_reminder_schedule_id = f"group_{group.id}_game_session_reminder_schedule"
 
@@ -100,17 +103,25 @@ async def update_group_schedules(group_id: int | None = None, group: Group | Non
             try:
                 game_session_schedule: Schedule | None = await scheduler.get_schedule(game_session_schedule_id)
 
-                # Check if the trigger is a cron trigger
-                if isinstance(game_session_schedule.trigger, CronTrigger):
-                    # Check if the group schedule has changed
-                    t1 = game_session_schedule.next_fire_time.astimezone(timezone.utc)
-                    t2 = group.game_session_cron_trigger.next().astimezone(timezone.utc)
-                    if t1 != t2:
+                if game_session_schedule:
+                    # Check if the trigger is a cron trigger
+                    if isinstance(game_session_schedule.trigger, CronTrigger):
+                        # Check if the group schedule has changed
+                        t1 = game_session_schedule.next_fire_time.astimezone(timezone.utc)
+                        t2 = (
+                            group.game_session_cron_trigger.next().astimezone(timezone.utc)
+                            if group.game_session_cron_trigger
+                            else None
+                        )
+                        if t1 != t2:
+                            replace_session_schedule = True
+
+                    # If the trigger is not a cron trigger, replace the schedule
+                    else:
+                        await scheduler.remove_schedule(game_session_schedule_id)
                         replace_session_schedule = True
 
-                # If the trigger is not a cron trigger, replace the schedule
                 else:
-                    await scheduler.remove_schedule(game_session_schedule_id)
                     replace_session_schedule = True
 
             # If the schedule does not exist, mark it for replacement
@@ -156,6 +167,9 @@ async def update_group_schedules(group_id: int | None = None, group: Group | Non
                 and next_game_session_event is not None
                 and game_session_schedule.next_fire_time != next_game_session_event.reminder_datetime
             ):
+                if not next_game_session_event:
+                    raise ValueError("Next game session event not found.")
+
                 await scheduler.add_schedule(
                     id=game_session_reminder_schedule_id,
                     func_or_task_id=game_session_reminder,

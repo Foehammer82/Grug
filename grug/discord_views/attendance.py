@@ -16,10 +16,10 @@ class EventAttendanceConfirmButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        from grug.models_crud import get_user_given_interaction
+        from grug.models_crud import get_or_create_discord_user_given_interaction
 
         async with async_session() as session:
-            user = await get_user_given_interaction(interaction, session)
+            user = await get_or_create_discord_user_given_interaction(interaction, session)
             event_occurrence = await _get_event_attendance_given_interaction(interaction, session)
 
             # mark the user as attending the event
@@ -54,10 +54,10 @@ class EventAttendanceDenyButton(discord.ui.Button):
         )
 
     async def callback(self, interaction: discord.Interaction):
-        from grug.models_crud import get_user_given_interaction
+        from grug.models_crud import get_or_create_discord_user_given_interaction
 
         async with async_session() as session:
-            user = await get_user_given_interaction(interaction, session)
+            user = await get_or_create_discord_user_given_interaction(interaction, session)
             event_occurrence = await _get_event_attendance_given_interaction(interaction, session)
 
             if user not in event_occurrence.users_rsvp_no:
