@@ -22,6 +22,7 @@ from grug.settings import settings
 #         work for everyone, I vote for 1, the winning date is picked and announced to everyone. or could possibly
 #         save a step if everyone picks a day that is the same, it just auto-selects the first day that everyone votes
 #         for Or just start with a discord poll tagging everyone with an option for every tuesday that month.
+# TODO: have specific instructions and results for when users are rude or inappropriate towards grug
 
 app = typer.Typer(no_args_is_help=True)
 
