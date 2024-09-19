@@ -3,7 +3,7 @@ import datetime
 import discord
 from loguru import logger
 
-from grug.bot_discord import client
+from grug.bot_discord import discord_client
 from grug.db import async_session
 from grug.models import DiscordInteractionAudit, Group
 from grug.models_crud import (
@@ -16,7 +16,7 @@ from grug.reminders import game_session_reminder
 from grug.utils import get_interaction_response
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def get_group_settings(interaction: discord.Interaction):
@@ -42,7 +42,7 @@ async def get_group_settings(interaction: discord.Interaction):
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def update_game_session_schedule(interaction: discord.Interaction, cron: str):
@@ -70,7 +70,7 @@ async def update_game_session_schedule(interaction: discord.Interaction, cron: s
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def trigger_game_session_reminder(interaction: discord.Interaction):
@@ -93,7 +93,7 @@ async def trigger_game_session_reminder(interaction: discord.Interaction):
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 @discord.app_commands.choices(
@@ -129,7 +129,7 @@ async def update_game_session_reminder(
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def set_bot_channel_id(interaction: discord.Interaction, channel: discord.TextChannel):
@@ -151,7 +151,7 @@ async def set_bot_channel_id(interaction: discord.Interaction, channel: discord.
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 async def get_food_history(interaction: discord.Interaction):
     """Get the food log for the group."""
@@ -181,7 +181,7 @@ async def get_food_history(interaction: discord.Interaction):
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 @discord.app_commands.guild_only()
 @discord.app_commands.checks.has_permissions(manage_guild=True)
 async def update_user_info(
@@ -221,7 +221,7 @@ async def update_user_info(
         await session.commit()
 
 
-@client.tree.command()
+@discord_client.tree.command()
 async def update_my_info(
     interaction: discord.Interaction,
     first_name: str | None = None,

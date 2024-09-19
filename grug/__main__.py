@@ -48,7 +48,7 @@ async def main():
     logger.info("Starting Grug...")
     try:
         async with anyio.create_task_group() as tg:
-            tg.start_soon(bot_discord.client.start, settings.discord_bot_token.get_secret_value())
+            tg.start_soon(bot_discord.discord_client.start, settings.discord_bot_token.get_secret_value())
             tg.start_soon(start_scheduler)
     except KeyboardInterrupt:
         pass

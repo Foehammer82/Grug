@@ -6,16 +6,16 @@ import json
 
 from loguru import logger
 from openai import AsyncOpenAI, OpenAI
-from openai.types.beta import Thread
 from openai.types.beta.threads import RequiredActionFunctionToolCall
 from pydantic import BaseModel
 
-from grug.db import async_session
 from grug.models import Group, User
 from grug.settings import settings
 
 # TODO: setup monitor/log/handle openai rate limits:
 #       https://platform.openai.com/docs/guides/rate-limits/rate-limits-in-headers
+# TODO: log/track cost/usage of openai to a table to track costs and usage (having a TTL based chat history log would
+#       be nice too, to help with debugging and whatnot)
 # TODO: configure file uploading for the assistant and load useful files for the assistant to use.
 #       - pathfinder wonderful items list
 #       - pathfinder spells list
@@ -28,6 +28,7 @@ class AssistantResponse(BaseModel):
     response: str
     thread_id: str
     tools_used: set[str] = set()
+    respond_ephemeraly: bool = False
 
 
 class Assistant:
@@ -73,116 +74,44 @@ class Assistant:
                 tools=self._get_assistant_tools(),
             )
 
-    async def send_anonymous_message(
-        self,
-        message: str,
-    ) -> AssistantResponse:
-        """
-        Send an anonymous message to the assistant and get the response.
-
-        Args:
-            message (str): The message to send to the assistant.
-
-        Returns:
-            AssistantResponse: The response from the assistant.
-        """
-        return await self._send_message(
-            thread=await self.async_client.beta.threads.create(),
-            message=message,
-        )
-
-    async def send_direct_message(
+    async def send_message(
         self,
         message: str,
         user: User,
-        session: async_session,
-    ) -> AssistantResponse:
-        """
-        Send a direct message from a player to the assistant and get the response.
-
-        Args:
-            message (str): The message to send to the assistant.
-            user (Player): The player sending the message.
-            session (async_session): The session to use for database operations.
-
-        Returns:
-            AssistantResponse: The response from the assistant.
-        """
-        if user.assistant_thread_id is None:
-            thread = await self.async_client.beta.threads.create()
-
-            # Update the user with the thread_id
-            user.assistant_thread_id = thread.id
-            session.add(user)
-            await session.commit()
-        else:
-            thread = await self.async_client.beta.threads.retrieve(thread_id=user.assistant_thread_id)
-
-        return await self._send_message(
-            thread=thread,
-            message=message,
-            user=user,
-        )
-
-    async def send_group_message(
-        self,
-        message: str,
-        user: User,
-        group: Group,
-        thread_id: str | None = None,
-    ) -> AssistantResponse:
-        """
-        Send a message to a group thread and get the response.
-
-        Args:
-            message (str): The message to send to the assistant.
-            thread_id (str): The thread_id of the group thread.
-            user (User): The player sending the message.
-            group (Group): The group the player is in.
-
-        Returns:
-            AssistantResponse: The response from the assistant.
-        """
-
-        return await self._send_message(
-            thread=(
-                await self.async_client.beta.threads.retrieve(thread_id=thread_id)
-                if thread_id
-                else await self.async_client.beta.threads.create()
-            ),
-            message=(
-                f"This message is from {user.friendly_name}.  The following is their message:"
-                f"\n{message}"
-                "\n\n[AI should not factor the person's name into its response.]"
-                "\n[AI should not state that they received a message from the person.]"
-            ),
-            user=user,
-            group=group,
-        )
-
-    async def _send_message(
-        self,
-        thread: Thread,
-        message: str,
-        user: User | None = None,
         group: Group | None = None,
+        thread_id: str | None = None,
     ) -> AssistantResponse:
         """
         Send a message to the assistant and get the response.
 
         Args:
-            thread (Thread): The thread to send the message to.
             message (str): The message to send to the assistant.
+            user (User): The player sending the message.
+            group (Group): The group the player is in.
+            thread_id (str): The thread_id for the given message.
 
         Returns:
             AssistantResponse: The response from the assistant.
         """
+        # Get the thread
+        if thread_id:
+            thread = await self.async_client.beta.threads.retrieve(thread_id=thread_id)
+        else:
+            thread = await self.async_client.beta.threads.create()
+
+        # track the tools used
         tools_used: set[str] = set()
 
+        # Send the message to the assistant
         await self.async_client.beta.threads.messages.create(
             thread_id=thread.id,
             role="user",
-            content=message,
+            content=(
+                f"This message is from {user.friendly_name}.  The following is their message:\n"
+                f"{message}\n\n"
+                "[AI should not factor the person's name into its response.]\n"
+                "[AI should not state that they received a message from the person.]"
+            ),
         )
 
         # Create a new run (https://platform.openai.com/docs/assistants/how-it-works/runs-and-run-steps)
@@ -220,6 +149,7 @@ class Assistant:
                     tools_used.union({tool_call.function.name for tool_call in tool_calls})
 
                     # execute the tool calls
+                    # TODO: use context variable in the tool to know if the response should be ephemeral
                     run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=run.id,
@@ -299,9 +229,6 @@ class Assistant:
         group: Group | None = None,
     ):
         """Call the tool function and return the output."""
-        # TODO: setup auditing on tool calls to track when the tools were called and if they raised errors or not, and
-        #       details around what was passed to the tool and received back from the tool.
-
         logger.info(f"Calling tool function: {tool_call.function.name}")
 
         try:

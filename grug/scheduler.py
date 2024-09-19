@@ -46,7 +46,7 @@ scheduler = AsyncScheduler(
 
 
 async def start_scheduler(discord_bot_startup_timeout: int = 15):
-    from grug.bot_discord import client
+    from grug.bot_discord import discord_client
 
     # Create the db schema for the scheduler
     async with async_engine.begin() as conn:
@@ -55,7 +55,7 @@ async def start_scheduler(discord_bot_startup_timeout: int = 15):
     # wait for the discord bot to be ready
     timed_out = True
     for _ in range(discord_bot_startup_timeout):
-        if client.is_ready():
+        if discord_client.is_ready():
             timed_out = False
             break
         await asyncio.sleep(1)

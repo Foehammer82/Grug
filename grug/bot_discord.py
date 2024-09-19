@@ -65,7 +65,7 @@ class Client(discord.Client):
             await self.tree.sync()
 
 
-client = Client()
+discord_client = Client()
 discord.utils.setup_logging(handler=InterceptLogHandler())
 
 
@@ -80,18 +80,18 @@ async def on_tree_error(interaction: discord.Interaction, error: app_commands.Ap
     )
 
 
-client.tree.on_error = on_tree_error
+discord_client.tree.on_error = on_tree_error
 
 
 def get_bot_invite_url() -> str | None:
     return (
-        f"https://discord.com/api/oauth2/authorize?client_id={client.user.id}&permissions=8&scope=bot"
-        if client.user
+        f"https://discord.com/api/oauth2/authorize?client_id={discord_client.user.id}&permissions=8&scope=bot"
+        if discord_client.user
         else None
     )
 
 
-@client.event
+@discord_client.event
 async def on_ready():
     """
     Event handler for when the bot is ready.
@@ -105,7 +105,7 @@ async def on_ready():
     # Make sure all the guilds are loaded in the server
     logger.info("Loading guilds...")
     async with async_session() as session:
-        for guild in client.guilds:
+        for guild in discord_client.guilds:
             logger.info(f"Initializing guild {guild.name} (ID: {guild.id})")
             group = await get_or_create_discord_server_group(guild=guild, db_session=session)
 
@@ -116,10 +116,10 @@ async def on_ready():
                     await get_or_create_discord_user(discord_member=member, group=group, db_session=session)
 
     # Add persistent views to the discord bot
-    client.add_view(view=DiscordAttendanceCheckView())
-    client.add_view(view=DiscordFoodBringerSelectionView(group))
+    discord_client.add_view(view=DiscordAttendanceCheckView())
+    discord_client.add_view(view=DiscordFoodBringerSelectionView(group))
 
-    logger.info(f"Logged in as {client.user} (ID: {client.user.id})")
+    logger.info(f"Logged in as {discord_client.user} (ID: {discord_client.user.id})")
 
     # wait for the scheduler to start and update the group schedules
     for second in range(10):
@@ -133,13 +133,13 @@ async def on_ready():
     await update_group_schedules()
 
 
-@client.event
+@discord_client.event
 async def on_message(message: discord.Message):
     """on_message event handler for the Discord bot."""
 
     async with async_session() as session:
         # ignore messages from self and all bots
-        if message.author == client.user or message.author.bot:
+        if message.author == discord_client.user or message.author.bot:
             return
 
         # If the assistant is not initialized, send a message and raise an error
@@ -162,16 +162,22 @@ async def on_message(message: discord.Message):
         if isinstance(message.channel, discord.DMChannel):
             async with message.channel.typing():
                 # Send the message to the assistant and get the response
-                assistant_response = await assistant.send_direct_message(
+                assistant_response = await assistant.send_message(
                     message=message.content,
                     user=user,
-                    session=session,
+                    thread_id=user.assistant_thread_id,
                 )
+
+                # Save the assistant thread ID to the database if it is not already saved for the current user
+                if not user.assistant_thread_id:
+                    user.assistant_thread_id = assistant_response.thread_id
+                    session.add(user)
+                    await session.commit
 
         # respond to @mentions in channels
         elif (
             isinstance(message.channel, discord.TextChannel) or isinstance(message.channel, discord.Thread)
-        ) and client.user in message.mentions:
+        ) and discord_client.user in message.mentions:
             async with message.channel.typing():
                 # noinspection PyTypeChecker
                 discord_text_channel = await get_or_create_discord_text_channel(
@@ -180,21 +186,15 @@ async def on_message(message: discord.Message):
                 )
 
                 # Send the message to the assistant and get the response
-                if discord_text_channel.assistant_thread_id:
-                    assistant_response = await assistant.send_group_message(
-                        message=message.content,
-                        thread_id=discord_text_channel.assistant_thread_id,
-                        user=user,
-                        group=discord_text_channel.group,
-                    )
-                else:
-                    assistant_response = await assistant.send_group_message(
-                        message=message.content,
-                        user=user,
-                        group=discord_text_channel.group,
-                    )
+                assistant_response = await assistant.send_message(
+                    message=message.content,
+                    user=user,
+                    group=discord_text_channel.group,
+                    thread_id=discord_text_channel.assistant_thread_id,
+                )
 
-                    # Save the assistant thread ID to the database
+                # Save the assistant thread ID to the database if it is not already saved for the current text channel
+                if not discord_text_channel.assistant_thread_id:
                     discord_text_channel.assistant_thread_id = assistant_response.thread_id
                     session.add(discord_text_channel)
                     await session.commit()

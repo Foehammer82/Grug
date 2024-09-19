@@ -1,6 +1,7 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Set
 
+from discord import Poll
 from elasticsearch import Elasticsearch
 from loguru import logger
 from openai.types import Image
@@ -12,15 +13,10 @@ from grug.models import DalleImageRequest, Group
 from grug.models_crud import get_distinct_users_who_last_brought_food, get_or_create_next_game_session_event
 from grug.settings import settings
 
-# TODO: create a grug function to automatically create polls for the group
-# TODO: create a grug tool to shift the next session date
-# TODO: log/track cost/usage of openai to a table to track costs and usage (having a TTL based chat history log would
-#       be nice too, to help with debugging and whatnot)
-
-assistant_functions: Set[Callable[[...], Any]] = set()
+assistant_functions: Set[Callable[..., Any]] = set()
 
 
-def register_function(function: Callable[[...], Any]) -> Callable[[...], Any]:
+def register_function(function: Callable[..., Any]) -> Callable[..., Any]:
     """Register a function as an assistant function."""
     assistant_functions.add(function)
     return function
@@ -269,3 +265,42 @@ def search_archives_of_nethys(search_string: str) -> list[dict]:
     )
 
     return results_clean
+
+
+@register_function
+async def create_pole(
+    group: Group, poll_question: str, answers: str, duration_hours: int = 24, multiple: bool = False
+) -> None:
+    """
+    Create a poll in the group's discord channel.
+
+    Args:
+        group (Group): The group to create the poll for.
+        poll_question (str): The question to ask in the poll.
+        answers (str): A comma seperated list of answers to provide in the poll.
+        duration_hours (int, optional): The duration of the poll in hours. Defaults to 24.
+        multiple (bool, optional): Whether multiple answers can be selected in the poll. Defaults to False.
+    """
+    from grug.bot_discord import discord_client
+
+    guild = discord_client.get_guild(group.discord_guild_id)
+
+    # TODO: get a way for the user to either select the channel or have a way to pass in the sending channel id
+    if group.discord_bot_channel_id:
+        discord_channel = guild.get_channel(group.discord_bot_channel_id)
+    else:
+        discord_channel = guild.channels[0]
+
+    # Define the poll
+    poll = Poll(
+        question=poll_question,
+        multiple=multiple,
+        duration=timedelta(hours=duration_hours),
+    )
+    for answer in answers.split(","):
+        poll.add_answer(text=answer.strip())
+
+    # send a poll to the channel
+    await discord_channel.send(poll=poll)
+
+    return

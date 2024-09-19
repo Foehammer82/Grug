@@ -8,7 +8,7 @@ from grug.models_crud import get_distinct_users_who_last_brought_food, get_or_cr
 
 
 async def send_attendance_reminder(group_id: int, session: AsyncSession):
-    from grug.bot_discord import client
+    from grug.bot_discord import discord_client
 
     game_session_event = await get_or_create_next_game_session_event(group_id=group_id, session=session)
 
@@ -20,10 +20,10 @@ async def send_attendance_reminder(group_id: int, session: AsyncSession):
 
     # Get the default discord channel
     if game_session_event.group.discord_bot_channel_id is not None:
-        guild_channel = client.get_channel(game_session_event.group.discord_bot_channel_id)
+        guild_channel = discord_client.get_channel(game_session_event.group.discord_bot_channel_id)
     else:
         guild_id = game_session_event.group.discord_guild_id
-        guild_channel = client.get_guild(guild_id).system_channel
+        guild_channel = discord_client.get_guild(guild_id).system_channel
 
     # Send the message to discord
     message = await guild_channel.send(
@@ -41,7 +41,7 @@ async def send_attendance_reminder(group_id: int, session: AsyncSession):
 
 
 async def send_food_reminder(group_id: int, session: AsyncSession):
-    from grug.bot_discord import client
+    from grug.bot_discord import discord_client
 
     game_session_event = await get_or_create_next_game_session_event(group_id=group_id, session=session)
 
@@ -73,10 +73,10 @@ async def send_food_reminder(group_id: int, session: AsyncSession):
 
     # Get the default discord channel
     if game_session_event.group.discord_bot_channel_id is not None:
-        guild_channel = client.get_channel(game_session_event.group.discord_bot_channel_id)
+        guild_channel = discord_client.get_channel(game_session_event.group.discord_bot_channel_id)
     else:
         guild_id = game_session_event.group.discord_guild_id
-        guild_channel = client.get_guild(guild_id).system_channel
+        guild_channel = discord_client.get_guild(guild_id).system_channel
 
     # Send the message to discord
     message = await guild_channel.send(
