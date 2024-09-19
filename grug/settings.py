@@ -1,9 +1,9 @@
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 import pytz
-from pydantic import AliasChoices, Field, PostgresDsn, SecretStr, computed_field
+from pydantic import AliasChoices, Field, PostgresDsn, SecretStr, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 TimeZone = StrEnum("TimeZone", tuple((tz, tz) for tz in pytz.common_timezones))
@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     # OpenAI Settings
     openai_key: SecretStr | None = None
     openai_model: str = "gpt-4o"
+    openai_fallback_model: str = "gpt-4o-mini"
     openai_assistant_name: str = "Grug"
     openai_assistant_instructions: str = "\n".join(
         [
@@ -105,6 +106,13 @@ class Settings(BaseSettings):
                 path=self.postgres_db,
             )
         )
+
+    @model_validator(mode="after")
+    def validate_settings(self) -> Self:
+        if self.openai_fallback_model == self.openai_model:
+            raise ValueError("fallback model cannot be the same as the primary model")
+
+        return self
 
 
 # Create the settings singleton object

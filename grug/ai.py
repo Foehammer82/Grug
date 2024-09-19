@@ -197,13 +197,14 @@ class Assistant:
 
             if run.status == "failed":
                 if run.last_error.code == "rate_limit_exceeded":
-                    logger.warning("Rate limit exceeded. Retrying with a smaller model.")
+                    logger.warning(f"Rate limit exceeded. Retrying with {settings.openai_fallback_model}.")
 
-                    # If the rate limit is exceeded, retry with a smaller model
+                    # If the rate limit is exceeded, retry with a fallback model
+                    # noinspection PyUnresolvedReferences
                     run = await self.async_client.beta.threads.runs.create(
                         thread_id=thread.id,
                         assistant_id=self.assistant.id,
-                        model="gpt-4o-mini",
+                        model=settings.openai_fallback_model,
                     )
 
                 else:
@@ -213,10 +214,12 @@ class Assistant:
                 await asyncio.sleep(self.response_wait_seconds)
 
             elif run.status == "requires_action":
-                if (tool_calls := run.required_action.submit_tool_outputs.tool_calls) is not None:
-                    for tool_call in tool_calls:
-                        tools_used.add(tool_call.function.name)
+                tool_calls = run.required_action.submit_tool_outputs.tool_calls
+                if tool_calls:
+                    # Add the tools used to the set of tools used
+                    tools_used.union({tool_call.function.name for tool_call in tool_calls})
 
+                    # execute the tool calls
                     run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=run.id,
