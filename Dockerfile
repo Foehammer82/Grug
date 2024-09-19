@@ -22,11 +22,8 @@ COPY alembic.ini alembic.ini
 # Copy application files
 COPY grug grug
 
-EXPOSE 9000
-ENV API_HOST="0.0.0.0"
-ENV ENVIRONMENT="prd"
-
 # Start the application
+ENV ENVIRONMENT="prd"
 CMD poetry run python grug start
 
 # Container Healthcheck

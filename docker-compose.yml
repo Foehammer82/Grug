@@ -6,8 +6,6 @@ services:
     env_file:
       - config/postgres.env
       - ${SECRETS_ENV_FILE:-config/secrets.env}
-    ports:
-      - "9089:9000"
 
   postgres:
     image: postgres:15
