@@ -82,6 +82,10 @@ class User(SQLModelValidation, table=True):
     @property
     def friendly_name(self) -> str:
         """Get the user's friendly name."""
+        # TODO: when using friendly_name in discord_groups (i.e. food selection and so on) the order of name choices
+        #       should be; first_name -> guild nickname -> discord username.  though to get this working, friendly_name
+        #       will need the context of the guild it's being used in.
+
         if self.first_name is not None:
             return self.first_name
         else:
