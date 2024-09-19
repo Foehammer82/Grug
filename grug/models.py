@@ -11,8 +11,6 @@ from pydantic import computed_field, field_validator
 from sqlalchemy import Index
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field, Relationship, SQLModel
-
-# noinspection PyProtectedMember
 from sqlmodel._compat import SQLModelConfig
 
 from grug.settings import TimeZone, settings
