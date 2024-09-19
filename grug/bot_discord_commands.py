@@ -1,20 +1,18 @@
 import datetime
 
 import discord
-import pytz
 from loguru import logger
 
 from grug.bot_discord import discord_client
 from grug.db import async_session
 from grug.models import DiscordInteractionAudit, Group
 from grug.models_crud import (
-    get_distinct_users_who_last_brought_food,
     get_or_create_discord_server_group,
     get_or_create_discord_user,
     get_or_create_discord_user_given_interaction,
 )
 from grug.reminders import game_session_reminder
-from grug.utils import get_interaction_response
+from grug.utils import get_food_assignment_log_text, get_interaction_response
 
 
 @discord_client.tree.command()
@@ -162,13 +160,7 @@ async def get_food_history(interaction: discord.Interaction):
         if not group or not group.id:
             raise ValueError("Group not found.")
 
-        food_history = await get_distinct_users_who_last_brought_food(group.id, session)
-        message = "\n".join(
-            [
-                f"**{event.astimezone(pytz.timezone(group.timezone)).date().isoformat()}:** {user.friendly_name}"
-                for user, event in food_history
-            ]
-        )
+        message = await get_food_assignment_log_text(group.id, session)
 
         if message == "":
             message = "No food history found."

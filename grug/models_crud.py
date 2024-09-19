@@ -2,6 +2,7 @@ from datetime import datetime
 
 import discord
 import pytz
+from dateutil.relativedelta import relativedelta
 from loguru import logger
 from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -113,6 +114,7 @@ async def get_or_create_next_game_session_event(group_id: int, session: AsyncSes
 
     # Search through the event occurrences and see if any exist after current datetime, if more than one, return just
     # the next one
+    # noinspection Pydantic
     query = (
         select(GameSessionEvent)
         .where(GameSessionEvent.group_id == group_id)
@@ -143,7 +145,9 @@ async def get_or_create_next_game_session_event(group_id: int, session: AsyncSes
 
 
 async def get_distinct_users_who_last_brought_food(
-    group_id: int, db_session: AsyncSession
+    group_id: int,
+    db_session: AsyncSession,
+    months_back: int = 12,
 ) -> list[tuple[User, datetime]]:
     """
     Get the distinct users who last brought food for the group.
@@ -151,9 +155,11 @@ async def get_distinct_users_who_last_brought_food(
     Args:
         group_id: The ID of the group.
         db_session: The database session.
+        months_back: The number of months back to search for food history.
     """
 
     # Subquery to get the latest timestamp for each group
+    # noinspection Pydantic
     subquery = (
         select(GameSessionEvent.user_assigned_food_id, func.max(GameSessionEvent.timestamp).label("latest_timestamp"))
         .group_by(GameSessionEvent.user_assigned_food_id)
@@ -172,6 +178,7 @@ async def get_distinct_users_who_last_brought_food(
             & (main_table.timestamp == subquery.c.latest_timestamp),
         )
         .where(main_table.group_id == group_id)
+        .where(main_table.timestamp >= datetime.now(tz=pytz.utc) - relativedelta(months=months_back))
         .order_by(main_table.timestamp.desc())
     )
 

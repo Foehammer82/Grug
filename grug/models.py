@@ -269,9 +269,8 @@ class GameSessionEvent(SQLModelValidation, table=True):
     @property
     def user_attendance_summary_md(self) -> str:
         event_timestamp = self.timestamp.astimezone(pytz.timezone(self.group.timezone))
-        event_timesatmp_str = f"{event_timestamp.strftime('%Y-%m-%d %H:%M')} ({event_timestamp.tzname()})"
 
-        summary_md = f"## Attendance {event_timesatmp_str}\n"
+        summary_md = f"## Attendance {event_timestamp.strftime('%Y-%m-%d')}\n"
         summary_md += "**RSVP Yes**\n"
         summary_md += "\n".join([f"- {user.friendly_name}" for user in self.users_rsvp_yes])
         summary_md += "\n\n"

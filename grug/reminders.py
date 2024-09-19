@@ -5,7 +5,7 @@ from grug.discord_views.attendance import DiscordAttendanceCheckView
 from grug.discord_views.food import DiscordFoodBringerSelectionView
 from grug.models import EventAttendanceReminderDiscordMessage, EventFoodReminderDiscordMessage
 from grug.models_crud import get_or_create_next_game_session_event
-from grug.utils import get_food_history_message
+from grug.utils import get_food_assignment_log_text
 
 
 async def send_attendance_reminder(group_id: int, session: AsyncSession):
@@ -58,7 +58,7 @@ async def send_food_reminder(group_id: int, session: AsyncSession):
     logger.info(f"Sending food reminder for GameSessionEvent ID: {game_session_event.id}")
 
     # Build the food reminder message
-    message_content = await get_food_history_message(group_id, session)
+    message_content = await get_food_assignment_log_text(group_id, session)
 
     # Expand the messge for select box instructions
     if game_session_event.user_assigned_food is not None:
@@ -97,12 +97,12 @@ async def game_session_reminder(group_id: int, session: AsyncSession | None = No
         from grug.db import async_session
 
         async with async_session() as session:
-            await send_food_reminder(group_id, session)
             await send_attendance_reminder(group_id, session)
+            await send_food_reminder(group_id, session)
 
     else:
-        await send_food_reminder(group_id, session)
         await send_attendance_reminder(group_id, session)
+        await send_food_reminder(group_id, session)
 
 
 # async def _get

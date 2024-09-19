@@ -43,7 +43,7 @@ def get_interaction_response(interaction: discord.Interaction) -> discord.Intera
     return interaction.response
 
 
-async def get_food_history_message(group_id: int, db_session: AsyncSession) -> str:
+async def get_food_assignment_log_text(group_id: int, db_session: AsyncSession) -> str:
     # noinspection Pydantic
     group: Group = (await db_session.execute(select(Group).where(Group.id == group_id))).scalars().one_or_none()
     food_history = await get_distinct_users_who_last_brought_food(group_id, db_session)
@@ -54,6 +54,7 @@ async def get_food_history_message(group_id: int, db_session: AsyncSession) -> s
     for user, timestamp in food_history:
         list_item = f"{timestamp.astimezone(pytz.timezone(group.timezone)).date().isoformat()}: {user.friendly_name}"
 
+        # If the timestamp is in the future, mark it as assigned and bold
         if timestamp > datetime.datetime.now(tz=pytz.utc):
             list_item = f"**{list_item} (Assigned)**"
 

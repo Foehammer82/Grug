@@ -5,7 +5,7 @@ from sqlmodel import select
 
 from grug.db import async_session
 from grug.models import EventFoodReminderDiscordMessage, Group
-from grug.utils import get_food_history_message, get_interaction_response
+from grug.utils import get_food_assignment_log_text, get_interaction_response
 
 
 class EventFoodAssignedUserDropDown(discord.ui.Select):
@@ -63,7 +63,7 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
                 f"event {event_occurrence.group.name} on {event_occurrence.timestamp.isoformat()}"
             )
 
-            new_content = await get_food_history_message(event_occurrence.group_id, session)
+            new_content = await get_food_assignment_log_text(event_occurrence.group_id, session)
             new_content += "\n\nSelect from list below to change."
             await get_interaction_response(interaction).edit_message(content=new_content)
 
