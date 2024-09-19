@@ -1,6 +1,7 @@
 import datetime
 
 import discord
+import pytz
 from loguru import logger
 
 from grug.bot_discord import discord_client
@@ -161,10 +162,11 @@ async def get_food_history(interaction: discord.Interaction):
         if not group or not group.id:
             raise ValueError("Group not found.")
 
+        food_history = await get_distinct_users_who_last_brought_food(group.id, session)
         message = "\n".join(
             [
-                f"{user.friendly_name} - {event.isoformat()}"
-                for user, event in await get_distinct_users_who_last_brought_food(group.id, session)
+                f"**{event.astimezone(pytz.timezone(group.timezone)).date().isoformat()}:** {user.friendly_name}"
+                for user, event in food_history
             ]
         )
 

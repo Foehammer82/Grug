@@ -5,6 +5,7 @@ from sqlmodel import select
 
 from grug.db import async_session
 from grug.models import EventFoodReminderDiscordMessage, Group
+from grug.utils import get_food_history_message, get_interaction_response
 
 
 class EventFoodAssignedUserDropDown(discord.ui.Select):
@@ -51,41 +52,20 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
 
             event_occurrence = event_food_reminder_discord_message.game_session_event
 
-            # Handle when a user is selected
-            if selected_user_id:
-                event_occurrence.user_assigned_food_id = selected_user_id
-                session.add(event_occurrence)
-                await session.commit()
-                await session.refresh(event_occurrence)
+            # Process the user selection
+            event_occurrence.user_assigned_food_id = selected_user_id
+            session.add(event_occurrence)
+            await session.commit()
+            await session.refresh(event_occurrence)
 
-                logger.info(
-                    f"Player {event_occurrence.user_assigned_food.friendly_name} selected to bring food for "
-                    f"event {event_occurrence.group.name} on {event_occurrence.timestamp.isoformat()}"
-                )
+            logger.info(
+                f"User `{selected_user_id}` selected to bring food for "
+                f"event {event_occurrence.group.name} on {event_occurrence.timestamp.isoformat()}"
+            )
 
-                # noinspection PyUnresolvedReferences
-                await interaction.response.send_message(
-                    f"{event_occurrence.user_assigned_food.friendly_name} scheduled to bring food for "
-                    f"{event_occurrence.group.name} on {event_occurrence.timestamp.isoformat()}",
-                )
-
-            # Handle when no user is selected
-            else:
-                event_occurrence.user_assigned_food_id = None
-                session.add(event_occurrence)
-                await session.commit()
-
-                logger.info(
-                    f"No player selected to bring food for {event_occurrence.group.name} "
-                    f"on {event_occurrence.timestamp.isoformat()}"
-                )
-
-                # https://discordpy.readthedocs.io/en/latest/interactions/api.html#discord.InteractionResponse.send_message
-                # noinspection PyUnresolvedReferences
-                await interaction.response.send_message(
-                    f"No player selected to bring food for {event_occurrence.group.name} "
-                    f"on {event_occurrence.timestamp.isoformat()}",
-                )
+            new_content = await get_food_history_message(event_occurrence.group_id, session)
+            new_content += "\n\nSelect from list below to change."
+            await get_interaction_response(interaction).edit_message(content=new_content)
 
 
 class DiscordFoodBringerSelectionView(discord.ui.View):

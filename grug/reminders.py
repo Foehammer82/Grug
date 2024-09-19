@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from grug.discord_views.attendance import DiscordAttendanceCheckView
 from grug.discord_views.food import DiscordFoodBringerSelectionView
 from grug.models import EventAttendanceReminderDiscordMessage, EventFoodReminderDiscordMessage
-from grug.models_crud import get_distinct_users_who_last_brought_food, get_or_create_next_game_session_event
+from grug.models_crud import get_or_create_next_game_session_event
+from grug.utils import get_food_history_message
 
 
 async def send_attendance_reminder(group_id: int, session: AsyncSession):
@@ -27,7 +28,7 @@ async def send_attendance_reminder(group_id: int, session: AsyncSession):
 
     # Send the message to discord
     message = await guild_channel.send(
-        content=f"{game_session_event.user_attendance_summary_md}\n\nWill you be attending?\n",
+        content=f"{game_session_event.user_attendance_summary_md}\n\nWill you be attending?\n\n",
         view=DiscordAttendanceCheckView(),
     )
 
@@ -43,33 +44,27 @@ async def send_attendance_reminder(group_id: int, session: AsyncSession):
 async def send_food_reminder(group_id: int, session: AsyncSession):
     from grug.bot_discord import discord_client
 
+    # Get the next event
     game_session_event = await get_or_create_next_game_session_event(group_id=group_id, session=session)
 
+    # Validate the event
     if not game_session_event:
         logger.info("Group ID has no future events, no food reminder to send.")
         return
-
-    logger.info(f"Sending food reminder for GameSessionEvent ID: {game_session_event.id}")
-
     if game_session_event.group_id is None:
         raise ValueError("Event occurrence ID is required to send a food reminder.")
 
-    # Build the food reminder message
-    message_content = "The last people to bring food were:"
-    for user_assigned_food, event_date in await get_distinct_users_who_last_brought_food(
-        group_id=game_session_event.group_id,
-        session=session,
-    ):
-        message_content += f"\n- [{event_date.isoformat()}] " f"{user_assigned_food.friendly_name}"
+    # Send the food reminder
+    logger.info(f"Sending food reminder for GameSessionEvent ID: {game_session_event.id}")
 
-    # if there is a user assigned to bring food, add that to the message
+    # Build the food reminder message
+    message_content = await get_food_history_message(group_id, session)
+
+    # Expand the messge for select box instructions
     if game_session_event.user_assigned_food is not None:
-        message_content += (
-            f"\n\n{game_session_event.user_assigned_food.friendly_name} volunteered to bring food next.  "
-            "Select from list below to change."
-        )
+        message_content += "\n\nSelect from list below to change."
     else:
-        message_content += f"\n\nGrug want know, who bring food {game_session_event.timestamp.isoformat()}?"
+        message_content += f"\n\nGrug want know, who bring food on {game_session_event.timestamp.date().isoformat()}?"
 
     # Get the default discord channel
     if game_session_event.group.discord_bot_channel_id is not None:
@@ -108,3 +103,6 @@ async def game_session_reminder(group_id: int, session: AsyncSession | None = No
     else:
         await send_food_reminder(group_id, session)
         await send_attendance_reminder(group_id, session)
+
+
+# async def _get

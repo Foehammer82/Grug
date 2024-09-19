@@ -1,10 +1,13 @@
 """Main entry point for the grug package."""
 
+import asyncio
+
 import anyio
+import discord
 import typer
 from loguru import logger
 
-from grug import bot_discord
+from grug.bot_discord import discord_client
 from grug.db import init_db
 from grug.scheduler import start_scheduler
 from grug.settings import settings
@@ -49,7 +52,7 @@ async def main():
     logger.info("Starting Grug...")
     try:
         async with anyio.create_task_group() as tg:
-            tg.start_soon(bot_discord.discord_client.start, settings.discord_bot_token.get_secret_value())
+            tg.start_soon(discord_client.start, settings.discord_bot_token.get_secret_value())
             tg.start_soon(start_scheduler)
     except KeyboardInterrupt:
         pass
@@ -58,6 +61,7 @@ async def main():
 
 @app.command()
 def start():
+    # noinspection PyTypeChecker
     anyio.run(main)
 
 
@@ -66,6 +70,37 @@ def health():
     # TODO: using shelf or some other method, setup a health monitoring system that can be checked while the app is
     #       running.  raise an exception to indicate the app is unhealthy.
     print("OK")
+
+
+# noinspection PyTypeChecker
+@app.command()
+def copy_discord_commands(guild_id: int):
+    """
+    Copy global commands to a specific guild.
+
+    Args:
+        guild_id: The ID of the guild to copy the commands to.
+    """
+
+    async def copy_commands():
+        await discord_client.wait_until_ready()
+
+        guild = discord.Object(id=guild_id)
+        discord_client.tree.copy_global_to(guild=guild)
+        await discord_client.tree.sync(guild=guild)
+
+        logger.info(f"Copied global commands to guild ID: {guild_id}")
+
+        # raise an exception to cancel the task
+        raise asyncio.CancelledError("Commands copied successfully.")
+
+    async def async_function():
+        async with anyio.create_task_group() as tg:
+            tg.start_soon(discord_client.start, settings.discord_bot_token.get_secret_value())
+            tg.start_soon(copy_commands)
+
+    # noinspection PyTypeChecker
+    anyio.run(async_function)
 
 
 @app.command()

@@ -9,8 +9,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 TimeZone = StrEnum("TimeZone", tuple((tz, tz) for tz in pytz.common_timezones))
 _ROOT_DIR = Path(__file__).parent.parent.absolute()
 
-# TODO: enable secrets loading from text files as an option
-
 
 class Settings(BaseSettings):
     """Settings for the Grug Bot."""
@@ -28,12 +26,10 @@ class Settings(BaseSettings):
 
     # General Settings
     environment: Literal["dev", "prd"] = "dev"
-    dev_guild_id: int | None = None
     timezone: TimeZone = Field(default=TimeZone["UTC"], validation_alias=AliasChoices("tz"))
 
     # Discord Settings
     discord_bot_token: SecretStr | None = None
-    discord_bot_channel_id: int | None = None
 
     # Sentry Settings
     # https://docs.sentry.io/platforms/python/#configure

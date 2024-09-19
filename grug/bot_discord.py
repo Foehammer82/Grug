@@ -1,10 +1,7 @@
 """Discord bot interface for the Grug assistant server."""
 
-import asyncio
-
 import discord
 import discord.utils
-from apscheduler import RunState
 from discord import app_commands
 from loguru import logger
 
@@ -17,9 +14,7 @@ from grug.models_crud import (
     get_or_create_discord_text_channel,
     get_or_create_discord_user,
 )
-from grug.scheduler import scheduler, update_group_schedules
-from grug.settings import settings
-from grug.utils import InterceptLogHandler
+from grug.utils import InterceptLogHandler, get_interaction_response
 
 # Why the `members` intent is necessary for the Grug Discord bot:
 #
@@ -53,16 +48,7 @@ class Client(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        # copy the global commands over to your guild.
-        if settings.environment != "prd":
-            if settings.dev_guild_id:
-                dev_guild = discord.Object(id=settings.dev_guild_id)
-                self.tree.copy_global_to(guild=dev_guild)
-                await self.tree.sync(guild=dev_guild)
-            else:
-                logger.warning("No dev guild set in settings. Cannot copy global commands.")
-        else:
-            await self.tree.sync()
+        await self.tree.sync()
 
 
 discord_client = Client()
@@ -71,10 +57,7 @@ discord.utils.setup_logging(handler=InterceptLogHandler())
 
 # Command Error Handling
 async def on_tree_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    # noinspection PyTypeChecker
-    response: discord.InteractionResponse = interaction.response
-
-    return await response.send_message(
+    return await get_interaction_response(interaction).send_message(
         content=str(error),
         ephemeral=True,
     )
@@ -120,17 +103,6 @@ async def on_ready():
     discord_client.add_view(view=DiscordFoodBringerSelectionView(group))
 
     logger.info(f"Logged in as {discord_client.user} (ID: {discord_client.user.id})")
-
-    # wait for the scheduler to start and update the group schedules
-    for second in range(10):
-        if scheduler.state is RunState.started:
-            break
-        else:
-            logger.info("Waiting for the scheduler to start...")
-            await asyncio.sleep(1)
-    if scheduler.state is not RunState.started:
-        raise TimeoutError("Scheduler did not start in time.")
-    await update_group_schedules()
 
 
 @discord_client.event

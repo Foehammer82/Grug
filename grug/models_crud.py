@@ -3,7 +3,9 @@ from datetime import datetime
 import discord
 import pytz
 from loguru import logger
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 from sqlmodel import select
 
 from grug.models import DiscordTextChannel, GameSessionEvent, Group, User
@@ -141,35 +143,38 @@ async def get_or_create_next_game_session_event(group_id: int, session: AsyncSes
 
 
 async def get_distinct_users_who_last_brought_food(
-    group_id: int,
-    session: AsyncSession,
-    max_lookback: int = 15,
+    group_id: int, db_session: AsyncSession
 ) -> list[tuple[User, datetime]]:
-    # noinspection Pydantic
-    group: Group = (await session.execute(select(Group).where(Group.id == group_id))).scalars().one_or_none()
-    if group is None:
-        raise ValueError(f"Event {group_id} not found.")
+    """
+    Get the distinct users who last brought food for the group.
 
-    # get distinct set of people who last brought food
-    distinct_food_bringers: dict[str, GameSessionEvent] = {}
-    for i, game_session_event in enumerate(group.game_session_events):
-        if i > max_lookback:
-            break
+    Args:
+        group_id: The ID of the group.
+        db_session: The database session.
+    """
 
-        if game_session_event.user_assigned_food:
-            user_friendly_name = game_session_event.user_assigned_food.friendly_name
-            if (
-                user_friendly_name not in distinct_food_bringers
-                or game_session_event.timestamp > distinct_food_bringers[user_friendly_name].timestamp
-            ):
-                distinct_food_bringers[user_friendly_name] = game_session_event
-
-    distinct_food_bringers_sorted = dict(
-        sorted(
-            distinct_food_bringers.items(),
-            key=lambda item: item[1].timestamp,
-            reverse=True,
-        )
+    # Subquery to get the latest timestamp for each group
+    subquery = (
+        select(GameSessionEvent.user_assigned_food_id, func.max(GameSessionEvent.timestamp).label("latest_timestamp"))
+        .group_by(GameSessionEvent.user_assigned_food_id)
+        .subquery()
     )
 
-    return [(event.user_assigned_food, event.timestamp) for event in list(distinct_food_bringers_sorted.values())]
+    # Alias for the main table
+    main_table = aliased(GameSessionEvent)
+
+    # Join the main table with the subquery to get the latest records
+    query = (
+        select(main_table)
+        .join(
+            subquery,
+            (main_table.user_assigned_food_id == subquery.c.user_assigned_food_id)
+            & (main_table.timestamp == subquery.c.latest_timestamp),
+        )
+        .where(main_table.group_id == group_id)
+        .order_by(main_table.timestamp.desc())
+    )
+
+    results = (await db_session.execute(query)).scalars().all()
+
+    return [(obj.user_assigned_food, obj.timestamp) for obj in results]

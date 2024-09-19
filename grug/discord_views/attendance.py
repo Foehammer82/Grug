@@ -5,6 +5,7 @@ from sqlmodel import select
 
 from grug.db import async_session
 from grug.models import EventAttendanceReminderDiscordMessage, GameSessionEvent
+from grug.utils import get_interaction_response
 
 
 class EventAttendanceConfirmButton(discord.ui.Button):
@@ -40,7 +41,7 @@ class EventAttendanceConfirmButton(discord.ui.Button):
 
         # https://discordpy.readthedocs.io/en/latest/interactions/api.html#discord.InteractionResponse.send_message
         # noinspection PyUnresolvedReferences
-        await interaction.response.edit_message(
+        await get_interaction_response(interaction).edit_message(
             content=f"{event_occurrence.user_attendance_summary_md}\n\nWill you be attending?\n",
         )
 
@@ -74,9 +75,7 @@ class EventAttendanceDenyButton(discord.ui.Button):
             f"{event_occurrence} ({event_occurrence.timestamp.isoformat()}): " f"{user.friendly_name} will not attend."
         )
 
-        # https://discordpy.readthedocs.io/en/latest/interactions/api.html#discord.InteractionResponse.send_message
-        # noinspection PyUnresolvedReferences
-        await interaction.response.edit_message(
+        await get_interaction_response(interaction).edit_message(
             content=f"{event_occurrence.user_attendance_summary_md}\n\nWill you be attending?\n",
         )
 
