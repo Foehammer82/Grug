@@ -9,8 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from grug.settings import settings
 
-# TODO: configure to use sqlite for local development and testing, when postgres is not available
-
 # Set the event loop policy for Windows
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

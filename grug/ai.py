@@ -149,7 +149,7 @@ class Assistant:
                     tools_used.union({tool_call.function.name for tool_call in tool_calls})
 
                     # execute the tool calls
-                    # TODO: use context variable in the tool to know if the response should be ephemeral
+                    # TODO: figure out how to toggle ephemeral responses
                     run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                         thread_id=thread.id,
                         run_id=run.id,
