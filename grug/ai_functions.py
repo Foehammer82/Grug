@@ -268,7 +268,7 @@ def search_archives_of_nethys(search_string: str) -> list[dict]:
 
 
 @register_function
-async def create_pole(
+async def create_poll(
     group: Group, poll_question: str, answers: str, duration_hours: int = 24, multiple: bool = False
 ) -> None:
     """
