@@ -103,6 +103,3 @@ async def game_session_reminder(group_id: int, session: AsyncSession | None = No
     else:
         await send_attendance_reminder(group_id, session)
         await send_food_reminder(group_id, session)
-
-
-# async def _get
