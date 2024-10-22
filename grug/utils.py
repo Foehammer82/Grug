@@ -48,7 +48,11 @@ async def get_food_assignment_log_text(group_id: int, db_session: AsyncSession) 
     group: Group = (await db_session.execute(select(Group).where(Group.id == group_id))).scalars().one_or_none()
     food_history = await get_distinct_users_who_last_brought_food(group_id, db_session)
 
-    message = "## Food\n- "
+    # If there is no food history, return an empty string
+    if len(food_history) == 0:
+        return ""
+
+    message = "\n- "
 
     food_log: list[str] = []
     for user, timestamp in food_history:

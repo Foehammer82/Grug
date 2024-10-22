@@ -63,7 +63,8 @@ class EventFoodAssignedUserDropDown(discord.ui.Select):
                 f"event {event_occurrence.group.name} on {event_occurrence.timestamp.isoformat()}"
             )
 
-            new_content = await get_food_assignment_log_text(event_occurrence.group_id, session)
+            new_content = "## Food"
+            new_content += await get_food_assignment_log_text(event_occurrence.group_id, session)
             new_content += "\n\nSelect from list below to change."
             await get_interaction_response(interaction).edit_message(content=new_content)
 

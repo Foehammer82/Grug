@@ -58,7 +58,8 @@ async def send_food_reminder(group_id: int, session: AsyncSession):
     logger.info(f"Sending food reminder for GameSessionEvent ID: {game_session_event.id}")
 
     # Build the food reminder message
-    message_content = await get_food_assignment_log_text(group_id, session)
+    message_content = "## Food\n"
+    message_content += await get_food_assignment_log_text(group_id, session)
 
     # Expand the messge for select box instructions
     if game_session_event.user_assigned_food is not None:
@@ -90,13 +91,16 @@ async def send_food_reminder(group_id: int, session: AsyncSession):
 
 
 async def game_session_reminder(group_id: int, session: AsyncSession | None = None):
-    # TODO: either remove previous reminders from discord when a new one is made for the same event, or have a
-    #       way to update all existing reminders.
+    # TODO: when subsequent reminders are sent, remove all previous reminders for the same event.
 
     if session is None:
         from grug.db import async_session
 
         async with async_session() as session:
+            # TODO: have a button to make the session as canceld (toggle button that can be toggled back on if needed)
+            #       - when a session is canceled, all reminders for that session should be removed
+            #       - if the canceled session is uncanceled, the reminders should be re-added
+            #       - if canceled, set whoever is assigned to food to null
             await send_attendance_reminder(group_id, session)
             await send_food_reminder(group_id, session)
 

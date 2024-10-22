@@ -8,6 +8,7 @@ from grug.models import EventAttendanceReminderDiscordMessage, GameSessionEvent
 from grug.utils import get_interaction_response
 
 
+# noinspection DuplicatedCode
 class EventAttendanceConfirmButton(discord.ui.Button):
     def __init__(self):
         super().__init__(
@@ -46,6 +47,7 @@ class EventAttendanceConfirmButton(discord.ui.Button):
         )
 
 
+# noinspection DuplicatedCode
 class EventAttendanceDenyButton(discord.ui.Button):
     def __init__(self):
         super().__init__(

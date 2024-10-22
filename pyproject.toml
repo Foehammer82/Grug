@@ -20,14 +20,13 @@ croniter = "^3.0"
 openai = "^1.30"
 loguru = "^0.7"
 elasticsearch = "^8.13"
-python-jose = {extras = ["cryptography"], version = "^3.3"}
 alembic-postgresql-enum = "^1.2"
 sentry-sdk = {extras = ["loguru"], version = "^2.5"}
 psycopg = {extras = ["binary", "pool"], version = "^3.2"}
-asyncpg = "^0.29.0"
+asyncpg = "^0.30"
 anyio = "^4.4"
-typer = "^0.12.5"
-phonenumbers = "^8.13.45"
+typer = "^0.12"
+phonenumbers = "^8.13"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.1"

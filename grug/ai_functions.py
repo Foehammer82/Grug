@@ -285,7 +285,6 @@ async def create_poll(
 
     guild = discord_client.get_guild(group.discord_guild_id)
 
-    # TODO: get a way for the user to either select the channel or have a way to pass in the sending channel id
     if group.discord_bot_channel_id:
         discord_channel = guild.get_channel(group.discord_bot_channel_id)
     else:
