@@ -289,7 +289,7 @@ async def create_poll(
     if group.discord_bot_channel_id:
         discord_channel = guild.get_channel(group.discord_bot_channel_id)
     else:
-        discord_channel = guild.channels[0]
+        discord_channel = guild.text_channels[0]
 
     # Define the poll
     poll = Poll(
