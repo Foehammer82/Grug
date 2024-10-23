@@ -7,7 +7,6 @@ import json
 import discord
 from loguru import logger
 from openai import AsyncOpenAI, OpenAI
-from openai.types.beta.threads import RequiredActionFunctionToolCall
 from pydantic import BaseModel
 
 from grug.db import async_session
@@ -162,19 +161,61 @@ class Assistant:
                         await asyncio.sleep(self.response_wait_seconds)
 
                     elif run.status == "requires_action":
-                        tool_calls = run.required_action.submit_tool_outputs.tool_calls
-                        if tool_calls:
-                            # Add the tools used to the set of tools used
-                            tools_used.union({tool_call.function.name for tool_call in tool_calls})
+                        tool_outputs = []
 
-                            # execute the tool calls
-                            # TODO: figure out how to toggle ephemeral responses
+                        # execute the tool calls
+                        for tool_call in run.required_action.submit_tool_outputs.tool_calls:
+                            tools_used.add(tool_call.function.name)
+
+                            try:
+                                logger.info(f"Calling tool function: {tool_call.function.name}")
+
+                                tool_callable = self._tools[tool_call.function.name]
+                                function_args = json.loads(tool_call.function.arguments)
+                                tool_args: list[str] = inspect.getfullargspec(self._tools[tool_call.function.name]).args
+
+                                if "message" in tool_args:
+                                    function_args["message"] = message
+
+                                for arg in tool_args:
+                                    if arg not in function_args:
+                                        raise ValueError(
+                                            f"Missing argument: {arg} from function call {tool_callable.__name__}"
+                                        )
+
+                                if inspect.iscoroutinefunction(tool_callable):
+                                    # noinspection PyArgumentList
+                                    tools_response = await tool_callable(**function_args)
+                                elif inspect.isfunction(tool_callable):
+                                    # noinspection PyArgumentList
+                                    tools_response = tool_callable(**function_args)
+                                else:
+                                    raise ValueError(
+                                        f"Expected a function or coroutine function for {tool_callable.__name__}.  "
+                                        f"Got {type(tool_callable)}."
+                                    )
+
+                                tool_outputs.append(
+                                    {
+                                        "tool_call_id": tool_call.id,
+                                        "output": str(tools_response),
+                                    }
+                                )
+
+                            except Exception as e:
+                                logger.error(f"Error calling tool function: {tool_call.function.name} - {e}")
+                                tool_outputs.append(
+                                    {
+                                        "tool_call_id": tool_call.id,
+                                        "output": str(e),
+                                    }
+                                )
+
+                            # apply the tool outputs to the run
                             run = await self.async_client.beta.threads.runs.submit_tool_outputs(
                                 thread_id=ai_thread.id,
                                 run_id=run.id,
-                                tool_outputs=[
-                                    await self._call_tool_function(tool_call, user, group) for tool_call in tool_calls
-                                ],
+                                tool_outputs=tool_outputs,
                             )
 
                     elif run.status == "completed":
@@ -192,24 +233,22 @@ class Assistant:
                     )
                 ).data[0]
 
-                assistant_response = AssistantResponse(
-                    response=response_message.content[0].text.value, thread_id=ai_thread.id, tools_used=tools_used
-                )
+                assistant_response: str = response_message.content[0].text.value
 
                 # note if the assistant used any AI tools
-                if len(assistant_response.tools_used) > 0:
-                    assistant_response.response += f"\n\n-# AI Tools Used: {assistant_response.tools_used}\n"
+                if len(tools_used) > 0:
+                    assistant_response += f"\n\n-# AI Tools Used: {tools_used}\n"
 
                 # Send the response back to the user
                 for output in [
-                    assistant_response.response[i : i + settings.discord_max_message_length]
-                    for i in range(0, len(assistant_response.response), settings.discord_max_message_length)
+                    assistant_response[i : i + settings.discord_max_message_length]
+                    for i in range(0, len(assistant_response), settings.discord_max_message_length)
                 ]:
                     await message.channel.send(output, suppress_embeds=False)
 
             # Save the assistant thread ID to the database if it is not already saved for the current text channel
             if not discord_channel.assistant_thread_id:
-                discord_channel.assistant_thread_id = assistant_response.thread_id
+                discord_channel.assistant_thread_id = ai_thread.id
                 db_session.add(discord_channel)
                 await db_session.commit()
 
@@ -224,7 +263,7 @@ class Assistant:
             bool: "boolean",
         }
 
-        ignored_args = ["user", "group"]
+        ignored_args = ["message"]
 
         for function_name, function in self._tools.items():
             function_arg_spec = inspect.getfullargspec(function)
@@ -257,56 +296,6 @@ class Assistant:
             )
 
         return tools
-
-    async def _call_tool_function(
-        self,
-        tool_call: RequiredActionFunctionToolCall,
-        user: User | None = None,
-        group: Group | None = None,
-    ):
-        """Call the tool function and return the output."""
-        logger.info(f"Calling tool function: {tool_call.function.name}")
-
-        try:
-            tool_callable = self._tools[tool_call.function.name]
-            function_args = json.loads(tool_call.function.arguments)
-            tool_args: list[str] = inspect.getfullargspec(self._tools[tool_call.function.name]).args
-
-            # pass in the user object to the function if it's in the function's arguments
-            if "user" in tool_args:
-                function_args["user"] = user
-
-            # pass in the group object to the function if it's in the function's arguments
-            if "group" in tool_args:
-                function_args["group"] = group
-
-            for arg in tool_args:
-                if arg not in function_args:
-                    raise ValueError(f"Missing argument: {arg} from function call {tool_callable.__name__}")
-
-            if inspect.iscoroutinefunction(tool_callable):
-                # noinspection PyArgumentList
-                tools_response = await tool_callable(**function_args)
-            elif inspect.isfunction(tool_callable):
-                # noinspection PyArgumentList
-                tools_response = tool_callable(**function_args)
-            else:
-                raise ValueError(
-                    f"Expected a function or coroutine function for {tool_callable.__name__}.  "
-                    f"Got {type(tool_callable)}."
-                )
-
-            return {
-                "tool_call_id": tool_call.id,
-                "output": str(tools_response),
-            }
-
-        except Exception as e:
-            logger.error(f"Error calling tool function: {tool_call.function.name} - {e}")
-            return {
-                "tool_call_id": tool_call.id,
-                "output": str(e),
-            }
 
 
 # Instantiate the assistant singleton for use in the application

@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Set
 
+import discord
 from discord import Poll
 from elasticsearch import Elasticsearch
 from loguru import logger
@@ -9,8 +10,12 @@ from sqlalchemy import Date, func
 from sqlmodel import cast, select
 
 from grug.db import async_session
-from grug.models import DalleImageRequest, Group
-from grug.models_crud import get_distinct_users_who_last_brought_food, get_or_create_next_game_session_event
+from grug.models import DalleImageRequest
+from grug.models_crud import (
+    get_distinct_users_who_last_brought_food,
+    get_or_create_discord_server_group,
+    get_or_create_next_game_session_event,
+)
 from grug.settings import settings
 
 assistant_functions: Set[Callable[..., Any]] = set()
@@ -109,12 +114,12 @@ async def generate_ai_image(prompt: str) -> dict[str, str | int] | None:
 
 
 @register_function
-async def get_food_schedule(group: Group) -> dict[str, Any]:
+async def get_food_schedule(message: discord.Message) -> dict[str, Any]:
     """
     Get information about who will bring and who has brought food for the group.
 
     Args:
-        group (Group): The group to get the food history for.
+        message (Message): The message that triggered the function.
 
     Returns:
         dict: A dictionary with the following keys
@@ -124,15 +129,24 @@ async def get_food_schedule(group: Group) -> dict[str, Any]:
               and whether the date is in the future.
             - todays_date (datetime): The current date.
     """
-    if not group or not group.id:
-        raise ValueError("Group not found.")
-    if not group.game_session_track_food:
-        raise ValueError(f"Food tracking disabled for the group {group.name}.")
+    if not message.guild:
+        return {
+            "history": [],
+            "future": [],
+            "todays_date": datetime.now().astimezone(timezone.utc),
+        }
 
-    async with async_session() as session:
+    async with async_session() as db_session:
+        group = await get_or_create_discord_server_group(message.guild, db_session)
+
+        if not group or not group.id:
+            raise ValueError("Group not found.")
+        if not group.game_session_track_food:
+            raise ValueError(f"Food tracking disabled for the group {group.name}.")
+
         food_log = [
             (user.friendly_name, session_date, session_date > datetime.now().astimezone(timezone.utc))
-            for user, session_date in await get_distinct_users_who_last_brought_food(group.id, session)
+            for user, session_date in await get_distinct_users_who_last_brought_food(group.id, db_session)
         ]
 
         return {
@@ -143,25 +157,30 @@ async def get_food_schedule(group: Group) -> dict[str, Any]:
 
 
 @register_function
-async def get_next_session_attendance(group: Group) -> str:
+async def get_next_session_attendance(message: discord.Message) -> str:
     """
     Get information about who is scheduled to attend the next game session.
 
     Returns:
         Markdown-formatted string: A string containing the names of the users who RSVP'd to the next session.
     """
-    if not group or not group.id:
-        raise ValueError("Group not found.")
-    if not group.game_session_track_food:
-        raise ValueError(f"Food tracking disabled for the group {group.name}.")
-
-    async with async_session() as session:
-        next_game_session_event = await get_or_create_next_game_session_event(group.id, session)
-
-    if next_game_session_event:
-        return next_game_session_event.user_attendance_summary_md
-    else:
+    if not message.guild:
         return "No upcoming game session found."
+
+    async with async_session() as db_session:
+        group = await get_or_create_discord_server_group(message.guild, db_session)
+
+        if not group or not group.id:
+            raise ValueError("Group not found.")
+        if not group.game_session_track_food:
+            raise ValueError(f"Food tracking disabled for the group {group.name}.")
+
+        next_game_session_event = await get_or_create_next_game_session_event(group.id, db_session)
+
+        if next_game_session_event:
+            return next_game_session_event.user_attendance_summary_md
+        else:
+            return "No upcoming game session found."
 
 
 @register_function
@@ -269,26 +288,18 @@ def search_archives_of_nethys(search_string: str) -> list[dict]:
 
 @register_function
 async def create_poll(
-    group: Group, poll_question: str, answers: str, duration_hours: int = 24, multiple: bool = False
+    message: discord.Message, poll_question: str, answers: str, duration_hours: int = 24, multiple: bool = False
 ) -> None:
     """
     Create a poll in the group's discord channel.
 
     Args:
-        group (Group): The group to create the poll for.
+        message (Message): The message that triggered the poll.
         poll_question (str): The question to ask in the poll.
         answers (str): A comma seperated list of answers to provide in the poll.
         duration_hours (int, optional): The duration of the poll in hours. Defaults to 24.
         multiple (bool, optional): Whether multiple answers can be selected in the poll. Defaults to False.
     """
-    from grug.bot_discord import discord_client
-
-    guild = discord_client.get_guild(group.discord_guild_id)
-
-    if group.discord_bot_channel_id:
-        discord_channel = guild.get_channel(group.discord_bot_channel_id)
-    else:
-        discord_channel = guild.text_channels[0]
 
     # Define the poll
     poll = Poll(
@@ -296,10 +307,10 @@ async def create_poll(
         multiple=multiple,
         duration=timedelta(hours=duration_hours),
     )
+
+    # Add the answers to the poll
     for answer in answers.split(","):
         poll.add_answer(text=answer.strip())
 
     # send a poll to the channel
-    await discord_channel.send(poll=poll)
-
-    return
+    await message.channel.send(poll=poll)
