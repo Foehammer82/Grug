@@ -4,12 +4,19 @@ import asyncio
 import inspect
 import json
 
+import discord
 from loguru import logger
 from openai import AsyncOpenAI, OpenAI
 from openai.types.beta.threads import RequiredActionFunctionToolCall
 from pydantic import BaseModel
 
+from grug.db import async_session
 from grug.models import Group, User
+from grug.models_crud import (
+    get_or_create_discord_server_group,
+    get_or_create_discord_text_channel,
+    get_or_create_discord_user,
+)
 from grug.settings import settings
 
 # TODO: setup monitor/log/handle openai rate limits:
@@ -74,108 +81,137 @@ class Assistant:
                 tools=self._get_assistant_tools(),
             )
 
-    async def send_message(
-        self,
-        message: str,
-        user: User,
-        group: Group | None = None,
-        thread_id: str | None = None,
-    ) -> AssistantResponse:
-        """
-        Send a message to the assistant and get the response.
-
-        Args:
-            message (str): The message to send to the assistant.
-            user (User): The player sending the message.
-            group (Group): The group the player is in.
-            thread_id (str): The thread_id for the given message.
-
-        Returns:
-            AssistantResponse: The response from the assistant.
-        """
-        # Get the thread
-        if thread_id:
-            thread = await self.async_client.beta.threads.retrieve(thread_id=thread_id)
-        else:
-            thread = await self.async_client.beta.threads.create()
-
-        # track the tools used
-        tools_used: set[str] = set()
-
-        # Send the message to the assistant
-        await self.async_client.beta.threads.messages.create(
-            thread_id=thread.id,
-            role="user",
-            content=(
-                f"This message is from {user.friendly_name}.  The following is their message:\n"
-                f"{message}\n\n"
-                "[AI should not factor the person's name into its response.]\n"
-                "[AI should not state that they received a message from the person.]"
-            ),
-        )
-
-        # Create a new run (https://platform.openai.com/docs/assistants/how-it-works/runs-and-run-steps)
-        run = await self.async_client.beta.threads.runs.create(
-            thread_id=thread.id,
-            assistant_id=self.assistant.id,
-        )
-
-        while run.status != "completed":
-            # noinspection PyUnresolvedReferences
-            run = await self.async_client.beta.threads.runs.retrieve(thread_id=thread.id, run_id=run.id)
-
-            if run.status == "failed":
-                if run.last_error.code == "rate_limit_exceeded":
-                    logger.warning(f"Rate limit exceeded. Retrying with {settings.openai_fallback_model}.")
-
-                    # If the rate limit is exceeded, retry with a fallback model
-                    # noinspection PyUnresolvedReferences
-                    run = await self.async_client.beta.threads.runs.create(
-                        thread_id=thread.id,
-                        assistant_id=self.assistant.id,
-                        model=settings.openai_fallback_model,
-                    )
-
-                else:
-                    raise Exception(f"Run failed with message: {run.last_error.code}: {run.last_error.message}")
-
-            elif run.status == "in_progress" or run.status == "queued":
-                await asyncio.sleep(self.response_wait_seconds)
-
-            elif run.status == "requires_action":
-                tool_calls = run.required_action.submit_tool_outputs.tool_calls
-                if tool_calls:
-                    # Add the tools used to the set of tools used
-                    tools_used.union({tool_call.function.name for tool_call in tool_calls})
-
-                    # execute the tool calls
-                    # TODO: figure out how to toggle ephemeral responses
-                    run = await self.async_client.beta.threads.runs.submit_tool_outputs(
-                        thread_id=thread.id,
-                        run_id=run.id,
-                        tool_outputs=[
-                            await self._call_tool_function(tool_call, user, group) for tool_call in tool_calls
-                        ],
-                    )
-
-            elif run.status == "completed":
-                continue
-
-            else:
-                raise ValueError(f"Unknown run status: {run.status}")
-
-        # Get the response message from the run
-        response_message = (
-            await self.async_client.beta.threads.messages.list(
-                thread_id=thread.id,
-                order="desc",
-                limit=1,
+    async def respond_to_discord_message(self, message: discord.Message, discord_client: discord.Client):
+        # Only respond to @mentions and DMs
+        if not (
+            isinstance(message.channel, discord.DMChannel)
+            or (
+                (isinstance(message.channel, discord.TextChannel) or isinstance(message.channel, discord.Thread))
+                and discord_client.user in message.mentions
             )
-        ).data[0]
+        ):
+            logger.warning(f"Message from {message.author} in {message.channel} was not an @mention or DM, Ignoring.")
+            return
 
-        return AssistantResponse(
-            response=response_message.content[0].text.value, thread_id=thread.id, tools_used=tools_used
-        )
+        async with message.channel.typing():
+            async with async_session() as db_session:
+                group: Group | None = (
+                    await get_or_create_discord_server_group(guild=message.guild, db_session=db_session)
+                    if message.guild
+                    else None
+                )
+                user: User = await get_or_create_discord_user(
+                    discord_member=message.author,
+                    group=group,
+                    db_session=db_session,
+                )
+                discord_channel = await get_or_create_discord_text_channel(
+                    channel=message.channel,
+                    session=db_session,
+                )
+
+                # Get the OpenAI thread
+                ai_thread = (
+                    await self.async_client.beta.threads.retrieve(thread_id=discord_channel.assistant_thread_id)
+                    if discord_channel.assistant_thread_id
+                    else await self.async_client.beta.threads.create()
+                )
+
+                # track the tools used
+                tools_used: set[str] = set()
+
+                # Send the message to the assistant
+                await self.async_client.beta.threads.messages.create(
+                    thread_id=ai_thread.id,
+                    role="user",
+                    content=(
+                        f"This message is from {user.friendly_name}.  The following is their message:\n"
+                        f"{message.content}\n\n"
+                        "[AI should not factor the person's name into its response.]\n"
+                        "[AI should not state that they received a message from the person.]"
+                    ),
+                )
+
+                # Create a new run (https://platform.openai.com/docs/assistants/how-it-works/runs-and-run-steps)
+                run = await self.async_client.beta.threads.runs.create(
+                    thread_id=ai_thread.id,
+                    assistant_id=self.assistant.id,
+                )
+
+                # loop until the run is completed
+                while run.status != "completed":
+                    # noinspection PyUnresolvedReferences
+                    run = await self.async_client.beta.threads.runs.retrieve(thread_id=ai_thread.id, run_id=run.id)
+
+                    if run.status == "failed":
+                        if run.last_error.code == "rate_limit_exceeded":
+                            logger.warning(f"Rate limit exceeded. Retrying with {settings.openai_fallback_model}.")
+
+                            # If the rate limit is exceeded, retry with a fallback model
+                            # noinspection PyUnresolvedReferences
+                            run = await self.async_client.beta.threads.runs.create(
+                                thread_id=ai_thread.id,
+                                assistant_id=self.assistant.id,
+                                model=settings.openai_fallback_model,
+                            )
+
+                        else:
+                            raise Exception(f"Run failed with message: {run.last_error.code}: {run.last_error.message}")
+
+                    elif run.status == "in_progress" or run.status == "queued":
+                        await asyncio.sleep(self.response_wait_seconds)
+
+                    elif run.status == "requires_action":
+                        tool_calls = run.required_action.submit_tool_outputs.tool_calls
+                        if tool_calls:
+                            # Add the tools used to the set of tools used
+                            tools_used.union({tool_call.function.name for tool_call in tool_calls})
+
+                            # execute the tool calls
+                            # TODO: figure out how to toggle ephemeral responses
+                            run = await self.async_client.beta.threads.runs.submit_tool_outputs(
+                                thread_id=ai_thread.id,
+                                run_id=run.id,
+                                tool_outputs=[
+                                    await self._call_tool_function(tool_call, user, group) for tool_call in tool_calls
+                                ],
+                            )
+
+                    elif run.status == "completed":
+                        continue
+
+                    else:
+                        raise ValueError(f"Unknown run status: {run.status}")
+
+                # Get the response message from the run
+                response_message = (
+                    await self.async_client.beta.threads.messages.list(
+                        thread_id=ai_thread.id,
+                        order="desc",
+                        limit=1,
+                    )
+                ).data[0]
+
+                assistant_response = AssistantResponse(
+                    response=response_message.content[0].text.value, thread_id=ai_thread.id, tools_used=tools_used
+                )
+
+                # note if the assistant used any AI tools
+                if len(assistant_response.tools_used) > 0:
+                    assistant_response.response += f"\n\n-# AI Tools Used: {assistant_response.tools_used}\n"
+
+                # Send the response back to the user
+                for output in [
+                    assistant_response.response[i : i + settings.discord_max_message_length]
+                    for i in range(0, len(assistant_response.response), settings.discord_max_message_length)
+                ]:
+                    await message.channel.send(output, suppress_embeds=False)
+
+            # Save the assistant thread ID to the database if it is not already saved for the current text channel
+            if not discord_channel.assistant_thread_id:
+                discord_channel.assistant_thread_id = assistant_response.thread_id
+                db_session.add(discord_channel)
+                await db_session.commit()
 
     def _get_assistant_tools(self) -> list[dict]:
         """Get the tools from the assistant_tools module."""

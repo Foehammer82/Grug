@@ -61,6 +61,7 @@ class User(SQLModelValidation, table=True):
     last_name: str | None = None
     phone: str | None = None
 
+    # TODO: remove thead_id from the user model as we are using only discord channels now
     assistant_thread_id: str | None = None
 
     groups: list["Group"] = Relationship(

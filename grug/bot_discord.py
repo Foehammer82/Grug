@@ -9,11 +9,7 @@ from grug.ai import assistant
 from grug.db import async_session
 from grug.discord_views.attendance import DiscordAttendanceCheckView
 from grug.discord_views.food import DiscordFoodBringerSelectionView
-from grug.models_crud import (
-    get_or_create_discord_server_group,
-    get_or_create_discord_text_channel,
-    get_or_create_discord_user,
-)
+from grug.models_crud import get_or_create_discord_server_group, get_or_create_discord_user
 from grug.utils import InterceptLogHandler, get_interaction_response
 
 # Why the `members` intent is necessary for the Grug Discord bot:
@@ -33,9 +29,6 @@ from grug.utils import InterceptLogHandler, get_interaction_response
 #
 # Without the `members` intent, the bot would not be able to access detailed information about guild members, which
 # would significantly limit its functionality related to user and event management.
-
-
-_max_discord_message_length = 2000
 
 
 class Client(discord.Client):
@@ -109,79 +102,13 @@ async def on_ready():
 async def on_message(message: discord.Message):
     """on_message event handler for the Discord bot."""
 
-    async with async_session() as session:
-        # ignore messages from self and all bots
-        if message.author == discord_client.user or message.author.bot:
-            return
+    # ignore messages from self and all bots
+    if message.author == discord_client.user or message.author.bot:
+        return
 
-        # If the assistant is not initialized, send a message and raise an error
-        if not assistant:
-            await message.channel.send("I'm sorry, I'm not able to respond right now. Please try again later.")
-            raise ValueError("Assistant not initialized")
+    # If the assistant is not initialized, send a message and raise an error
+    if not assistant:
+        await message.channel.send("I'm sorry, I'm not able to respond right now. Please try again later.")
+        raise ValueError("Assistant not initialized")
 
-        # get the user and group
-        group = (
-            await get_or_create_discord_server_group(guild=message.guild, db_session=session) if message.guild else None
-        )
-
-        user = await get_or_create_discord_user(
-            discord_member=message.author,
-            group=group,
-            db_session=session,
-        )
-
-        # respond to DMs
-        if isinstance(message.channel, discord.DMChannel):
-            async with message.channel.typing():
-                # Send the message to the assistant and get the response
-                assistant_response = await assistant.send_message(
-                    message=message.content,
-                    user=user,
-                    thread_id=user.assistant_thread_id,
-                )
-
-                # Save the assistant thread ID to the database if it is not already saved for the current user
-                if not user.assistant_thread_id:
-                    user.assistant_thread_id = assistant_response.thread_id
-                    session.add(user)
-                    await session.commit
-
-        # respond to @mentions in channels
-        elif (
-            isinstance(message.channel, discord.TextChannel) or isinstance(message.channel, discord.Thread)
-        ) and discord_client.user in message.mentions:
-            async with message.channel.typing():
-                # noinspection PyTypeChecker
-                discord_text_channel = await get_or_create_discord_text_channel(
-                    channel=message.channel,
-                    session=session,
-                )
-
-                # Send the message to the assistant and get the response
-                assistant_response = await assistant.send_message(
-                    message=message.content,
-                    user=user,
-                    group=discord_text_channel.group,
-                    thread_id=discord_text_channel.assistant_thread_id,
-                )
-
-                # Save the assistant thread ID to the database if it is not already saved for the current text channel
-                if not discord_text_channel.assistant_thread_id:
-                    discord_text_channel.assistant_thread_id = assistant_response.thread_id
-                    session.add(discord_text_channel)
-                    await session.commit()
-
-        # if the message is not a DM or a mention, ignore it
-        else:
-            return
-
-        # note if the assistant used any AI tools
-        if len(assistant_response.tools_used) > 0:
-            assistant_response.response += f"\n\n-# AI Tools Used: {assistant_response.tools_used}\n"
-
-        # Send the response back to the user
-        for output in [
-            assistant_response.response[i : i + _max_discord_message_length]
-            for i in range(0, len(assistant_response.response), _max_discord_message_length)
-        ]:
-            await message.channel.send(output, suppress_embeds=False)
+    await assistant.respond_to_discord_message(message, discord_client)

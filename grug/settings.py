@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Discord Settings
     discord_bot_token: SecretStr | None = None
+    discord_max_message_length: int = 2000
 
     # Sentry Settings
     # https://docs.sentry.io/platforms/python/#configure
