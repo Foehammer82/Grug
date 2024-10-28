@@ -61,9 +61,6 @@ class User(SQLModelValidation, table=True):
     last_name: str | None = None
     phone: str | None = None
 
-    # TODO: remove thead_id from the user model as we are using only discord channels now
-    assistant_thread_id: str | None = None
-
     groups: list["Group"] = Relationship(
         back_populates="users",
         link_model=UserGroupLink,
@@ -160,10 +157,6 @@ class Group(SQLModelValidation, table=True):
         link_model=UserGroupLink,
         sa_relationship_kwargs={"lazy": "selectin"},
     )
-    discord_text_channels: list["DiscordTextChannel"] = Relationship(
-        back_populates="group",
-        sa_relationship_kwargs={"lazy": "selectin", "cascade": "all, delete"},
-    )
 
     @property
     def game_session_cron_trigger(self) -> CronTrigger | None:
@@ -210,11 +203,13 @@ class DiscordTextChannel(SQLModelValidation, table=True):
 
     discord_channel_id: int = Field(sa_column=sa.Column(sa.BigInteger(), index=True))
     assistant_thread_id: str | None = None
-    group_id: int = Field(sa_column=sa.Column(sa.BigInteger(), sa.ForeignKey("groups.id")))
-    group: Group = Relationship(
-        back_populates="discord_text_channels",
-        sa_relationship_kwargs={"lazy": "selectin"},
-    )
+    # group_id: int | None = Field(
+    #     sa_column=sa.Column(sa.BigInteger(), sa.ForeignKey("groups.id"), nullable=True, default=None),
+    # )
+    # group: Group | None = Relationship(
+    #     back_populates="discord_text_channels",
+    #     sa_relationship_kwargs={"lazy": "selectin"},
+    # )
 
     def __str__(self):
         return self.discord_channel_id

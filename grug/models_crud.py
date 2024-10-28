@@ -95,7 +95,7 @@ async def get_or_create_discord_text_channel(
     if discord_channel is None:
         discord_channel = DiscordTextChannel(
             discord_channel_id=channel.id,
-            group_id=(await get_or_create_discord_server_group(channel.guild, session)).id,
+            group_id=(await get_or_create_discord_server_group(channel.guild, session)).id if channel.guild else None,
         )
         session.add(discord_channel)
         await session.commit()
