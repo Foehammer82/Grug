@@ -16,12 +16,11 @@ class Settings(BaseSettings):
     discord_token: str = Field(..., description="Discord bot token")
     discord_prefix: str = Field(default="!", description="Command prefix")
 
-    # OpenAI
-    openai_api_key: str = Field(..., description="OpenAI API key")
-    openai_model: str = Field(default="gpt-4o", description="OpenAI model to use")
-    openai_embedding_model: str = Field(
-        default="text-embedding-3-small",
-        description="OpenAI embedding model for RAG",
+    # Anthropic
+    anthropic_api_key: str = Field(..., description="Anthropic API key")
+    anthropic_model: str = Field(
+        default="claude-3-5-sonnet-20241022",
+        description="Anthropic model to use",
     )
 
     # Database

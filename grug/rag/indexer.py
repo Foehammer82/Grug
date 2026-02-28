@@ -7,7 +7,6 @@ from pathlib import Path
 
 import aiofiles
 import chromadb
-from chromadb.utils.embedding_functions import OpenAIEmbeddingFunction
 
 from grug.config.settings import get_settings
 
@@ -45,16 +44,10 @@ class DocumentIndexer:
     def __init__(self) -> None:
         settings = get_settings()
         self._client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
-        self._embedding_fn = OpenAIEmbeddingFunction(
-            api_key=settings.openai_api_key,
-            model_name=settings.openai_embedding_model,
-        )
 
     def _get_collection(self, guild_id: int):
-        return self._client.get_or_create_collection(
-            name=_collection_name(guild_id),
-            embedding_function=self._embedding_fn,
-        )
+        # Uses ChromaDB's built-in default embedding function (all-MiniLM-L6-v2 via ONNX)
+        return self._client.get_or_create_collection(name=_collection_name(guild_id))
 
     async def index_file(
         self,

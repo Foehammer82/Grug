@@ -11,7 +11,7 @@ def test_settings_defaults():
         os.environ,
         {
             "DISCORD_TOKEN": "test-discord-token",
-            "OPENAI_API_KEY": "test-openai-key",
+            "ANTHROPIC_API_KEY": "test-anthropic-key",
         },
         clear=False,
     ):
@@ -21,8 +21,8 @@ def test_settings_defaults():
         from grug.config.settings import get_settings
         settings = get_settings()
         assert settings.discord_token == "test-discord-token"
-        assert settings.openai_api_key == "test-openai-key"
-        assert settings.openai_model == "gpt-4o"
+        assert settings.anthropic_api_key == "test-anthropic-key"
+        assert settings.anthropic_model == "claude-3-5-sonnet-20241022"
         assert settings.discord_prefix == "!"
         assert settings.agent_max_iterations == 10
         assert settings.agent_context_window == 20
@@ -38,7 +38,7 @@ def test_settings_mcp_config_json_parsing():
         os.environ,
         {
             "DISCORD_TOKEN": "tok",
-            "OPENAI_API_KEY": "key",
+            "ANTHROPIC_API_KEY": "key",
             "MCP_SERVER_CONFIGS": mcp_config,
         },
         clear=False,
@@ -58,8 +58,8 @@ def test_settings_custom_model():
         os.environ,
         {
             "DISCORD_TOKEN": "tok",
-            "OPENAI_API_KEY": "key",
-            "OPENAI_MODEL": "gpt-4-turbo",
+            "ANTHROPIC_API_KEY": "key",
+            "ANTHROPIC_MODEL": "claude-3-opus-20240229",
         },
         clear=False,
     ):
@@ -67,5 +67,5 @@ def test_settings_custom_model():
         s._settings = None
         from grug.config.settings import get_settings
         settings = get_settings()
-        assert settings.openai_model == "gpt-4-turbo"
+        assert settings.anthropic_model == "claude-3-opus-20240229"
         s._settings = None

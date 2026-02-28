@@ -1,22 +1,30 @@
-"""Tests for agent tool definitions."""
+"""Tests for agent tools and pydantic-ai agent setup."""
 
+import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-import os
 
 
 @pytest.fixture(autouse=True)
 def mock_settings(monkeypatch):
     monkeypatch.setenv("DISCORD_TOKEN", "test-token")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     import grug.config.settings as s
     s._settings = None
     yield
     s._settings = None
 
 
-def test_base_tool_openai_schema():
-    """BaseTool.to_openai_tool() returns correct schema structure."""
+def test_base_tool_abc_requires_implementation():
+    """BaseTool ABC raises TypeError when abstract methods are missing."""
+    from grug.agent.tools.base import BaseTool
+
+    with pytest.raises(TypeError):
+        BaseTool()  # type: ignore[abstract]
+
+
+def test_base_tool_concrete_implementation():
+    """A concrete BaseTool subclass can be instantiated and run."""
     from grug.agent.tools.base import BaseTool
 
     class MyTool(BaseTool):
@@ -39,56 +47,51 @@ def test_base_tool_openai_schema():
         async def run(self, **kwargs):
             return "result"
 
-    schema = MyTool().to_openai_tool()
-    assert schema["type"] == "function"
-    assert schema["function"]["name"] == "my_tool"
-    assert "q" in schema["function"]["parameters"]["properties"]
+    tool = MyTool()
+    assert tool.name == "my_tool"
+    assert tool.description == "A test tool"
+    assert tool.parameters["type"] == "object"
 
 
-def test_rag_tools_have_correct_names():
-    """RAG tools are named as expected."""
-    from grug.agent.tools.rag_tools import SearchDocumentsTool, ListDocumentsTool
-    assert SearchDocumentsTool(1).name == "search_documents"
-    assert ListDocumentsTool(1).name == "list_documents"
+def test_grug_agent_builds_with_anthropic(monkeypatch):
+    """GrugAgent initialises without error given an Anthropic API key."""
+    import grug.agent.core as core
+    # Reset cached agent
+    core._agent = None
+    # Patch AgentProvider so no real API call is made
+    with patch("pydantic_ai.providers.anthropic.AnthropicProvider.__init__", return_value=None), \
+         patch("pydantic_ai.models.anthropic.AnthropicModel.__init__", return_value=None):
+        from grug.agent.core import GrugAgent
+        agent = GrugAgent()
+        assert agent._context_window == 20
+    core._agent = None
 
 
-def test_scheduling_tools_have_correct_names():
-    """Scheduling tools are named as expected."""
-    from grug.agent.tools.scheduling_tools import (
-        CreateCalendarEventTool,
-        ListCalendarEventsTool,
-        CreateReminderTool,
-        CreateScheduledTaskTool,
-    )
-    assert CreateCalendarEventTool(1, 1).name == "create_calendar_event"
-    assert ListCalendarEventsTool(1).name == "list_calendar_events"
-    assert CreateReminderTool(1, 1, 1).name == "create_reminder"
-    assert CreateScheduledTaskTool(1, 1, 1).name == "create_scheduled_task"
+def test_grug_deps_fields():
+    """GrugDeps dataclass has the expected fields."""
+    from grug.agent.core import GrugDeps
+    import dataclasses
+
+    fields = {f.name for f in dataclasses.fields(GrugDeps)}
+    assert fields == {"guild_id", "channel_id", "user_id", "username"}
 
 
-def test_all_tools_have_valid_openai_schema():
-    """All built-in tools produce valid OpenAI tool schema dicts."""
-    from grug.agent.tools.rag_tools import SearchDocumentsTool, ListDocumentsTool
-    from grug.agent.tools.scheduling_tools import (
-        CreateCalendarEventTool,
-        ListCalendarEventsTool,
-        CreateReminderTool,
-        CreateScheduledTaskTool,
-    )
+def test_mcp_tools_build_empty_when_no_config(monkeypatch):
+    """build_mcp_servers returns empty list when no MCP configs provided."""
+    from grug.agent.tools.mcp_tools import build_mcp_servers
 
-    tools = [
-        SearchDocumentsTool(1),
-        ListDocumentsTool(1),
-        CreateCalendarEventTool(1, 1),
-        ListCalendarEventsTool(1),
-        CreateReminderTool(1, 1, 1),
-        CreateScheduledTaskTool(1, 1, 1),
-    ]
-    for tool in tools:
-        schema = tool.to_openai_tool()
-        assert schema["type"] == "function"
-        fn = schema["function"]
-        assert "name" in fn
-        assert "description" in fn
-        assert "parameters" in fn
-        assert fn["parameters"]["type"] == "object"
+    result = build_mcp_servers(configs=[])
+    assert result == []
+
+
+def test_mcp_tools_build_servers(monkeypatch):
+    """build_mcp_servers creates MCPServerStdio instances from config."""
+    mock_server_cls = MagicMock(return_value=MagicMock())
+    with patch("pydantic_ai.mcp.MCPServerStdio", mock_server_cls):
+        from grug.agent.tools import mcp_tools
+        # Force reimport to pick up the mock
+        import importlib
+        importlib.reload(mcp_tools)
+        configs = [{"command": "npx", "args": ["-y", "some-server"]}]
+        servers = mcp_tools.build_mcp_servers(configs=configs)
+    assert len(servers) == 1
