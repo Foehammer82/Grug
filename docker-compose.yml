@@ -1,0 +1,38 @@
+services:
+  grug:
+    build: .
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - grug_db:/app/data
+      - grug_chroma:/app/chroma_data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/grug.db
+      - CHROMA_PERSIST_DIR=/app/chroma_data
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - grug_db:/app/data
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/grug.db
+    ports:
+      - "8000:8000"
+    depends_on:
+      - grug
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  grug_db:
+  grug_chroma:
