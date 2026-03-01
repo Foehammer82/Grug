@@ -74,6 +74,15 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not commit secrets, API keys, or credentials to the repository.
 - Do not break backward compatibility without a clear migration path and documentation.
 
+## Capturing Pitched Ideas
+
+There are two roadmap documents with distinct purposes:
+
+- **`roadmap.md`** (repo root) — informal scratch pad for spitballing. Whenever the user pitches an idea, floats a "what if", or mentions a feature they'd like to explore someday, add it to the appropriate section of this file immediately, even if it's rough or half-formed.
+- **`docs/` roadmap** — official planned work that has been agreed on and is intended to ship. Do not add speculative ideas here.
+
+When an idea is promoted from brainstorming to "we're actually doing this", move it out of `roadmap.md` and into the appropriate docs page.
+
 ## Keeping These Instructions Current
 
 When the user corrects a response, points out a mistake, or shares an important pattern, best practice, or project convention, treat it as a signal to update this file and/or the relevant customization artifact (see section below). Specifically:
