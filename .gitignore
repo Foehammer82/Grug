@@ -1,14 +1,27 @@
+# ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.egg-info/
+
+# ── Environment & Secrets ────────────────────────────────────────────────────
 .env
+.env.*
+!.env.example
+
+# ── Virtual Environments ─────────────────────────────────────────────────────
+.venv/
+
+# ── Database & Persistent Data ───────────────────────────────────────────────
 *.db
 chroma_data/
-.venv/
+
+# ── Build Artifacts ──────────────────────────────────────────────────────────
 dist/
 build/
-*.egg-info/
+
+# ── Testing & Coverage ───────────────────────────────────────────────────────
 .pytest_cache/
-htmlcov/
 .coverage
+htmlcov/
