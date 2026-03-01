@@ -19,6 +19,7 @@ def mock_settings(monkeypatch):
     """
     monkeypatch.setenv("DISCORD_TOKEN", "test-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
     import grug.config.settings as s
 
     s._settings = None

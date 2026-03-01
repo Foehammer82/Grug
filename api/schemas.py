@@ -73,6 +73,7 @@ class DocumentOut(BaseModel):
     chroma_collection: str
     chunk_count: int
     uploaded_by: int
+    campaign_id: int | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -134,3 +135,39 @@ class DiscordChannelOut(BaseModel):
     id: str
     name: str
     type: int
+
+
+class CampaignOut(BaseModel):
+    id: int
+    guild_id: int
+    channel_id: int
+    name: str
+    system: str
+    is_active: bool
+    created_by: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CharacterOut(BaseModel):
+    id: int
+    owner_discord_user_id: int
+    campaign_id: int | None
+    name: str
+    system: str
+    structured_data: dict | None
+    file_path: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class UserProfileOut(BaseModel):
+    id: int
+    discord_user_id: int
+    active_character_id: int | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

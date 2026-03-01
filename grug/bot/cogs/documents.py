@@ -60,6 +60,9 @@ class DocumentsCog(commands.Cog, name="Documents"):
                 tmp_path = Path(tmp_dir) / attachment.filename
                 await attachment.save(tmp_path)
 
+                # Resolve campaign for this channel (if one exists).
+                campaign_id = await _get_campaign_id_for_channel(ctx.channel.id)
+
                 factory = get_session_factory()
                 async with factory() as session:
                     doc = Document(
@@ -69,6 +72,7 @@ class DocumentsCog(commands.Cog, name="Documents"):
                         chroma_collection=f"guild_{ctx.guild.id}",
                         chunk_count=0,
                         uploaded_by=ctx.author.id,
+                        campaign_id=campaign_id,
                     )
                     session.add(doc)
                     await session.commit()
@@ -147,3 +151,16 @@ class DocumentsCog(commands.Cog, name="Documents"):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(DocumentsCog(bot))
+
+
+async def _get_campaign_id_for_channel(channel_id: int) -> int | None:
+    """Return the campaign_id for a Discord channel, or None if no campaign is linked."""
+    from grug.db.models import Campaign
+    from sqlalchemy import select
+
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(Campaign.id).where(Campaign.channel_id == channel_id)
+        )
+        return result.scalar_one_or_none()

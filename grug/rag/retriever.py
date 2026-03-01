@@ -2,6 +2,8 @@
 
 import logging
 
+from sqlalchemy import select
+
 from grug.rag.vector_store import VectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -19,11 +21,63 @@ class DocumentRetriever:
         query: str,
         k: int = 5,
         document_id: int | None = None,
+        campaign_id: int | None = None,
     ) -> list[dict]:
         """Return the top-k relevant chunks for *query*.
 
+        When *campaign_id* is provided, filters results to documents associated
+        with that campaign.  If no campaign-scoped documents are found, falls
+        back to the full guild-wide search so a response is always possible.
+
         Returns a list of dicts with keys: text, filename, chunk_index, distance.
         """
+        if campaign_id is not None:
+            chunks = await self._search_campaign(
+                guild_id, query, k=k, campaign_id=campaign_id
+            )
+            if chunks:
+                return chunks
+            # Fall back to guild-wide search.
+            logger.debug(
+                "No campaign-scoped chunks found for campaign %d; falling back to guild search",
+                campaign_id,
+            )
+
         return await self._store.doc_query(
             guild_id, query, n_results=k, document_id=document_id
         )
+
+    async def _search_campaign(
+        self,
+        guild_id: int,
+        query: str,
+        k: int,
+        campaign_id: int,
+    ) -> list[dict]:
+        """Search only documents whose campaign_id matches."""
+        from grug.db.models import Document
+        from grug.db.session import get_session_factory
+
+        factory = get_session_factory()
+        async with factory() as session:
+            result = await session.execute(
+                select(Document.id).where(
+                    Document.guild_id == guild_id,
+                    Document.campaign_id == campaign_id,
+                )
+            )
+            doc_ids = [row[0] for row in result.all()]
+
+        if not doc_ids:
+            return []
+
+        # Gather results across all campaign documents and pick the top-k.
+        all_chunks: list[dict] = []
+        for doc_id in doc_ids:
+            chunks = await self._store.doc_query(
+                guild_id, query, n_results=k, document_id=doc_id
+            )
+            all_chunks.extend(chunks)
+
+        all_chunks.sort(key=lambda c: c.get("distance", 1.0))
+        return all_chunks[:k]

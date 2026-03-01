@@ -42,6 +42,18 @@ glossary using the lookup_glossary_term tool.
 - Add or update glossary terms (AI-owned entries only) when players define new terms \
 or correct an existing definition, using the upsert_glossary_term tool.
 
+- Access, discuss, and help update player character sheets using get_character_sheet, \
+update_character_field, and search_character_knowledge.
+- Export an updated character sheet back to the player using export_character_sheet.
+
+Character sheet guidance:
+- In DM sessions, always clarify *which character and campaign* you are discussing \
+at the start if there is any ambiguity.
+- When a player says their character takes damage, levels up, gains items, or \
+otherwise changes — use update_character_field to record the change.
+- When discussing abilities, spells, or stats, use search_character_knowledge to \
+find the relevant section of their sheet.
+
 When asked about rules, lore, or campaign information always search documents first, \
 then check the glossary for any server-specific overrides on terminology.
 When scheduling, confirm times clearly and always use ISO-8601 format internally.
@@ -59,6 +71,12 @@ class GrugDeps:
     channel_id: int
     user_id: int
     username: str
+    # Optional campaign scoping — set when the channel has a campaign linked.
+    campaign_id: int | None = None
+    # Set for DM sessions when the user has an active character.
+    active_character_id: int | None = None
+    # True when responding to a DM rather than a guild channel.
+    is_dm_session: bool = False
 
 
 def _build_agent() -> Agent[GrugDeps, str]:
@@ -84,14 +102,18 @@ def _build_agent() -> Agent[GrugDeps, str]:
     async def search_documents(
         ctx: RunContext[GrugDeps], query: str, k: int = 5
     ) -> str:
-        """Search the guild's indexed documents using semantic similarity.
+        """Search indexed documents using semantic similarity.
 
+        When in a campaign channel or DM with an active campaign, searches
+        campaign-scoped documents. Falls back to guild-wide search otherwise.
         Use when the user asks about rules, lore, or content from uploaded documents.
         """
         from grug.rag.retriever import DocumentRetriever
 
         retriever = DocumentRetriever()
-        chunks = await retriever.search(ctx.deps.guild_id, query, k=k)
+        chunks = await retriever.search(
+            ctx.deps.guild_id, query, k=k, campaign_id=ctx.deps.campaign_id
+        )
         if not chunks:
             return "No relevant documents found."
         parts = [
@@ -286,6 +308,165 @@ def _build_agent() -> Agent[GrugDeps, str]:
     from grug.agent.tools.glossary_tools import register_glossary_tools
 
     register_glossary_tools(agent)
+
+    # --------------------------------------------------------------- characters
+    @agent.tool
+    async def get_character_sheet(ctx: RunContext[GrugDeps]) -> str:
+        """Retrieve the current user's active character sheet.
+
+        Use when asked about the user's character, stats, abilities,
+        inventory, HP, or any other character-specific information.
+        Returns an error string if no active character is set.
+        """
+        import json
+
+        from grug.db.models import Character, UserProfile
+
+        char_id = ctx.deps.active_character_id
+        if char_id is None:
+            factory = get_session_factory()
+            async with factory() as session:
+                profile = (
+                    await session.execute(
+                        select(UserProfile).where(
+                            UserProfile.discord_user_id == ctx.deps.user_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if profile is None or profile.active_character_id is None:
+                    return "No active character found. Ask the player to upload a sheet with !character upload."
+                char_id = profile.active_character_id
+
+        factory = get_session_factory()
+        async with factory() as session:
+            character = (
+                await session.execute(select(Character).where(Character.id == char_id))
+            ).scalar_one_or_none()
+
+        if character is None:
+            return "Character not found."
+
+        sd = character.structured_data or {}
+        lines = [
+            f"Character: {character.name}",
+            f"System: {character.system}",
+            f"Structured data: {json.dumps(sd, indent=2)}",
+        ]
+        if character.raw_sheet_text:
+            lines += ["", "Raw sheet text:", character.raw_sheet_text[:3000]]
+        return "\n".join(lines)
+
+    @agent.tool
+    async def update_character_field(
+        ctx: RunContext[GrugDeps], field: str, value: str
+    ) -> str:
+        """Update a specific field in the current user's active character sheet.
+
+        Use when the player's character changes during a session: HP loss/gain,
+        levelling up, acquiring/spending items, learning spells, etc.
+
+        Parameters
+        ----------
+        field:
+            Dot-notation path to the field, e.g. 'hp.current', 'level', 'notes'.
+        value:
+            New value as a string. Numbers and JSON structures are coerced automatically.
+        """
+        import json
+
+        from grug.character.indexer import CharacterIndexer
+        from grug.db.models import Character, UserProfile
+
+        char_id = ctx.deps.active_character_id
+        if char_id is None:
+            factory = get_session_factory()
+            async with factory() as session:
+                profile = (
+                    await session.execute(
+                        select(UserProfile).where(
+                            UserProfile.discord_user_id == ctx.deps.user_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if profile is None or profile.active_character_id is None:
+                    return "No active character to update."
+                char_id = profile.active_character_id
+
+        factory = get_session_factory()
+        async with factory() as session:
+            character = (
+                await session.execute(select(Character).where(Character.id == char_id))
+            ).scalar_one_or_none()
+            if character is None:
+                return "Character not found."
+
+            sd = dict(character.structured_data or {})
+            coerced: object = value
+            try:
+                coerced = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+            # Navigate dot-notation path and set the leaf key.
+            keys = field.split(".")
+            target = sd
+            for key in keys[:-1]:
+                if not isinstance(target, dict):
+                    target = {}
+                target = target.setdefault(key, {})
+            if isinstance(target, dict):
+                target[keys[-1]] = coerced
+
+            character.structured_data = sd
+            await session.commit()
+            await session.refresh(character)
+            raw_text = character.raw_sheet_text or ""
+            character_id = character.id
+
+        # Re-index so semantic search reflects the change.
+        if raw_text:
+            indexer = CharacterIndexer()
+            await indexer.index_character(character_id, raw_text)
+
+        return f"\u2705 Updated {field} = {coerced} for character ID {character_id}."
+
+    @agent.tool
+    async def search_character_knowledge(
+        ctx: RunContext[GrugDeps], query: str, k: int = 4
+    ) -> str:
+        """Search the current user's character sheet for specific information.
+
+        Use when asked about the character's specific abilities, spells,
+        equipment, or traits. Searches the indexed sheet chunks semantically.
+        """
+        from grug.db.models import UserProfile
+        from grug.rag.vector_store import get_vector_store
+
+        char_id = ctx.deps.active_character_id
+        if char_id is None:
+            factory = get_session_factory()
+            async with factory() as session:
+                profile = (
+                    await session.execute(
+                        select(UserProfile).where(
+                            UserProfile.discord_user_id == ctx.deps.user_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if profile is None or profile.active_character_id is None:
+                    return "No active character to search."
+                char_id = profile.active_character_id
+
+        store = get_vector_store()
+        chunks = await store.character_query(char_id, query, n_results=k)
+        if not chunks:
+            return "Nothing relevant found in the character sheet."
+        parts = [
+            f"[{i}] (chunk {c['chunk_index']}):\n{c['text']}"
+            for i, c in enumerate(chunks, 1)
+        ]
+        return "\n\n---\n\n".join(parts)
+
     return agent
 
 
@@ -434,6 +615,9 @@ class GrugAgent:
         user_id: int,
         username: str,
         message: str,
+        campaign_id: int | None = None,
+        active_character_id: int | None = None,
+        is_dm_session: bool = False,
     ) -> str:
         """Process a user message and return Grug's response."""
         await self._save_message(
@@ -446,6 +630,9 @@ class GrugAgent:
             channel_id=channel_id,
             user_id=user_id,
             username=username,
+            campaign_id=campaign_id,
+            active_character_id=active_character_id,
+            is_dm_session=is_dm_session,
         )
 
         try:

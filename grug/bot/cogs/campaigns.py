@@ -25,6 +25,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
         self.bot = bot
 
     @commands.group(name="campaign", invoke_without_command=True)
+    @commands.guild_only()
     async def campaign_group(self, ctx: commands.Context) -> None:
         """Campaign management commands. Use !campaign <subcommand>."""
         await ctx.send_help(ctx.command)
@@ -49,6 +50,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
                 )
                 return
 
+            assert ctx.guild is not None  # enforced by @commands.guild_only()
             campaign = Campaign(
                 guild_id=ctx.guild.id,
                 channel_id=ctx.channel.id,
@@ -148,6 +150,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
     async def list_campaigns(self, ctx: commands.Context) -> None:
         """List all campaigns in this server."""
         factory = get_session_factory()
+        assert ctx.guild is not None  # enforced by @commands.guild_only()
         async with factory() as session:
             campaigns = (
                 (

@@ -75,7 +75,15 @@ def test_grug_deps_fields():
     import dataclasses
 
     fields = {f.name for f in dataclasses.fields(GrugDeps)}
-    assert fields == {"guild_id", "channel_id", "user_id", "username"}
+    assert fields == {
+        "guild_id",
+        "channel_id",
+        "user_id",
+        "username",
+        "campaign_id",
+        "active_character_id",
+        "is_dm_session",
+    }
 
 
 def test_mcp_tools_build_empty_when_no_config(monkeypatch):

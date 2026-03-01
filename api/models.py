@@ -10,7 +10,9 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     DateTime,
+    ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
 )
@@ -51,6 +53,7 @@ class Document(Base):
     chroma_collection: Mapped[str] = mapped_column(String(256), nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     uploaded_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    campaign_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=lambda: datetime.now(timezone.utc)
     )
@@ -124,6 +127,65 @@ class GlossaryTerm(Base):
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class Campaign(Base):
+    __tablename__ = "campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    channel_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    system: Mapped[str] = mapped_column(String(128), default="unknown")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class Character(Base):
+    __tablename__ = "characters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    owner_discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True
+    )
+    campaign_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    system: Mapped[str] = mapped_column(String(128), default="unknown")
+    raw_sheet_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    structured_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
+    active_character_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("characters.id", use_alter=True, name="fk_user_active_character"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
     )
 
 
