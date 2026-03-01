@@ -1,0 +1,95 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    # Only trigger on version tags created by the release workflow.
+    # Push to main is handled indirectly: release.yml creates a v* tag which fires this.
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    name: ${{ matrix.image }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The Discord bot — root Dockerfile, context is the whole repo.
+          - image: grug
+            context: .
+            file: Dockerfile
+
+          # REST API — context is the whole repo so it can copy grug/ alongside api/.
+          - image: grug-api
+            context: .
+            file: api/Dockerfile
+
+          # React/Vite frontend served by nginx.
+          - image: grug-web
+            context: web
+            file: web/Dockerfile
+
+          # MkDocs static-site docs served by nginx.
+          - image: grug-docs
+            context: .
+            file: docs/Dockerfile
+
+          # pgvector-enabled Postgres image.
+          - image: grug-postgres
+            context: postgres
+            file: postgres/Dockerfile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            # PR number for PR builds (e.g. :pr-42)
+            type=ref,event=pr
+            # Full version from tag, v prefix stripped (e.g. :0.1.0.4)
+            type=match,pattern=v(.*),group=1
+            # Short commit SHA for traceability (e.g. :sha-abc1234)
+            type=sha,prefix=sha-
+            # :latest always points to the most recent version tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          # Only push on branch/tag pushes; PRs only build to validate.
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Share the layer cache across runs to speed up rebuilds.
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  tag-and-release:
+    name: Create versioned tag and release
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # needed to push tags and create releases
+
+    steps:
+      - name: Checkout (full history for tag inspection)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # we need all tags to find the current highest build number
+
+      - name: Compute next tag
+        id: version
+        run: |
+          # Read the base version from pyproject.toml using Python's stdlib tomllib
+          BASE_VERSION=$(python3 -c "
+          import tomllib
+          with open('pyproject.toml', 'rb') as f:
+              data = tomllib.load(f)
+          print(data['project']['version'])
+          ")
+
+          echo "Base version from pyproject.toml: ${BASE_VERSION}"
+
+          # Find the highest build number already published for this base version.
+          # Tags look like v0.1.0.0, v0.1.0.1, …
+          HIGHEST=$(git tag -l "v${BASE_VERSION}.*" \
+            | sed "s/v${BASE_VERSION}\.//" \
+            | grep -E '^[0-9]+$' \
+            | sort -n \
+            | tail -1)
+
+          if [ -z "$HIGHEST" ]; then
+            BUILD_NUM=0
+          else
+            BUILD_NUM=$((HIGHEST + 1))
+          fi
+
+          NEW_TAG="v${BASE_VERSION}.${BUILD_NUM}"
+          echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
+          echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "build_num=${BUILD_NUM}" >> "$GITHUB_OUTPUT"
+          echo "New tag: ${NEW_TAG}"
+
+      - name: Create and push tag
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "${{ steps.version.outputs.new_tag }}"
+          git push origin "${{ steps.version.outputs.new_tag }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.new_tag }}" \
+            --title "Grug ${{ steps.version.outputs.new_tag }}" \
+            --generate-notes
