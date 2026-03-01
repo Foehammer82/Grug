@@ -13,11 +13,12 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from grug.config.settings import get_settings
 from grug.db.models import ConversationMessage
 from grug.db.session import get_session_factory
+from grug.rag.history_archiver import ConversationArchiver
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +250,24 @@ def _build_agent() -> Agent[GrugDeps, str]:
         )
         return f"🔁 Recurring task **{name}** scheduled ({cron_expression}) — ID: {task_id}."
 
+    @agent.tool
+    async def search_conversation_history(ctx: RunContext[GrugDeps], query: str, k: int = 3) -> str:
+        """Search the archived conversation history for past events, decisions, and lore.
+
+        Use when the user asks about something that may have happened in a previous
+        session or earlier in the campaign (e.g. 'what did we decide about the dragon?',
+        'what happened last time we visited the city?').
+        """
+        archiver = ConversationArchiver()
+        results = archiver.search(ctx.deps.guild_id, ctx.deps.channel_id, query, k=k)
+        if not results:
+            return "No relevant conversation history found in the chronicles."
+        parts = [
+            f"[{i}] ({r['start_time']} → {r['end_time']}, {r['message_count']} messages):\n{r['summary']}"
+            for i, r in enumerate(results, 1)
+        ]
+        return "📜 From the chronicles:\n\n" + "\n\n---\n\n".join(parts)
+
     return agent
 
 
@@ -287,20 +306,68 @@ class GrugAgent:
     async def _load_history(
         self, guild_id: int, channel_id: int
     ) -> list[ModelRequest | ModelResponse]:
-        """Reconstruct pydantic-ai message history from the database."""
+        """Load recent messages, archiving overflow to RAG history when the window fills."""
+        settings = get_settings()
         factory = get_session_factory()
+
         async with factory() as session:
-            result = await session.execute(
+            # Count total unarchived messages for this channel.
+            count_result = await session.execute(
+                select(func.count(ConversationMessage.id)).where(
+                    ConversationMessage.guild_id == guild_id,
+                    ConversationMessage.channel_id == channel_id,
+                    ConversationMessage.archived.is_(False),
+                )
+            )
+            total = count_result.scalar() or 0
+
+            overflow = total - self._context_window
+            if overflow >= settings.agent_history_archive_batch:
+                # Fetch the oldest overflow messages for archival.
+                overflow_result = await session.execute(
+                    select(ConversationMessage)
+                    .where(
+                        ConversationMessage.guild_id == guild_id,
+                        ConversationMessage.channel_id == channel_id,
+                        ConversationMessage.archived.is_(False),
+                    )
+                    .order_by(ConversationMessage.created_at.asc())
+                    .limit(overflow)
+                )
+                to_archive = overflow_result.scalars().all()
+                if to_archive:
+                    archive_dicts = [
+                        {
+                            "role": m.role,
+                            "content": m.content,
+                            "author_name": m.author_name,
+                            "created_at": m.created_at.isoformat() if m.created_at else "",
+                        }
+                        for m in to_archive
+                    ]
+                    try:
+                        archiver = ConversationArchiver()
+                        await archiver.archive(guild_id, channel_id, archive_dicts)
+                    except Exception:
+                        logger.exception("Failed to archive conversation history — skipping")
+
+                    # Mark rows archived regardless of whether summary succeeded.
+                    for msg in to_archive:
+                        msg.archived = True
+                    await session.commit()
+
+            # Load the most recent context_window unarchived messages.
+            recent_result = await session.execute(
                 select(ConversationMessage)
                 .where(
                     ConversationMessage.guild_id == guild_id,
                     ConversationMessage.channel_id == channel_id,
+                    ConversationMessage.archived.is_(False),
                 )
                 .order_by(ConversationMessage.created_at.desc())
                 .limit(self._context_window)
             )
-            rows = result.scalars().all()
-        rows = list(reversed(rows))
+            rows = list(reversed(recent_result.scalars().all()))
 
         messages: list[ModelRequest | ModelResponse] = []
         for row in rows:

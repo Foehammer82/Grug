@@ -125,4 +125,5 @@ class ConversationMessage(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     author_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     author_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))

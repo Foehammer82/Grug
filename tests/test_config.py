@@ -69,3 +69,40 @@ def test_settings_custom_model():
         settings = get_settings()
         assert settings.anthropic_model == "claude-3-opus-20240229"
         s._settings = None
+
+
+def test_settings_history_archive_defaults():
+    """History archive settings have correct defaults."""
+    with patch.dict(
+        os.environ,
+        {"DISCORD_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"},
+        clear=False,
+    ):
+        import grug.config.settings as s
+        s._settings = None
+        from grug.config.settings import get_settings
+        settings = get_settings()
+        assert settings.agent_history_archive_batch == 10
+        assert settings.agent_history_max_summaries == 100
+        s._settings = None
+
+
+def test_settings_history_archive_overrides():
+    """History archive settings can be overridden via environment."""
+    with patch.dict(
+        os.environ,
+        {
+            "DISCORD_TOKEN": "tok",
+            "ANTHROPIC_API_KEY": "key",
+            "AGENT_HISTORY_ARCHIVE_BATCH": "25",
+            "AGENT_HISTORY_MAX_SUMMARIES": "50",
+        },
+        clear=False,
+    ):
+        import grug.config.settings as s
+        s._settings = None
+        from grug.config.settings import get_settings
+        settings = get_settings()
+        assert settings.agent_history_archive_batch == 25
+        assert settings.agent_history_max_summaries == 50
+        s._settings = None

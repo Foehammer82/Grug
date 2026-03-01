@@ -63,6 +63,14 @@ class Settings(BaseSettings):
         default=20,
         description="Number of recent messages to keep in context",
     )
+    agent_history_archive_batch: int = Field(
+        default=10,
+        description="Minimum overflow messages required before archiving to RAG history",
+    )
+    agent_history_max_summaries: int = Field(
+        default=100,
+        description="Max number of history summaries per channel stored in ChromaDB",
+    )
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
