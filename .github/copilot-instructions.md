@@ -24,11 +24,21 @@ Grug is a self-hosted AI agent designed to assist with TTRPGs (Tabletop Role-Pla
 - Keep functions small and single-purpose.
 - Avoid hardcoding configuration values; use environment variables or config files.
 
+## Tooling and Environment
+
+- This project uses **[uv](https://docs.astral.sh/uv/)** for dependency management and running Python.
+- All dependencies are declared in `pyproject.toml` only — there is no `requirements.txt` and one must never be created.
+- Dev dependencies (pytest, etc.) live in the `[dependency-groups] dev` section of `pyproject.toml`.
+- Always run Python commands with `uv run` (e.g. `uv run pytest tests/`, `uv run python main.py`).
+- Add new dependencies with `uv add <package>` (or `uv add --dev <package>` for dev-only).
+
 ## Testing
 
+- Use **pytest** for all tests (never `unittest.TestCase` subclasses).
+- Use pytest fixtures — shared fixtures go in `tests/conftest.py`.
 - Write tests for all new features and bug fixes.
 - Tests should cover both happy paths and edge cases.
-- Run existing tests before submitting changes to ensure nothing is broken.
+- Run existing tests before submitting changes: `uv run pytest tests/`.
 
 ## Forbidden Practices
 

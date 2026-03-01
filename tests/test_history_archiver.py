@@ -1,56 +1,13 @@
-"""Tests for the conversation history archiver (RAG-over-history)."""
+"""Tests for the conversation history archiver (RAG-over-history).
 
-import os
+``mock_settings``, ``mock_chromadb``, ``mock_anthropic``, and ``make_messages``
+are provided by conftest.py.  Individual tests only import what they need.
+"""
+
+import importlib
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-@pytest.fixture(autouse=True)
-def reset_settings(monkeypatch):
-    """Ensure a clean settings instance for every test."""
-    monkeypatch.setenv("DISCORD_TOKEN", "test-token")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    import grug.config.settings as s
-    s._settings = None
-    yield
-    s._settings = None
-
-
-def _make_messages(n: int) -> list[dict]:
-    """Return *n* fake conversation message dicts."""
-    msgs = []
-    for i in range(n):
-        role = "user" if i % 2 == 0 else "assistant"
-        msgs.append(
-            {
-                "role": role,
-                "content": f"message {i}",
-                "author_name": "Blake" if role == "user" else None,
-                "created_at": f"2026-01-{i + 1:02d}T10:00:00",
-            }
-        )
-    return msgs
-
-
-def _make_archiver(max_summaries: int = 5) -> "ConversationArchiver":  # type: ignore[name-defined]
-    """Return a ConversationArchiver with mocked external clients."""
-    with patch("grug.rag.history_archiver.get_settings") as mock_get:
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-3-5-sonnet-20241022"
-        settings.agent_history_max_summaries = max_summaries
-        mock_get.return_value = settings
-
-        with patch("chromadb.PersistentClient"), patch("anthropic.AsyncAnthropic"):
-            from grug.rag.history_archiver import ConversationArchiver
-            archiver = ConversationArchiver()
-
-    return archiver
+from unittest.mock import AsyncMock, MagicMock
 
 
 # ---------------------------------------------------------------------------
@@ -78,44 +35,29 @@ def test_history_collection_name_uniqueness():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_summarise_formats_transcript():
+async def test_summarise_formats_transcript(make_messages, mock_chromadb, mock_anthropic):
     """_summarise sends a transcript with role/name prefixes to Anthropic."""
-    messages = _make_messages(3)
+    messages = make_messages(3)
 
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text="The party slew the dragon.")]
+    mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
 
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient"), \
-         patch("anthropic.AsyncAnthropic") as mock_anthropic_cls:
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
+    archiver._anthropic = mock_anthropic
+    archiver._model = "claude-test"
 
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 100
-        mock_get.return_value = settings
-
-        mock_client = AsyncMock()
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
-        mock_anthropic_cls.return_value = mock_client
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
-        archiver._anthropic = mock_client
-        archiver._model = "claude-test"
-
-        result = await archiver._summarise(messages)
+    result = await archiver._summarise(messages)
 
     assert result == "The party slew the dragon."
-    call_args = mock_client.messages.create.call_args
+    call_args = mock_anthropic.messages.create.call_args
     assert "Conversation to summarise" in call_args.kwargs["messages"][0]["content"]
 
 
 @pytest.mark.asyncio
-async def test_summarise_uses_author_name_for_users():
+async def test_summarise_uses_author_name_for_users(mock_chromadb, mock_anthropic):
     """User messages are labelled with author_name, not generic 'user'."""
     messages = [
         {"role": "user", "content": "We attack!", "author_name": "Thorin", "created_at": ""},
@@ -124,28 +66,16 @@ async def test_summarise_uses_author_name_for_users():
 
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text="summary")]
+    mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
 
-    mock_client = AsyncMock()
-    mock_client.messages.create = AsyncMock(return_value=mock_response)
-
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient"), \
-         patch("anthropic.AsyncAnthropic"):
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 100
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
-        archiver._anthropic = mock_client
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
+    archiver._anthropic = mock_anthropic
 
     await archiver._summarise(messages)
-    transcript = mock_client.messages.create.call_args.kwargs["messages"][0]["content"]
+
+    transcript = mock_anthropic.messages.create.call_args.kwargs["messages"][0]["content"]
     assert "Thorin:" in transcript
     assert "Assistant:" in transcript
 
@@ -155,68 +85,37 @@ async def test_summarise_uses_author_name_for_users():
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_archive_empty_messages_returns_empty_string():
+async def test_archive_empty_messages_returns_empty_string(mock_chromadb, mock_anthropic):
     """Archiving an empty message list short-circuits and returns ''."""
-    mock_response = MagicMock()
-    mock_response.content = [MagicMock(text="unused")]
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
+    archiver._anthropic = mock_anthropic
 
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient"), \
-         patch("anthropic.AsyncAnthropic") as mock_cls:
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 100
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
-        mock_client = AsyncMock()
-        mock_client.messages.create = AsyncMock(return_value=mock_response)
-        archiver._anthropic = mock_client
-
-        result = await archiver.archive(guild_id=1, channel_id=1, messages=[])
+    result = await archiver.archive(guild_id=1, channel_id=1, messages=[])
 
     assert result == ""
-    mock_client.messages.create.assert_not_called()
+    mock_anthropic.messages.create.assert_not_called()
 
 
 @pytest.mark.asyncio
-async def test_archive_stores_summary_in_chromadb():
+async def test_archive_stores_summary_in_chromadb(make_messages, mock_chromadb, mock_anthropic):
     """archive calls ChromaDB upsert with the summary text and correct metadata."""
-    messages = _make_messages(4)
+    messages = make_messages(4)
 
     mock_response = MagicMock()
     mock_response.content = [MagicMock(text="The adventurers explored the dungeon.")]
+    mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
 
     mock_collection = MagicMock()
     mock_collection.get.return_value = {"ids": [], "metadatas": []}
+    mock_chromadb.get_or_create_collection.return_value = mock_collection
 
-    mock_chroma = MagicMock()
-    mock_chroma.get_or_create_collection.return_value = mock_collection
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
 
-    mock_anthropic_client = AsyncMock()
-    mock_anthropic_client.messages.create = AsyncMock(return_value=mock_response)
-
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient", return_value=mock_chroma), \
-         patch("anthropic.AsyncAnthropic", return_value=mock_anthropic_client):
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 100
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
-
-        result = await archiver.archive(guild_id=7, channel_id=42, messages=messages)
+    result = await archiver.archive(guild_id=7, channel_id=42, messages=messages)
 
     assert result == "The adventurers explored the dungeon."
     mock_collection.upsert.assert_called_once()
@@ -232,7 +131,7 @@ async def test_archive_stores_summary_in_chromadb():
 # _prune_oldest
 # ---------------------------------------------------------------------------
 
-def test_prune_oldest_does_nothing_under_cap():
+def test_prune_oldest_does_nothing_under_cap(mock_chromadb, mock_anthropic):
     """No deletions occur when summary count is within the cap."""
     mock_collection = MagicMock()
     mock_collection.get.return_value = {
@@ -243,60 +142,39 @@ def test_prune_oldest_does_nothing_under_cap():
             {"channel_id": 1, "start_time": "2026-01-03"},
         ],
     }
+    mock_chromadb.get_or_create_collection.return_value = mock_collection
 
-    mock_chroma = MagicMock()
-    mock_chroma.get_or_create_collection.return_value = mock_collection
-
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient", return_value=mock_chroma), \
-         patch("anthropic.AsyncAnthropic"):
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 5  # cap=5, have=3 → no pruning
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
-        archiver._prune_oldest(guild_id=1, channel_id=1)
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
+    # Default agent_history_max_summaries=100; 3 summaries is well under the cap.
+    archiver._prune_oldest(guild_id=1, channel_id=1)
 
     mock_collection.delete.assert_not_called()
 
 
-def test_prune_oldest_removes_excess():
+def test_prune_oldest_removes_excess(monkeypatch, mock_chromadb, mock_anthropic):
     """Oldest summaries are deleted when count exceeds the cap."""
+    monkeypatch.setenv("AGENT_HISTORY_MAX_SUMMARIES", "5")
+    import grug.config.settings as s
+    s._settings = None
+
     ids = [f"id_{i}" for i in range(7)]
     metadatas = [{"channel_id": 1, "start_time": f"2026-01-{i + 1:02d}"} for i in range(7)]
 
     mock_collection = MagicMock()
     mock_collection.get.return_value = {"ids": ids, "metadatas": metadatas}
+    mock_chromadb.get_or_create_collection.return_value = mock_collection
 
-    mock_chroma = MagicMock()
-    mock_chroma.get_or_create_collection.return_value = mock_collection
-
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient", return_value=mock_chroma), \
-         patch("anthropic.AsyncAnthropic"):
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 5  # have 7, cap 5 → delete 2 oldest
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
-        archiver._prune_oldest(guild_id=1, channel_id=1)
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()  # max_summaries=5 now
+    archiver._prune_oldest(guild_id=1, channel_id=1)
 
     mock_collection.delete.assert_called_once()
     deleted = mock_collection.delete.call_args.kwargs["ids"]
     assert len(deleted) == 2
-    # The two oldest by start_time should be removed
+    # The two oldest by start_time should be removed.
     assert "id_0" in deleted
     assert "id_1" in deleted
 
@@ -305,7 +183,7 @@ def test_prune_oldest_removes_excess():
 # search
 # ---------------------------------------------------------------------------
 
-def test_search_returns_formatted_results():
+def test_search_returns_formatted_results(mock_chromadb, mock_anthropic):
     """search returns a list of dicts with expected keys."""
     mock_collection = MagicMock()
     mock_collection.query.return_value = {
@@ -313,24 +191,11 @@ def test_search_returns_formatted_results():
         "metadatas": [[{"start_time": "2026-01-01", "end_time": "2026-01-01", "message_count": 5}]],
         "distances": [[0.12]],
     }
+    mock_chromadb.get_or_create_collection.return_value = mock_collection
 
-    mock_chroma = MagicMock()
-    mock_chroma.get_or_create_collection.return_value = mock_collection
-
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient", return_value=mock_chroma), \
-         patch("anthropic.AsyncAnthropic"):
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 100
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
 
     results = archiver.search(guild_id=1, channel_id=1, query="artifact", k=1)
 
@@ -340,28 +205,16 @@ def test_search_returns_formatted_results():
     assert results[0]["distance"] == pytest.approx(0.12)
 
 
-def test_search_returns_empty_list_on_chromadb_error():
+def test_search_returns_empty_list_on_chromadb_error(mock_chromadb, mock_anthropic):
     """search returns [] gracefully when ChromaDB raises an exception."""
     mock_collection = MagicMock()
     mock_collection.query.side_effect = RuntimeError("ChromaDB exploded")
+    mock_chromadb.get_or_create_collection.return_value = mock_collection
 
-    mock_chroma = MagicMock()
-    mock_chroma.get_or_create_collection.return_value = mock_collection
-
-    with patch("grug.rag.history_archiver.get_settings") as mock_get, \
-         patch("chromadb.PersistentClient", return_value=mock_chroma), \
-         patch("anthropic.AsyncAnthropic"):
-        settings = MagicMock()
-        settings.chroma_persist_dir = ":memory:"
-        settings.anthropic_api_key = "test-key"
-        settings.anthropic_model = "claude-test"
-        settings.agent_history_max_summaries = 100
-        mock_get.return_value = settings
-
-        from grug.rag import history_archiver
-        import importlib
-        importlib.reload(history_archiver)
-        archiver = history_archiver.ConversationArchiver()
+    from grug.rag import history_archiver
+    importlib.reload(history_archiver)
+    archiver = history_archiver.ConversationArchiver()
 
     results = archiver.search(guild_id=1, channel_id=1, query="anything", k=3)
     assert results == []
+

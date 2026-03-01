@@ -1,108 +1,73 @@
-"""Tests for configuration settings."""
+"""Tests for configuration settings.
 
-import os
+The ``mock_settings`` fixture in conftest.py is autouse and injects
+DISCORD_TOKEN + ANTHROPIC_API_KEY and resets the _settings singleton before
+and after every test.  Individual tests only need to monkeypatch the specific
+environment variable they want to exercise.
+"""
+
+import json
 import pytest
-from unittest.mock import patch
 
 
 def test_settings_defaults():
-    """Settings load correctly with required fields provided."""
-    with patch.dict(
-        os.environ,
-        {
-            "DISCORD_TOKEN": "test-discord-token",
-            "ANTHROPIC_API_KEY": "test-anthropic-key",
-        },
-        clear=False,
-    ):
-        # Reset cached settings
-        import grug.config.settings as s
-        s._settings = None
-        from grug.config.settings import get_settings
-        settings = get_settings()
-        assert settings.discord_token == "test-discord-token"
-        assert settings.anthropic_api_key == "test-anthropic-key"
-        assert settings.anthropic_model == "claude-3-5-sonnet-20241022"
-        assert settings.discord_prefix == "!"
-        assert settings.agent_max_iterations == 10
-        assert settings.agent_context_window == 20
-        assert settings.mcp_server_configs == []
-        s._settings = None  # reset for other tests
+    """Settings load correctly with required fields provided by conftest."""
+    from grug.config.settings import get_settings
+
+    settings = get_settings()
+    assert settings.discord_token == "test-token"
+    assert settings.anthropic_api_key == "test-key"
+    assert settings.anthropic_model == "claude-3-5-sonnet-20241022"
+    assert settings.discord_prefix == "!"
+    assert settings.agent_max_iterations == 10
+    assert settings.agent_context_window == 20
+    assert settings.mcp_server_configs == []
 
 
-def test_settings_mcp_config_json_parsing():
+def test_settings_mcp_config_json_parsing(monkeypatch):
     """MCP server configs can be provided as a JSON string."""
-    import json
     mcp_config = json.dumps([{"command": "npx", "args": ["-y", "some-server"]}])
-    with patch.dict(
-        os.environ,
-        {
-            "DISCORD_TOKEN": "tok",
-            "ANTHROPIC_API_KEY": "key",
-            "MCP_SERVER_CONFIGS": mcp_config,
-        },
-        clear=False,
-    ):
-        import grug.config.settings as s
-        s._settings = None
-        from grug.config.settings import get_settings
-        settings = get_settings()
-        assert len(settings.mcp_server_configs) == 1
-        assert settings.mcp_server_configs[0]["command"] == "npx"
-        s._settings = None
+    monkeypatch.setenv("MCP_SERVER_CONFIGS", mcp_config)
+
+    import grug.config.settings as s
+    s._settings = None
+    from grug.config.settings import get_settings
+
+    settings = get_settings()
+    assert len(settings.mcp_server_configs) == 1
+    assert settings.mcp_server_configs[0]["command"] == "npx"
 
 
-def test_settings_custom_model():
+def test_settings_custom_model(monkeypatch):
     """Custom model can be set via environment."""
-    with patch.dict(
-        os.environ,
-        {
-            "DISCORD_TOKEN": "tok",
-            "ANTHROPIC_API_KEY": "key",
-            "ANTHROPIC_MODEL": "claude-3-opus-20240229",
-        },
-        clear=False,
-    ):
-        import grug.config.settings as s
-        s._settings = None
-        from grug.config.settings import get_settings
-        settings = get_settings()
-        assert settings.anthropic_model == "claude-3-opus-20240229"
-        s._settings = None
+    monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-opus-20240229")
+
+    import grug.config.settings as s
+    s._settings = None
+    from grug.config.settings import get_settings
+
+    settings = get_settings()
+    assert settings.anthropic_model == "claude-3-opus-20240229"
 
 
 def test_settings_history_archive_defaults():
     """History archive settings have correct defaults."""
-    with patch.dict(
-        os.environ,
-        {"DISCORD_TOKEN": "tok", "ANTHROPIC_API_KEY": "key"},
-        clear=False,
-    ):
-        import grug.config.settings as s
-        s._settings = None
-        from grug.config.settings import get_settings
-        settings = get_settings()
-        assert settings.agent_history_archive_batch == 10
-        assert settings.agent_history_max_summaries == 100
-        s._settings = None
+    from grug.config.settings import get_settings
+
+    settings = get_settings()
+    assert settings.agent_history_archive_batch == 10
+    assert settings.agent_history_max_summaries == 100
 
 
-def test_settings_history_archive_overrides():
+def test_settings_history_archive_overrides(monkeypatch):
     """History archive settings can be overridden via environment."""
-    with patch.dict(
-        os.environ,
-        {
-            "DISCORD_TOKEN": "tok",
-            "ANTHROPIC_API_KEY": "key",
-            "AGENT_HISTORY_ARCHIVE_BATCH": "25",
-            "AGENT_HISTORY_MAX_SUMMARIES": "50",
-        },
-        clear=False,
-    ):
-        import grug.config.settings as s
-        s._settings = None
-        from grug.config.settings import get_settings
-        settings = get_settings()
-        assert settings.agent_history_archive_batch == 25
-        assert settings.agent_history_max_summaries == 50
-        s._settings = None
+    monkeypatch.setenv("AGENT_HISTORY_ARCHIVE_BATCH", "25")
+    monkeypatch.setenv("AGENT_HISTORY_MAX_SUMMARIES", "50")
+
+    import grug.config.settings as s
+    s._settings = None
+    from grug.config.settings import get_settings
+
+    settings = get_settings()
+    assert settings.agent_history_archive_batch == 25
+    assert settings.agent_history_max_summaries == 50

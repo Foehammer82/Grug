@@ -1,18 +1,11 @@
-"""Tests for agent tools and pydantic-ai agent setup."""
+"""Tests for agent tools and pydantic-ai agent setup.
 
-import os
+The ``mock_settings`` fixture in conftest.py is autouse and handles env-var
+injection and singleton reset for every test in this module.
+"""
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-
-
-@pytest.fixture(autouse=True)
-def mock_settings(monkeypatch):
-    monkeypatch.setenv("DISCORD_TOKEN", "test-token")
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    import grug.config.settings as s
-    s._settings = None
-    yield
-    s._settings = None
 
 
 def test_base_tool_abc_requires_implementation():
@@ -174,19 +167,20 @@ async def test_load_history_triggers_archival_on_overflow(monkeypatch):
     mock_archiver = AsyncMock()
     mock_archiver.archive = AsyncMock(return_value="summary text")
 
-    with patch("grug.agent.core.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.core.ConversationArchiver", return_value=mock_archiver):
-        from grug.agent import core as agent_core
-        import importlib
-        importlib.reload(agent_core)
+    import importlib
+    from grug.agent import core as agent_core
+    importlib.reload(agent_core)
+
+    with patch.object(agent_core, "get_session_factory", return_value=mock_factory), \
+         patch.object(agent_core, "ConversationArchiver", return_value=mock_archiver):
         grug_agent = agent_core.GrugAgent()
         await grug_agent._load_history(guild_id=1, channel_id=1)
 
     mock_archiver.archive.assert_awaited_once()
-    call_kwargs = mock_archiver.archive.call_args
-    assert call_kwargs.kwargs["guild_id"] == 1
-    assert call_kwargs.kwargs["channel_id"] == 1
-    assert len(call_kwargs.kwargs["messages"]) == 5
+    archive_args = mock_archiver.archive.call_args.args
+    assert archive_args[0] == 1   # guild_id
+    assert archive_args[1] == 1   # channel_id
+    assert len(archive_args[2]) == 5  # overflow messages
 
     s._settings = None
 
@@ -240,11 +234,12 @@ async def test_load_history_skips_archival_below_batch_threshold(monkeypatch):
     mock_archiver = AsyncMock()
     mock_archiver.archive = AsyncMock(return_value="summary")
 
-    with patch("grug.agent.core.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.core.ConversationArchiver", return_value=mock_archiver):
-        from grug.agent import core as agent_core
-        import importlib
-        importlib.reload(agent_core)
+    import importlib
+    from grug.agent import core as agent_core
+    importlib.reload(agent_core)
+
+    with patch.object(agent_core, "get_session_factory", return_value=mock_factory), \
+         patch.object(agent_core, "ConversationArchiver", return_value=mock_archiver):
         grug_agent = agent_core.GrugAgent()
         await grug_agent._load_history(guild_id=1, channel_id=1)
 
@@ -280,6 +275,6 @@ def test_search_conversation_history_tool_formats_results():
              patch("pydantic_ai.models.anthropic.AnthropicModel.__init__", return_value=None):
             built_agent = agent_core.get_agent()
 
-    tool_names = [t.name for t in built_agent._function_tools.values()]
+    tool_names = list(built_agent._function_toolset.tools)
     assert "search_conversation_history" in tool_names
     agent_core._agent = None
