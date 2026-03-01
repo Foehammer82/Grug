@@ -19,10 +19,15 @@ from .auth import (
 from .config import settings
 from .database import get_db
 from .deps import get_current_user
-from .models import CalendarEvent, Document, GuildConfig, Reminder, ScheduledTask
+from .models import CalendarEvent, Document, GlossaryTerm, GlossaryTermHistory, GuildConfig, Reminder, ScheduledTask
 from .schemas import (
     CalendarEventOut,
+    DiscordChannelOut,
     DocumentOut,
+    GlossaryTermCreate,
+    GlossaryTermHistoryOut,
+    GlossaryTermOut,
+    GlossaryTermUpdate,
     GuildConfigOut,
     GuildConfigUpdate,
     GuildOut,
@@ -299,3 +304,177 @@ async def list_reminders(
         select(Reminder).where(Reminder.guild_id == guild_id).order_by(Reminder.remind_at)
     )
     return list(result.scalars().all())
+
+
+# ---------------------------------------------------------------------------
+# Guild channels (proxied from Discord API — used by web UI channel selectors)
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/guilds/{guild_id}/channels", response_model=list[DiscordChannelOut])
+async def list_guild_channels(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> list[DiscordChannelOut]:
+    """Proxy Discord's channel list for a guild so the web UI can display channel names."""
+    import httpx
+
+    _assert_guild_member(str(guild_id), user)
+    bot_token = settings.discord_bot_token
+    if not bot_token:
+        raise HTTPException(status_code=503, detail="Bot token not configured")
+    async with httpx.AsyncClient() as http:
+        resp = await http.get(
+            f"https://discord.com/api/v10/guilds/{guild_id}/channels",
+            headers={"Authorization": f"Bot {bot_token}"},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(status_code=502, detail="Failed to fetch channels from Discord")
+    channels = resp.json()
+    # Only return text channels (type 0) and announcement channels (type 5)
+    return [
+        DiscordChannelOut(id=str(c["id"]), name=c["name"], type=c["type"])
+        for c in channels
+        if c.get("type") in (0, 5)
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Glossary
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/guilds/{guild_id}/glossary", response_model=list[GlossaryTermOut])
+async def list_glossary_terms(
+    guild_id: int,
+    channel_id: int | None = None,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[GlossaryTerm]:
+    """List glossary terms for a guild. Pass ?channel_id= to scope to a channel."""
+    _assert_guild_member(str(guild_id), user)
+    stmt = select(GlossaryTerm).where(GlossaryTerm.guild_id == guild_id)
+    if channel_id is not None:
+        stmt = stmt.where(GlossaryTerm.channel_id == channel_id)
+    stmt = stmt.order_by(GlossaryTerm.term)
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
+@app.post("/api/guilds/{guild_id}/glossary", response_model=GlossaryTermOut, status_code=201)
+async def create_glossary_term(
+    guild_id: int,
+    body: GlossaryTermCreate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GlossaryTerm:
+    """Create a human-authored glossary term."""
+    _assert_guild_member(str(guild_id), user)
+    now = datetime.now(timezone.utc)
+    term = GlossaryTerm(
+        guild_id=guild_id,
+        channel_id=body.channel_id,
+        term=body.term,
+        definition=body.definition,
+        ai_generated=False,
+        originally_ai_generated=False,
+        created_by=int(user["sub"]),
+        updated_at=now,
+    )
+    db.add(term)
+    await db.commit()
+    await db.refresh(term)
+    return term
+
+
+@app.patch("/api/guilds/{guild_id}/glossary/{term_id}", response_model=GlossaryTermOut)
+async def update_glossary_term(
+    guild_id: int,
+    term_id: int,
+    body: GlossaryTermUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GlossaryTerm:
+    """Update a glossary term. Saves a history row first and clears the ai_generated flag."""
+    _assert_guild_member(str(guild_id), user)
+    result = await db.execute(
+        select(GlossaryTerm).where(
+            GlossaryTerm.id == term_id, GlossaryTerm.guild_id == guild_id
+        )
+    )
+    term = result.scalar_one_or_none()
+    if term is None:
+        raise HTTPException(status_code=404, detail="Glossary term not found")
+
+    # Snapshot before changing.
+    history = GlossaryTermHistory(
+        term_id=term.id,
+        guild_id=term.guild_id,
+        old_term=term.term,
+        old_definition=term.definition,
+        old_ai_generated=term.ai_generated,
+        changed_by=int(user["sub"]),
+    )
+    db.add(history)
+
+    if body.term is not None:
+        term.term = body.term
+    if body.definition is not None:
+        term.definition = body.definition
+    # Human edit → clear the AI ownership flag; originally_ai_generated is never touched.
+    term.ai_generated = False
+    term.updated_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(term)
+    return term
+
+
+@app.delete("/api/guilds/{guild_id}/glossary/{term_id}", status_code=204)
+async def delete_glossary_term(
+    guild_id: int,
+    term_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a glossary term (and its history via cascade)."""
+    _assert_guild_member(str(guild_id), user)
+    result = await db.execute(
+        select(GlossaryTerm).where(
+            GlossaryTerm.id == term_id, GlossaryTerm.guild_id == guild_id
+        )
+    )
+    term = result.scalar_one_or_none()
+    if term is None:
+        raise HTTPException(status_code=404, detail="Glossary term not found")
+    await db.delete(term)
+    await db.commit()
+
+
+@app.get(
+    "/api/guilds/{guild_id}/glossary/{term_id}/history",
+    response_model=list[GlossaryTermHistoryOut],
+)
+async def get_glossary_term_history(
+    guild_id: int,
+    term_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[GlossaryTermHistory]:
+    """Retrieve the full change history for a glossary term."""
+    _assert_guild_member(str(guild_id), user)
+    # Verify the term belongs to this guild.
+    term_result = await db.execute(
+        select(GlossaryTerm).where(
+            GlossaryTerm.id == term_id, GlossaryTerm.guild_id == guild_id
+        )
+    )
+    if term_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Glossary term not found")
+
+    history_result = await db.execute(
+        select(GlossaryTermHistory)
+        .where(GlossaryTermHistory.term_id == term_id)
+        .order_by(GlossaryTermHistory.changed_at.desc())
+    )
+    return list(history_result.scalars().all())

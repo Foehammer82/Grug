@@ -80,6 +80,7 @@ async def main() -> None:
     await bot.load_extension("grug.bot.cogs.ai_chat")
     await bot.load_extension("grug.bot.cogs.documents")
     await bot.load_extension("grug.bot.cogs.admin")
+    await bot.load_extension("grug.bot.cogs.glossary")
 
     logger.info("Starting Discord bot...")
     try:

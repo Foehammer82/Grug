@@ -127,3 +127,61 @@ class ConversationMessage(Base):
     author_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+class GlossaryTerm(Base):
+    """A guild- or channel-scoped glossary term for campaign/server-specific definitions.
+
+    channel_id = None  -> guild-wide definition
+    channel_id = <id>  -> channel-level override (takes precedence over guild-wide)
+    """
+
+    __tablename__ = "glossary_terms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
+    )
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    term: Mapped[str] = mapped_column(String(256), nullable=False)
+    definition: Mapped[str] = mapped_column(Text, nullable=False)
+    # True while the agent owns this definition; flipped to False on any human edit.
+    ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Set once at creation; never mutated — records whether AI originally coined this term.
+    originally_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Discord user snowflake; 0 is the sentinel for the agent.
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    history: Mapped[list["GlossaryTermHistory"]] = relationship(
+        back_populates="term_ref", cascade="all, delete-orphan"
+    )
+
+
+class GlossaryTermHistory(Base):
+    """Immutable audit log of every change made to a glossary term."""
+
+    __tablename__ = "glossary_term_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    term_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("glossary_terms.id"), nullable=False, index=True
+    )
+    # Denormalised for fast guild-scoped history queries without a join.
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    old_term: Mapped[str] = mapped_column(String(256), nullable=False)
+    old_definition: Mapped[str] = mapped_column(Text, nullable=False)
+    old_ai_generated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    # Discord user snowflake; 0 = agent.
+    changed_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    term_ref: Mapped["GlossaryTerm"] = relationship(back_populates="history")

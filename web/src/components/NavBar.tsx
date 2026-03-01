@@ -39,6 +39,7 @@ export default function NavBar() {
           <Link to={`/guilds/${guildId}/events`} style={linkStyle}>Events</Link>
           <Link to={`/guilds/${guildId}/tasks`} style={linkStyle}>Tasks</Link>
           <Link to={`/guilds/${guildId}/documents`} style={linkStyle}>Documents</Link>
+          <Link to={`/guilds/${guildId}/glossary`} style={linkStyle}>Glossary</Link>
         </>
       )}
       <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

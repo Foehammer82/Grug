@@ -89,3 +89,48 @@ class ReminderOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class GlossaryTermOut(BaseModel):
+    id: int
+    guild_id: int
+    channel_id: int | None
+    term: str
+    definition: str
+    ai_generated: bool
+    originally_ai_generated: bool
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GlossaryTermCreate(BaseModel):
+    term: str
+    definition: str
+    channel_id: int | None = None
+
+
+class GlossaryTermUpdate(BaseModel):
+    term: str | None = None
+    definition: str | None = None
+
+
+class GlossaryTermHistoryOut(BaseModel):
+    id: int
+    term_id: int
+    guild_id: int
+    old_term: str
+    old_definition: str
+    old_ai_generated: bool
+    changed_by: int
+    changed_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DiscordChannelOut(BaseModel):
+    id: str
+    name: str
+    type: int

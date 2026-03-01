@@ -90,3 +90,39 @@ class ScheduledTask(Base):
     last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class GlossaryTerm(Base):
+    __tablename__ = "glossary_terms"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    term: Mapped[str] = mapped_column(String(256), nullable=False)
+    definition: Mapped[str] = mapped_column(Text, nullable=False)
+    ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)
+    originally_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class GlossaryTermHistory(Base):
+    __tablename__ = "glossary_term_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    term_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    old_term: Mapped[str] = mapped_column(String(256), nullable=False)
+    old_definition: Mapped[str] = mapped_column(Text, nullable=False)
+    old_ai_generated: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    changed_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    changed_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )

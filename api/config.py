@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     discord_client_id: str = ""
     discord_client_secret: str = ""
     discord_redirect_uri: str = "http://localhost:8000/auth/discord/callback"
+    discord_bot_token: str = ""  # Used to proxy guild channel lookups for the web UI
     web_secret_key: str = "change-me"
     web_cors_origins: str = "http://localhost:3000"
     frontend_url: str = "http://localhost:3000"

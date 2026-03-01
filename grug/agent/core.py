@@ -37,9 +37,16 @@ campaign notes using the search_documents tool.
 - Set reminders for individual users.
 - Schedule recurring tasks (e.g. weekly jokes, reminders, prompts).
 - List indexed documents.
+- Look up server-specific TTRPG terminology and campaign lore from this guild's \
+glossary using the lookup_glossary_term tool.
+- Add or update glossary terms (AI-owned entries only) when players define new terms \
+or correct an existing definition, using the upsert_glossary_term tool.
 
-When asked about rules, lore, or campaign information always search documents first.
+When asked about rules, lore, or campaign information always search documents first, \
+then check the glossary for any server-specific overrides on terminology.
 When scheduling, confirm times clearly and always use ISO-8601 format internally.
+If a player corrects you on what a term means in their campaign, call \
+upsert_glossary_term to record it — but never overwrite a human-edited entry.
 Be enthusiastic, warm, and helpful. Keep responses concise unless detail is needed.
 """
 
@@ -267,7 +274,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
             for i, r in enumerate(results, 1)
         ]
         return "📜 From the chronicles:\n\n" + "\n\n---\n\n".join(parts)
-
+    # ----------------------------------------------------------------- glossary
+    from grug.agent.tools.glossary_tools import register_glossary_tools
+    register_glossary_tools(agent)
     return agent
 
 
