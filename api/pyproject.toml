@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grug-api"
+version = "0.1.0"
+description = "FastAPI web companion for Grug"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn>=0.27.0",
+    "python-jose[cryptography]>=3.3.0",
+    "grug",
+]
+
+[tool.uv.sources]
+grug = { workspace = true }
+
+# Tell setuptools to look one level up (the repo root) for the `api` package,
+# since this pyproject.toml lives inside the `api/` directory itself.
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["api*"]
