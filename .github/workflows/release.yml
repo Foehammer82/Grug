@@ -33,9 +33,9 @@ jobs:
           echo "Base version from pyproject.toml: ${BASE_VERSION}"
 
           # Find the highest build number already published for this base version.
-          # Tags look like v0.1.0.0, v0.1.0.1, …
-          HIGHEST=$(git tag -l "v${BASE_VERSION}.*" \
-            | sed "s/v${BASE_VERSION}\.//" \
+          # Tags look like 0.1.0.0, 0.1.0.1, …
+          HIGHEST=$(git tag -l "${BASE_VERSION}.*" \
+            | sed "s/${BASE_VERSION}\.//" \
             | grep -E '^[0-9]+$' \
             | sort -n \
             | tail -1)
@@ -46,7 +46,7 @@ jobs:
             BUILD_NUM=$((HIGHEST + 1))
           fi
 
-          NEW_TAG="v${BASE_VERSION}.${BUILD_NUM}"
+          NEW_TAG="${BASE_VERSION}.${BUILD_NUM}"
           echo "new_tag=${NEW_TAG}" >> "$GITHUB_OUTPUT"
           echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
           echo "build_num=${BUILD_NUM}" >> "$GITHUB_OUTPUT"

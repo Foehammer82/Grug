@@ -8,11 +8,25 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Install Python dependencies
-COPY pyproject.toml uv.lock* ./
-RUN uv sync --no-dev --frozen
+# Silence hard-link warnings — cache and sync target are on different
+# filesystems inside Docker, so uv must copy instead of link.
+ENV UV_LINK_MODE=copy
 
+# Install external dependencies only (no workspace packages yet).
+# Bind mounts expose the lockfile and all pyproject.toml files to uv
+# without writing them into the image layer, keeping this layer
+# cache-friendly: it only re-runs when the lock or manifests change.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
+    --mount=type=bind,source=grug/pyproject.toml,target=grug/pyproject.toml \
+    --mount=type=bind,source=api/pyproject.toml,target=api/pyproject.toml \
+    uv sync --no-dev --frozen --no-install-workspace
+
+# Copy full source then install workspace packages into the cached venv.
 COPY . .
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --frozen
 
 # Create data directories
 RUN mkdir -p /app/chroma_data
