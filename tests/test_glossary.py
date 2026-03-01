@@ -306,7 +306,7 @@ async def test_agent_can_create_new_term():
 
     with (
         patch("grug.db.session.get_session_factory", return_value=fake_factory),
-        patch("grug.agent.core._ensure_guild", new=AsyncMock()),
+        patch("grug.utils.ensure_guild", new=AsyncMock()),
     ):
         import grug.agent.tools.glossary_tools as gt_module
         from pydantic_ai import Agent

@@ -66,9 +66,13 @@ def _build_agent() -> Agent[GrugDeps, str]:
         model,
         deps_type=GrugDeps,
         output_type=str,
-        system_prompt=SYSTEM_PROMPT.format(now=datetime.now(timezone.utc).isoformat()),
         toolsets=toolsets,
     )
+
+    @agent.system_prompt
+    def _system_prompt(_ctx: RunContext[GrugDeps]) -> str:  # noqa: ARG001
+        """Evaluate the system prompt fresh on every run so `now` stays current."""
+        return SYSTEM_PROMPT.format(now=datetime.now(timezone.utc).isoformat())
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
     from grug.agent.tools.character_tools import register_character_tools
@@ -196,6 +200,32 @@ class GrugAgent:
             rows = list(reversed(recent_result.scalars().all()))
 
         messages: list[ModelRequest | ModelResponse] = []
+
+        # Inject a voice reminder at the top of history so the model sees
+        # the correct style even when stale history contains bad examples.
+        messages.append(
+            ModelRequest(
+                parts=[
+                    UserPromptPart(
+                        content=(
+                            "[SYSTEM REMINDER] You are Grug. Speak like an orc. "
+                            "No emoji. No markdown. No contractions. No 'I' or 'me'. "
+                            "Say 'Grug' instead. Keep it short and punchy."
+                        )
+                    )
+                ]
+            )
+        )
+        messages.append(
+            ModelResponse(
+                parts=[
+                    TextPart(
+                        content="Grug understand! Grug always talk like Grug. No fancy stuff!"
+                    )
+                ]
+            )
+        )
+
         for row in rows:
             if row.role == "user":
                 content = (
@@ -244,11 +274,17 @@ class GrugAgent:
         is_dm_session: bool = False,
     ) -> str:
         """Process a user message and return Grug's response."""
-        await self._save_message(
-            guild_id, channel_id, "user", message, user_id, username
-        )
+        try:
+            # Load history BEFORE saving the current message so the incoming
+            # message isn't included in message_history AND the run() call.
+            history = await self._load_history(guild_id, channel_id)
+            await self._save_message(
+                guild_id, channel_id, "user", message, user_id, username
+            )
+        except Exception as exc:
+            logger.exception("Failed to load/save conversation history: %s", exc)
+            history = []
 
-        history = await self._load_history(guild_id, channel_id)
         deps = GrugDeps(
             guild_id=guild_id,
             channel_id=channel_id,
@@ -270,5 +306,9 @@ class GrugAgent:
             logger.exception("Agent run failed: %s", exc)
             response_text = "Grug brain confused... something go wrong. Try again?"
 
-        await self._save_message(guild_id, channel_id, "assistant", response_text)
+        try:
+            await self._save_message(guild_id, channel_id, "assistant", response_text)
+        except Exception as exc:
+            logger.exception("Failed to save assistant message: %s", exc)
+
         return response_text

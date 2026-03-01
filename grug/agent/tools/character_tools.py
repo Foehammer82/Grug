@@ -13,15 +13,15 @@ from typing import TYPE_CHECKING
 from pydantic_ai import RunContext
 from sqlalchemy import select
 
+from grug.agent.core import GrugDeps
+
 if TYPE_CHECKING:
     from pydantic_ai import Agent
-
-    from grug.agent.core import GrugDeps
 
 logger = logging.getLogger(__name__)
 
 
-def register_character_tools(agent: "Agent[GrugDeps, str]") -> None:
+def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
     """Register all character-sheet tools on *agent*."""
 
     @agent.tool

@@ -30,7 +30,7 @@ def test_settings_mcp_config_json_parsing(monkeypatch):
 
     import grug.config.settings as s
 
-    s._settings = None
+    s.get_settings.cache_clear()
     from grug.config.settings import get_settings
 
     settings = get_settings()
@@ -44,7 +44,7 @@ def test_settings_custom_model(monkeypatch):
 
     import grug.config.settings as s
 
-    s._settings = None
+    s.get_settings.cache_clear()
     from grug.config.settings import get_settings
 
     settings = get_settings()
@@ -67,7 +67,7 @@ def test_settings_history_archive_overrides(monkeypatch):
 
     import grug.config.settings as s
 
-    s._settings = None
+    s.get_settings.cache_clear()
     from grug.config.settings import get_settings
 
     settings = get_settings()

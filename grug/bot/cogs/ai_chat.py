@@ -24,6 +24,40 @@ class AIChatCog(commands.Cog, name="AI Chat"):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self._agent = GrugAgent()
+        self._history_flushed = False
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        """Flush conversation history on startup when FLUSH_CHAT_HISTORY=true."""
+        if self._history_flushed:
+            return
+        self._history_flushed = True
+
+        from grug.config.settings import get_settings
+
+        if not get_settings().flush_chat_history:
+            return
+
+        try:
+            from grug.db.models import ConversationMessage
+            from grug.db.session import get_session_factory
+            from sqlalchemy import update
+
+            factory = get_session_factory()
+            async with factory() as session:
+                result = await session.execute(
+                    update(ConversationMessage)
+                    .where(ConversationMessage.archived.is_(False))
+                    .values(archived=True)
+                )
+                await session.commit()
+                count = result.rowcount  # type: ignore[union-attr]
+                if count:
+                    logger.info(
+                        "FLUSH_CHAT_HISTORY enabled — archived %d messages", count
+                    )
+        except Exception:
+            logger.exception("Failed to flush conversation history on startup")
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message) -> None:
@@ -52,18 +86,27 @@ class AIChatCog(commands.Cog, name="AI Chat"):
         # Resolve campaign_id for this channel (used for campaign-scoped RAG).
         campaign_id = await get_campaign_id_for_channel(message.channel.id)
 
-        async with message.channel.typing():
-            response = await self._agent.respond(
-                guild_id=message.guild.id,
-                channel_id=message.channel.id,
-                user_id=message.author.id,
-                username=message.author.display_name,
-                message=content,
-                campaign_id=campaign_id,
+        try:
+            async with message.channel.typing():
+                response = await self._agent.respond(
+                    guild_id=message.guild.id,
+                    channel_id=message.channel.id,
+                    user_id=message.author.id,
+                    username=message.author.display_name,
+                    message=content,
+                    campaign_id=campaign_id,
+                )
+            for chunk in _split_message(response):
+                await message.channel.send(chunk)
+        except Exception:
+            logger.exception(
+                "Unhandled error in on_message for guild %s channel %s",
+                message.guild.id,
+                message.channel.id,
             )
-
-        for chunk in _split_message(response):
-            await message.channel.send(chunk)
+            await message.channel.send(
+                "Grug brain hurt... something go very wrong. Try again?"
+            )
 
     async def _handle_dm(self, message: discord.Message) -> None:
         """Process a direct message from a user."""

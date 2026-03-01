@@ -58,7 +58,9 @@ async def main() -> None:
     logger.info("Starting Grug...")
 
     # Initialise database
+    logger.info("Initialising database...")
     await init_db()
+    logger.info("Database ready.")
 
     # Create bot
     bot = create_bot()
@@ -83,6 +85,18 @@ async def main() -> None:
     await bot.load_extension("grug.bot.cogs.glossary")
     await bot.load_extension("grug.bot.cogs.campaigns")
     await bot.load_extension("grug.bot.cogs.characters")
+
+    # Pre-warm the agent so any init errors surface at startup, not on first message.
+    logger.info("Pre-warming agent...")
+    try:
+        from grug.agent.core import get_agent
+
+        get_agent()
+        logger.info("Agent ready.")
+    except Exception:
+        logger.exception(
+            "Agent failed to initialise — bot will start but responses may fail."
+        )
 
     logger.info("Starting Discord bot...")
     try:

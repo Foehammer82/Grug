@@ -32,10 +32,10 @@ class GuildConfig(Base):
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -68,7 +68,7 @@ class Campaign(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
@@ -98,10 +98,10 @@ class Character(Base):
     # Relative path within the grug_files volume, e.g. characters/123/fighter.pdf
     file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -125,7 +125,7 @@ class UserProfile(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     active_character: Mapped["Character | None"] = relationship(
@@ -148,7 +148,7 @@ class Document(Base):
     # Optional campaign association; NULL means document is guild-wide.
     campaign_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
 
@@ -163,12 +163,16 @@ class CalendarEvent(Base):
     )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-    start_time: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    start_time: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    end_time: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
@@ -186,10 +190,10 @@ class Reminder(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
-    remind_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="reminders")
@@ -209,10 +213,12 @@ class ScheduledTask(Base):
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
     cron_expression: Mapped[str] = mapped_column(String(128), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_run: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="scheduled_tasks")
@@ -236,7 +242,7 @@ class ConversationMessage(Base):
         Boolean, default=False, server_default="false", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
 
@@ -265,10 +271,10 @@ class GlossaryTerm(Base):
     # Discord user snowflake; 0 is the sentinel for the agent.
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
@@ -295,7 +301,7 @@ class GlossaryTermHistory(Base):
     # Discord user snowflake; 0 = agent.
     changed_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     changed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     term_ref: Mapped["GlossaryTerm"] = relationship(back_populates="history")

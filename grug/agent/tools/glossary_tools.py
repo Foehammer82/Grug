@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING
 from pydantic_ai import RunContext
 from sqlalchemy import or_, select
 
+from grug.agent.core import GrugDeps
+
 if TYPE_CHECKING:
     from pydantic_ai import Agent
-
-    from grug.agent.core import GrugDeps
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 _AGENT_USER_ID = 0
 
 
-def register_glossary_tools(agent: "Agent[GrugDeps, str]") -> None:
+def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
     """Register all glossary tools on the provided pydantic-ai Agent."""
 
     @agent.tool

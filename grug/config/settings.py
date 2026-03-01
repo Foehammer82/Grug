@@ -1,5 +1,6 @@
 """Configuration settings for Grug loaded from environment variables."""
 
+from functools import cache
 import json
 from typing import Any
 
@@ -19,7 +20,7 @@ class Settings(BaseSettings):
     # Anthropic
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     anthropic_model: str = Field(
-        default="claude-3-5-sonnet-20241022",
+        default="claude-sonnet-4-6",
         description="Anthropic model to use",
     )
 
@@ -52,20 +53,9 @@ class Settings(BaseSettings):
 
     # Database
     database_url: str = Field(
-        default="sqlite+aiosqlite:///./grug.db",
-        description="SQLAlchemy async database URL",
+        default="postgresql+asyncpg://grug:grug@localhost:5432/grug",
+        description="SQLAlchemy async database URL (Postgres required)",
     )
-
-    # ChromaDB (only relevant when vector_backend == 'chroma')
-    chroma_persist_dir: str = Field(
-        default="./chroma_data",
-        description="Directory to persist ChromaDB data",
-    )
-
-    @property
-    def vector_backend(self) -> str:
-        """Derived from DATABASE_URL — 'pgvector' for Postgres, 'chroma' otherwise."""
-        return "pgvector" if self.database_url.startswith("postgresql") else "chroma"
 
     # Scheduler
     scheduler_timezone: str = Field(
@@ -103,6 +93,10 @@ class Settings(BaseSettings):
         default=100,
         description="Max number of per-channel history summaries kept in the vector store (oldest pruned beyond this)",
     )
+    flush_chat_history: bool = Field(
+        default=False,
+        description="Archive all conversation history on startup (useful for testing prompt changes)",
+    )
 
     # File storage — uploaded character sheets are persisted here.
     file_data_dir: str = Field(
@@ -117,9 +111,7 @@ class Settings(BaseSettings):
 _settings: Settings | None = None
 
 
+@cache
 def get_settings() -> Settings:
     """Return the cached Settings instance."""
-    global _settings
-    if _settings is None:
-        _settings = Settings()
-    return _settings
+    return Settings()

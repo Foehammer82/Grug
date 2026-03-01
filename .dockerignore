@@ -1,0 +1,29 @@
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+
+# Secrets — never send .env to the Docker daemon
+.env
+.env.*
+!.env.example
+
+# Frontend — has its own build context (web/Dockerfile)
+web/
+
+# Dev / docs — not needed in any container image
+docs/
+tests/
+*.md
+!README.md
+
+# Misc
+.github/
+postgres/
+scripts/

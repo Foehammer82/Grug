@@ -22,9 +22,9 @@ def mock_settings(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
     import grug.config.settings as s
 
-    s._settings = None
+    s.get_settings.cache_clear()
     yield
-    s._settings = None
+    s.get_settings.cache_clear()
 
 
 # ---------------------------------------------------------------------------
@@ -59,29 +59,6 @@ def mock_db_session():
     mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
 
     return mock_factory, mock_session
-
-
-# ---------------------------------------------------------------------------
-# ChromaDB
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def mock_chromadb():
-    """Patch ``chromadb.PersistentClient`` and yield the mock client instance.
-
-    The yielded object is the *instance* returned by the patched constructor,
-    so tests can configure ``get_or_create_collection``, ``query``, etc. on it.
-    Also resets the vector store singleton so each test gets a fresh instance
-    backed by the mock client.
-    """
-    import grug.rag.vector_store as vs
-
-    mock_client = MagicMock()
-    vs._store = None  # reset singleton before patching
-    with patch("chromadb.PersistentClient", return_value=mock_client):
-        yield mock_client
-    vs._store = None  # clean up after the test
 
 
 # ---------------------------------------------------------------------------

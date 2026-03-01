@@ -142,26 +142,13 @@ _store: VectorStore | None = None
 def get_vector_store() -> VectorStore:
     """Return the process-wide VectorStore instance (lazy, thread-safe-ish).
 
-    The backend is selected automatically from settings:
-    - ``postgresql+asyncpg://…`` → PGVectorStore
-    - anything else             → ChromaVectorStore (default)
+    Always uses the pgvector backend (Postgres required).
     """
     global _store
     if _store is None:
-        from grug.config.settings import get_settings
+        from grug.db.session import get_session_factory
+        from grug.rag.backends.pgvector_store import PGVectorStore
 
-        settings = get_settings()
-        if settings.vector_backend == "pgvector":
-            from grug.db.session import get_session_factory
-            from grug.rag.backends.pgvector_store import PGVectorStore
-
-            logger.info("Vector backend: pgvector (Postgres)")
-            _store = PGVectorStore(get_session_factory())
-        else:
-            from grug.rag.backends.chroma_store import ChromaVectorStore
-
-            logger.info(
-                "Vector backend: ChromaDB (path=%s)", settings.chroma_persist_dir
-            )
-            _store = ChromaVectorStore(settings.chroma_persist_dir)
+        logger.info("Vector backend: pgvector (Postgres)")
+        _store = PGVectorStore(get_session_factory())
     return _store

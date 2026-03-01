@@ -96,14 +96,13 @@ async def test_load_history_triggers_archival_on_overflow(monkeypatch):
     """When unarchived message count exceeds window + batch, archiver is called."""
     import grug.config.settings as s
 
-    s._settings = None
+    s.get_settings.cache_clear()
     monkeypatch.setenv("DISCORD_TOKEN", "t")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     # window=5, batch=3 → archive fires when total > 8
     monkeypatch.setenv("AGENT_CONTEXT_WINDOW", "5")
     monkeypatch.setenv("AGENT_HISTORY_ARCHIVE_BATCH", "3")
-    s._settings = None
-
+    s.get_settings.cache_clear()
     from datetime import datetime, timezone
     from grug.db.models import ConversationMessage
 
@@ -168,7 +167,7 @@ async def test_load_history_triggers_archival_on_overflow(monkeypatch):
     assert archive_args[1] == 1  # channel_id
     assert len(archive_args[2]) == 5  # overflow messages
 
-    s._settings = None
+    s.get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
@@ -176,12 +175,12 @@ async def test_load_history_skips_archival_below_batch_threshold(monkeypatch):
     """Archiver is NOT called when overflow is smaller than the batch size."""
     import grug.config.settings as s
 
-    s._settings = None
+    s.get_settings.cache_clear()
     monkeypatch.setenv("DISCORD_TOKEN", "t")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
     monkeypatch.setenv("AGENT_CONTEXT_WINDOW", "5")
     monkeypatch.setenv("AGENT_HISTORY_ARCHIVE_BATCH", "10")  # batch > any overflow
-    s._settings = None
+    s.get_settings.cache_clear()
 
     from datetime import datetime, timezone
     from grug.db.models import ConversationMessage
@@ -234,7 +233,7 @@ async def test_load_history_skips_archival_below_batch_threshold(monkeypatch):
         await grug_agent._load_history(guild_id=1, channel_id=1)
 
     mock_archiver.archive.assert_not_awaited()
-    s._settings = None
+    s.get_settings.cache_clear()
 
 
 # ---------------------------------------------------------------------------

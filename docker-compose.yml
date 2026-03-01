@@ -1,21 +1,21 @@
 services:
   # ------------------------------------------------------------------ #
-  # Postgres with pgvector — optional, used when DATABASE_URL points    #
-  # at this service (see .env.example for the two deployment profiles). #
+  # Postgres with pgvector                                               #
+  # DB credentials and DATABASE_URL are set directly in this file.      #
   # ------------------------------------------------------------------ #
   postgres:
     build: ./postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-grug}
-      POSTGRES_USER: ${POSTGRES_USER:-grug}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-grug}
+      POSTGRES_DB: grug
+      POSTGRES_USER: grug
+      POSTGRES_PASSWORD: grug
     volumes:
       - grug_postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-grug} -d ${POSTGRES_DB:-grug}"]
+      test: ["CMD-SHELL", "pg_isready -U grug -d grug"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,17 +27,13 @@ services:
       - .env
     volumes:
       - grug_db:/app/data
-      - grug_chroma:/app/chroma_data
       - grug_files:/app/file_data
     environment:
-      # DATABASE_URL is read from .env — no default here so the .env value wins.
-      # Set CHROMA_PERSIST_DIR only when using the SQLite/Chroma profile.
-      - CHROMA_PERSIST_DIR=/app/chroma_data
+      - DATABASE_URL=postgresql+asyncpg://grug:grug@postgres:5432/grug
       - FILE_DATA_DIR=/app/file_data
     depends_on:
       postgres:
         condition: service_healthy
-        required: false
 
   api:
     build:
@@ -48,6 +44,8 @@ services:
       - .env
     volumes:
       - grug_db:/app/data
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://grug:grug@postgres:5432/grug
     ports:
       - "8000:8000"
     depends_on:
@@ -64,6 +62,5 @@ services:
 
 volumes:
   grug_db:
-  grug_chroma:
   grug_files:
   grug_postgres_data:

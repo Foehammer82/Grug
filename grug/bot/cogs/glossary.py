@@ -296,4 +296,6 @@ class GlossaryCog(commands.Cog, name="Glossary"):
 async def setup(bot: commands.Bot) -> None:
     cog = GlossaryCog(bot)
     await bot.add_cog(cog)
-    bot.tree.add_command(cog.glossary_group)
+    # Note: add_cog() automatically registers app_commands.Group attributes
+    # defined on the Cog class.  Calling bot.tree.add_command() here as well
+    # would double-register the group and raise CommandAlreadyRegistered.

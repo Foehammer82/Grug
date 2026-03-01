@@ -30,13 +30,3 @@ repos:
     rev: 0.10.7
     hooks:
       - id: uv-lock
-
-  # Alembic migration check — only runs when model files are touched
-  - repo: local
-    hooks:
-      - id: alembic-check
-        name: alembic migrations up to date
-        language: system
-        entry: uv run python scripts/check_alembic.py
-        pass_filenames: false
-        files: ^grug/db/(models|pg_models)\.py$

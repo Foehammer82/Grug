@@ -1,9 +1,8 @@
 """Archival of conversation history into the vector store for long-term RAG recall.
 
 When the active message window overflows, old messages are summarised by Claude
-into a compact narrative chunk and stored via the configured VectorStore backend
-(ChromaDB or pgvector). This keeps Grug's memory from growing unbounded while
-preserving the lore.
+into a compact narrative chunk and stored in the pgvector backend. This keeps
+Grug's memory from growing unbounded while preserving the lore.
 """
 
 import logging

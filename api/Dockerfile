@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     --mount=type=bind,source=grug/pyproject.toml,target=grug/pyproject.toml \
     --mount=type=bind,source=api/pyproject.toml,target=api/pyproject.toml \
-    uv sync --no-dev --frozen --no-install-workspace
+    uv sync --all-packages --no-dev --frozen --no-install-workspace
 
 # Copy the full source tree — the API imports from the grug package.
 COPY grug/ grug/
@@ -29,6 +29,6 @@ COPY api/ api/
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --no-dev --frozen
+    uv sync --all-packages --no-dev --frozen
 
 CMD ["uv", "run", "uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

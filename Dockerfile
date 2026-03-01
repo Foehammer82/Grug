@@ -23,9 +23,14 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=api/pyproject.toml,target=api/pyproject.toml \
     uv sync --no-dev --frozen --no-install-workspace
 
-# Copy full source then install workspace packages into the cached venv.
-COPY . .
+# Copy only what the bot needs — api/, web/, docs/, tests/ etc. are excluded.
+COPY grug/ grug/
+COPY main.py main.py
+COPY alembic/ alembic/
+COPY alembic.ini alembic.ini
 RUN --mount=type=cache,target=/root/.cache/uv \
+    --mount=type=bind,source=uv.lock,target=uv.lock \
+    --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --no-dev --frozen
 
 # Create data directories

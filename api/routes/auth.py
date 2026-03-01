@@ -68,7 +68,10 @@ async def get_me(user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
 
 
 @router.post("/logout")
-async def logout(response: Response) -> dict[str, str]:
+async def logout(
+    response: Response,
+    _user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, str]:
     """Clear the session cookie."""
     response.delete_cookie("session")
     return {"status": "ok"}

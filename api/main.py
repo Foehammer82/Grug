@@ -5,9 +5,10 @@ models, and database sessions all live in the ``grug`` package — the API
 layer is a thin HTTP skin on top.
 """
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.deps import get_current_user
 from api.routes import auth, documents, events, glossary, guilds
 from grug.config.settings import get_settings
 
@@ -23,9 +24,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register route modules.
+# Public auth routes (login redirect & OAuth callback must be unauthenticated).
 app.include_router(auth.router)
-app.include_router(guilds.router)
-app.include_router(events.router)
-app.include_router(documents.router)
-app.include_router(glossary.router)
+
+# All remaining routes require an authenticated session at the router level.
+# Individual endpoints that also declare Depends(get_current_user) to access
+# the user object are fine — FastAPI deduplicates the dependency call.
+_auth_required = [Depends(get_current_user)]
+app.include_router(guilds.router, dependencies=_auth_required)
+app.include_router(events.router, dependencies=_auth_required)
+app.include_router(documents.router, dependencies=_auth_required)
+app.include_router(glossary.router, dependencies=_auth_required)
