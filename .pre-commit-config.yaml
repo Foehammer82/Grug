@@ -30,3 +30,15 @@ repos:
     rev: 0.10.7
     hooks:
       - id: uv-lock
+
+  # Auto-generate an Alembic migration when ORM model files change.
+  # Requires Postgres to be reachable (DATABASE_URL in .env).
+  # Pauses the commit after generation so you can review the file.
+  - repo: local
+    hooks:
+      - id: alembic-autogenerate
+        name: alembic autogenerate migration
+        entry: uv run python scripts/alembic_autogenerate.py
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]
