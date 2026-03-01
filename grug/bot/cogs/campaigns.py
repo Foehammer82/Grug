@@ -8,14 +8,9 @@ from sqlalchemy import select
 
 from grug.db.models import Campaign
 from grug.db.session import get_session_factory
+from grug.utils import GAME_SYSTEM_LABELS
 
 logger = logging.getLogger(__name__)
-
-_KNOWN_SYSTEMS = {
-    "dnd5e": "D&D 5e",
-    "pf2e": "Pathfinder 2e",
-    "unknown": "Unknown / Homebrew",
-}
 
 
 class CampaignsCog(commands.Cog, name="Campaigns"):
@@ -68,7 +63,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
             f"⚔️ Campaign **{name}** created (ID: {campaign_id})!\n"
             "Documents uploaded here will be scoped to this campaign.\n"
             f"Set the game system: `!campaign set_system <system>`  "
-            f"(options: {', '.join(_KNOWN_SYSTEMS.keys())})"
+            f"(options: {', '.join(GAME_SYSTEM_LABELS.keys())})"
         )
 
     @campaign_group.command(name="info")
@@ -105,7 +100,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
                 .all()
             )
 
-        system_label = _KNOWN_SYSTEMS.get(campaign.system, campaign.system)
+        system_label = GAME_SYSTEM_LABELS.get(campaign.system, campaign.system)
         embed = discord.Embed(title=f"⚔️ {campaign.name}", color=discord.Color.gold())
         embed.add_field(name="System", value=system_label, inline=True)
         embed.add_field(
@@ -143,7 +138,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
             ).scalar_one()
             row.system = system
             await session.commit()
-        label = _KNOWN_SYSTEMS.get(system, system)
+        label = GAME_SYSTEM_LABELS.get(system, system)
         await ctx.send(f"🎲 Campaign system updated to **{label}**.")
 
     @campaign_group.command(name="list")
@@ -166,7 +161,7 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
             return
         embed = discord.Embed(title="⚔️ Campaigns", color=discord.Color.gold())
         for c in campaigns:
-            system_label = _KNOWN_SYSTEMS.get(c.system, c.system)
+            system_label = GAME_SYSTEM_LABELS.get(c.system, c.system)
             value = f"System: {system_label}\nChannel: <#{c.channel_id}>"
             if not c.is_active:
                 value += "\n*(inactive)*"

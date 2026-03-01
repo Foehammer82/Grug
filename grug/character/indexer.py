@@ -4,27 +4,14 @@ import logging
 import uuid
 
 from grug.rag.vector_store import VectorStore, get_vector_store
+from grug.utils import chunk_text
 
 logger = logging.getLogger(__name__)
 
-# Characters are chunked into smaller sections so keyword queries land on
-# the right part of the sheet (e.g. "what are my spells" vs "what is my AC").
-_CHUNK_SIZE = 800
-_CHUNK_OVERLAP = 100
-
-
-def _chunk_text(text: str) -> list[str]:
-    if not text:
-        return []
-    chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + _CHUNK_SIZE, len(text))
-        chunks.append(text[start:end])
-        if end == len(text):
-            break
-        start += _CHUNK_SIZE - _CHUNK_OVERLAP
-    return chunks
+# Character sheets use smaller chunks so keyword queries land on the
+# right section (e.g. "what are my spells" vs "what is my AC").
+_CHAR_CHUNK_SIZE = 800
+_CHAR_CHUNK_OVERLAP = 100
 
 
 class CharacterIndexer:
@@ -42,7 +29,9 @@ class CharacterIndexer:
         # Clear any previous index for this character (handles re-uploads).
         await self._store.character_delete_all(character_id)
 
-        chunks = _chunk_text(raw_text)
+        chunks = chunk_text(
+            raw_text, chunk_size=_CHAR_CHUNK_SIZE, overlap=_CHAR_CHUNK_OVERLAP
+        )
         if not chunks:
             return 0
 

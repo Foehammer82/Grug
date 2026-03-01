@@ -15,21 +15,6 @@ from grug.scheduler.manager import get_scheduler, remove_job
 logger = logging.getLogger(__name__)
 
 
-async def _ensure_guild(guild_id: int) -> GuildConfig:
-    factory = get_session_factory()
-    async with factory() as session:
-        result = await session.execute(
-            select(GuildConfig).where(GuildConfig.guild_id == guild_id)
-        )
-        cfg = result.scalar_one_or_none()
-        if cfg is None:
-            cfg = GuildConfig(guild_id=guild_id)
-            session.add(cfg)
-            await session.commit()
-            await session.refresh(cfg)
-    return cfg
-
-
 class AdminCog(commands.Cog, name="Admin"):
     """Administrative commands for configuring Grug."""
 
@@ -48,7 +33,7 @@ class AdminCog(commands.Cog, name="Admin"):
             color=discord.Color.blurple(),
             timestamp=datetime.now(timezone.utc),
         )
-        embed.add_field(name="Model", value=settings.openai_model, inline=True)
+        embed.add_field(name="Model", value=settings.anthropic_model, inline=True)
         embed.add_field(
             name="Scheduler",
             value="Running ✅" if scheduler.running else "Stopped ❌",

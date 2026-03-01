@@ -13,14 +13,41 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     # Discord
-    discord_token: str = Field(..., description="Discord bot token")
+    discord_token: str = Field(default="", description="Discord bot token")
     discord_prefix: str = Field(default="!", description="Command prefix")
 
     # Anthropic
-    anthropic_api_key: str = Field(..., description="Anthropic API key")
+    anthropic_api_key: str = Field(default="", description="Anthropic API key")
     anthropic_model: str = Field(
         default="claude-3-5-sonnet-20241022",
         description="Anthropic model to use",
+    )
+
+    # Discord OAuth (used by the web API; optional for bot-only deployments)
+    discord_client_id: str = Field(default="", description="Discord OAuth client ID")
+    discord_client_secret: str = Field(
+        default="", description="Discord OAuth client secret"
+    )
+    discord_redirect_uri: str = Field(
+        default="http://localhost:8000/auth/discord/callback",
+        description="Discord OAuth redirect URI",
+    )
+    discord_bot_token: str = Field(
+        default="",
+        description="Bot token used by the API to proxy guild channel lookups",
+    )
+
+    # Web API
+    web_secret_key: str = Field(
+        default="change-me", description="Secret key for JWT signing"
+    )
+    web_cors_origins: str = Field(
+        default="http://localhost:3000",
+        description="Comma-separated allowed CORS origins",
+    )
+    frontend_url: str = Field(
+        default="http://localhost:3000",
+        description="URL of the frontend for OAuth redirects",
     )
 
     # Database

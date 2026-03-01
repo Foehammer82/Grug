@@ -2,13 +2,15 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies and uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --no-dev --frozen
 
 COPY . .
 
@@ -22,4 +24,4 @@ ENV CHROMA_PERSIST_DIR=/app/chroma_data
 
 VOLUME ["/app/data", "/app/chroma_data"]
 
-CMD ["python", "main.py"]
+CMD ["uv", "run", "python", "main.py"]

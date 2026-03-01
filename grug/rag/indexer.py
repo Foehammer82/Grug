@@ -1,37 +1,15 @@
 """Document indexing for RAG — backend-agnostic via VectorStore."""
 
 import logging
-import re
 import uuid
 from pathlib import Path
 
 import aiofiles
 
 from grug.rag.vector_store import VectorStore, get_vector_store
+from grug.utils import chunk_text
 
 logger = logging.getLogger(__name__)
-
-CHUNK_SIZE = 1000
-CHUNK_OVERLAP = 200
-
-
-def _chunk_text(
-    text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
-) -> list[str]:
-    """Split text into overlapping chunks."""
-    # Normalise whitespace
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    if not text:
-        return []
-    chunks: list[str] = []
-    start = 0
-    while start < len(text):
-        end = min(start + chunk_size, len(text))
-        chunks.append(text[start:end])
-        if end == len(text):
-            break
-        start += chunk_size - overlap
-    return chunks
 
 
 class DocumentIndexer:
@@ -51,7 +29,7 @@ class DocumentIndexer:
         async with aiofiles.open(file_path, encoding="utf-8", errors="replace") as f:
             text = await f.read()
 
-        chunks = _chunk_text(text)
+        chunks = chunk_text(text)
         if not chunks:
             return 0
 

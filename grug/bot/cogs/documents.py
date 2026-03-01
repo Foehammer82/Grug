@@ -11,6 +11,7 @@ from sqlalchemy import select
 from grug.db.models import Document
 from grug.db.session import get_session_factory
 from grug.rag.indexer import DocumentIndexer
+from grug.utils import get_campaign_id_for_channel
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,7 @@ class DocumentsCog(commands.Cog, name="Documents"):
                 await attachment.save(tmp_path)
 
                 # Resolve campaign for this channel (if one exists).
-                campaign_id = await _get_campaign_id_for_channel(ctx.channel.id)
+                campaign_id = await get_campaign_id_for_channel(ctx.channel.id)
 
                 factory = get_session_factory()
                 async with factory() as session:
@@ -151,16 +152,3 @@ class DocumentsCog(commands.Cog, name="Documents"):
 
 async def setup(bot: commands.Bot) -> None:
     await bot.add_cog(DocumentsCog(bot))
-
-
-async def _get_campaign_id_for_channel(channel_id: int) -> int | None:
-    """Return the campaign_id for a Discord channel, or None if no campaign is linked."""
-    from grug.db.models import Campaign
-    from sqlalchemy import select
-
-    factory = get_session_factory()
-    async with factory() as session:
-        result = await session.execute(
-            select(Campaign.id).where(Campaign.channel_id == channel_id)
-        )
-        return result.scalar_one_or_none()

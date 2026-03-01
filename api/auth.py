@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 from jose import jwt
 
-from .config import settings
+from grug.config.settings import get_settings
 
 DISCORD_API = "https://discord.com/api/v10"
 ALGORITHM = "HS256"
@@ -14,6 +14,8 @@ TOKEN_EXPIRE_HOURS = 24
 
 
 def build_discord_oauth_url(state: str = "") -> str:
+    """Build the Discord OAuth2 authorization URL."""
+    settings = get_settings()
     params = (
         f"client_id={settings.discord_client_id}"
         f"&redirect_uri={settings.discord_redirect_uri}"
@@ -24,6 +26,8 @@ def build_discord_oauth_url(state: str = "") -> str:
 
 
 async def exchange_code(code: str) -> dict[str, Any]:
+    """Exchange an OAuth2 authorization code for an access token."""
+    settings = get_settings()
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{DISCORD_API}/oauth2/token",
@@ -41,6 +45,7 @@ async def exchange_code(code: str) -> dict[str, Any]:
 
 
 async def fetch_discord_user(access_token: str) -> dict[str, Any]:
+    """Fetch the authenticated Discord user's profile."""
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{DISCORD_API}/users/@me",
@@ -51,6 +56,7 @@ async def fetch_discord_user(access_token: str) -> dict[str, Any]:
 
 
 async def fetch_discord_guilds(access_token: str) -> list[dict[str, Any]]:
+    """Fetch the guilds the authenticated user belongs to."""
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{DISCORD_API}/users/@me/guilds",
@@ -61,10 +67,14 @@ async def fetch_discord_guilds(access_token: str) -> list[dict[str, Any]]:
 
 
 def create_jwt(payload: dict[str, Any]) -> str:
+    """Create a signed JWT with a 24-hour expiry."""
+    settings = get_settings()
     data = payload.copy()
     data["exp"] = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     return jwt.encode(data, settings.web_secret_key, algorithm=ALGORITHM)
 
 
 def decode_jwt(token: str) -> dict[str, Any]:
+    """Decode and verify a JWT."""
+    settings = get_settings()
     return jwt.decode(token, settings.web_secret_key, algorithms=[ALGORITHM])

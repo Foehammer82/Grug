@@ -41,9 +41,9 @@ A self-hosted AI agent for Discord, built to assist with TTRPGs and generally ha
 ### Running locally (development)
 
 ```bash
-pip install -e ".[dev]"
+uv sync          # install all dependencies (including dev)
 cp .env.example .env  # fill in values
-python main.py
+uv run python main.py
 ```
 
 ---
@@ -82,7 +82,7 @@ tests/                # Pytest test suite
 
 ## Developer Notes
 
-- Run tests: `pytest`
+- Run tests: `uv run pytest tests/`
 - The bot, API, and web are three separate services orchestrated via `docker-compose.yml`
 - Database migrations are handled automatically on startup via SQLAlchemy
 - MCP servers are configured as a JSON array in `MCP_SERVER_CONFIGS` — see `grug/config/settings.py` for the schema

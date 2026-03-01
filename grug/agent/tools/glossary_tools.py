@@ -126,9 +126,9 @@ def register_glossary_tools(agent: "Agent[GrugDeps, str]") -> None:
                 return f"📖 Grug update glossary: **{term}** — {definition}"
             else:
                 # New term — ensure guild config exists first.
-                from grug.agent.core import _ensure_guild
+                from grug.utils import ensure_guild
 
-                await _ensure_guild(ctx.deps.guild_id)
+                await ensure_guild(ctx.deps.guild_id)
                 new_term = GlossaryTerm(
                     guild_id=ctx.deps.guild_id,
                     channel_id=None,  # guild-wide

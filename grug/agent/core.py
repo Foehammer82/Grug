@@ -1,4 +1,9 @@
-"""Core agent using pydantic-ai with Anthropic Claude."""
+"""Core agent — builds the pydantic-ai Agent and manages conversation history.
+
+Tools are registered via ``register_*_tools()`` functions in the
+``grug.agent.tools`` sub-package; this module is kept focused on agent
+construction and the ``GrugAgent`` orchestration wrapper.
+"""
 
 import logging
 from dataclasses import dataclass
@@ -15,6 +20,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from sqlalchemy import func, select
 
+from grug.agent.prompt import SYSTEM_PROMPT
 from grug.config.settings import get_settings
 from grug.db.models import ConversationMessage
 from grug.db.session import get_session_factory
@@ -22,45 +28,10 @@ from grug.rag.history_archiver import ConversationArchiver
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """\
-You are Grug, a lovable caveman-brained AI companion for a TTRPG group.
-You speak in a friendly, slightly cave-person style (e.g. "Grug think...", \
-"Grug help!") but you are deeply knowledgeable about tabletop RPGs, scheduling, \
-and everything the group needs.
 
-Current UTC time: {now}
-
-Your capabilities:
-- Search and retrieve information from uploaded rule books, lore documents, and \
-campaign notes using the search_documents tool.
-- Manage the group calendar: create events, list upcoming sessions.
-- Set reminders for individual users.
-- Schedule recurring tasks (e.g. weekly jokes, reminders, prompts).
-- List indexed documents.
-- Look up server-specific TTRPG terminology and campaign lore from this guild's \
-glossary using the lookup_glossary_term tool.
-- Add or update glossary terms (AI-owned entries only) when players define new terms \
-or correct an existing definition, using the upsert_glossary_term tool.
-
-- Access, discuss, and help update player character sheets using get_character_sheet, \
-update_character_field, and search_character_knowledge.
-- Export an updated character sheet back to the player using export_character_sheet.
-
-Character sheet guidance:
-- In DM sessions, always clarify *which character and campaign* you are discussing \
-at the start if there is any ambiguity.
-- When a player says their character takes damage, levels up, gains items, or \
-otherwise changes — use update_character_field to record the change.
-- When discussing abilities, spells, or stats, use search_character_knowledge to \
-find the relevant section of their sheet.
-
-When asked about rules, lore, or campaign information always search documents first, \
-then check the glossary for any server-specific overrides on terminology.
-When scheduling, confirm times clearly and always use ISO-8601 format internally.
-If a player corrects you on what a term means in their campaign, call \
-upsert_glossary_term to record it — but never overwrite a human-edited entry.
-Be enthusiastic, warm, and helpful. Keep responses concise unless detail is needed.
-"""
+# ------------------------------------------------------------------
+# Dependencies
+# ------------------------------------------------------------------
 
 
 @dataclass
@@ -71,12 +42,14 @@ class GrugDeps:
     channel_id: int
     user_id: int
     username: str
-    # Optional campaign scoping — set when the channel has a campaign linked.
     campaign_id: int | None = None
-    # Set for DM sessions when the user has an active character.
     active_character_id: int | None = None
-    # True when responding to a DM rather than a guild channel.
     is_dm_session: bool = False
+
+
+# ------------------------------------------------------------------
+# Agent construction
+# ------------------------------------------------------------------
 
 
 def _build_agent() -> Agent[GrugDeps, str]:
@@ -97,200 +70,26 @@ def _build_agent() -> Agent[GrugDeps, str]:
         toolsets=toolsets,
     )
 
-    # ------------------------------------------------------------------ tools
-    @agent.tool
-    async def search_documents(
-        ctx: RunContext[GrugDeps], query: str, k: int = 5
-    ) -> str:
-        """Search indexed documents using semantic similarity.
+    # Register tool groups — each follows the register_*_tools(agent) pattern.
+    from grug.agent.tools.character_tools import register_character_tools
+    from grug.agent.tools.glossary_tools import register_glossary_tools
+    from grug.agent.tools.rag_tools import register_rag_tools
+    from grug.agent.tools.scheduling_tools import register_scheduling_tools
 
-        When in a campaign channel or DM with an active campaign, searches
-        campaign-scoped documents. Falls back to guild-wide search otherwise.
-        Use when the user asks about rules, lore, or content from uploaded documents.
-        """
-        from grug.rag.retriever import DocumentRetriever
+    register_rag_tools(agent)
+    register_scheduling_tools(agent)
+    register_glossary_tools(agent)
+    register_character_tools(agent)
 
-        retriever = DocumentRetriever()
-        chunks = await retriever.search(
-            ctx.deps.guild_id, query, k=k, campaign_id=ctx.deps.campaign_id
-        )
-        if not chunks:
-            return "No relevant documents found."
-        parts = [
-            f"[{i}] From **{c['filename']}** (chunk {c['chunk_index']}):\n{c['text']}"
-            for i, c in enumerate(chunks, 1)
-        ]
-        return "\n\n---\n\n".join(parts)
-
-    @agent.tool
-    async def list_documents(ctx: RunContext[GrugDeps]) -> str:
-        """List all documents that have been indexed for this server."""
-        from grug.db.models import Document
-
-        factory = get_session_factory()
-        async with factory() as session:
-            result = await session.execute(
-                select(Document).where(Document.guild_id == ctx.deps.guild_id)
-            )
-            docs = result.scalars().all()
-        if not docs:
-            return "No documents have been indexed for this server yet."
-        lines = ["Indexed documents:"]
-        for doc in docs:
-            desc = f" — {doc.description}" if doc.description else ""
-            lines.append(f"• **{doc.filename}** ({doc.chunk_count} chunks){desc}")
-        return "\n".join(lines)
-
-    @agent.tool
-    async def create_calendar_event(
-        ctx: RunContext[GrugDeps],
-        title: str,
-        start_time: str,
-        description: str | None = None,
-        end_time: str | None = None,
-        channel_id: int | None = None,
-    ) -> str:
-        """Create a calendar event for the guild. Times must be in ISO-8601 format."""
-        from datetime import datetime
-
-        from grug.db.models import CalendarEvent
-
-        await _ensure_guild(ctx.deps.guild_id)
-        start = datetime.fromisoformat(start_time)
-        end = datetime.fromisoformat(end_time) if end_time else None
-        factory = get_session_factory()
-        async with factory() as session:
-            event = CalendarEvent(
-                guild_id=ctx.deps.guild_id,
-                title=title,
-                description=description,
-                start_time=start,
-                end_time=end,
-                channel_id=channel_id,
-                created_by=ctx.deps.user_id,
-            )
-            session.add(event)
-            await session.commit()
-            await session.refresh(event)
-            event_id = event.id
-        return f"✅ Calendar event **{title}** created (ID: {event_id}, starts {start_time})."
-
-    @agent.tool
-    async def list_calendar_events(ctx: RunContext[GrugDeps], limit: int = 10) -> str:
-        """List upcoming calendar events for this guild."""
-        from datetime import datetime, timezone
-
-        from grug.db.models import CalendarEvent
-
-        factory = get_session_factory()
-        now = datetime.now(timezone.utc)
-        async with factory() as session:
-            result = await session.execute(
-                select(CalendarEvent)
-                .where(
-                    CalendarEvent.guild_id == ctx.deps.guild_id,
-                    CalendarEvent.start_time >= now,
-                )
-                .order_by(CalendarEvent.start_time)
-                .limit(limit)
-            )
-            events = result.scalars().all()
-        if not events:
-            return "No upcoming calendar events."
-        lines = ["📅 Upcoming events:"]
-        for ev in events:
-            end_str = f" → {ev.end_time.isoformat()}" if ev.end_time else ""
-            lines.append(f"• **{ev.title}** — {ev.start_time.isoformat()}{end_str}")
-        return "\n".join(lines)
-
-    @agent.tool
-    async def create_reminder(
-        ctx: RunContext[GrugDeps],
-        message: str,
-        remind_at: str,
-        user_id: int | None = None,
-    ) -> str:
-        """Create a reminder that will be sent to the user at the specified time (ISO-8601)."""
-        from datetime import datetime
-
-        from grug.db.models import Reminder
-        from grug.scheduler.manager import add_date_job
-        from grug.scheduler.tasks import send_reminder
-
-        await _ensure_guild(ctx.deps.guild_id)
-        target_user = user_id if user_id is not None else ctx.deps.user_id
-        run_dt = datetime.fromisoformat(remind_at)
-        factory = get_session_factory()
-        async with factory() as session:
-            reminder = Reminder(
-                guild_id=ctx.deps.guild_id,
-                user_id=target_user,
-                channel_id=ctx.deps.channel_id,
-                message=message,
-                remind_at=run_dt,
-            )
-            session.add(reminder)
-            await session.commit()
-            await session.refresh(reminder)
-            reminder_id = reminder.id
-
-        add_date_job(
-            send_reminder,
-            run_date=run_dt,
-            job_id=f"reminder_{reminder_id}",
-            args=[reminder_id, ctx.deps.channel_id, target_user, message],
-        )
-        return f"⏰ Reminder set for {remind_at} (ID: {reminder_id})."
-
-    @agent.tool
-    async def create_scheduled_task(
-        ctx: RunContext[GrugDeps],
-        name: str,
-        prompt: str,
-        cron_expression: str,
-    ) -> str:
-        """Create a recurring task where Grug responds to a prompt on a cron schedule.
-
-        Cron format: 'minute hour day month day_of_week' (5 fields, UTC).
-        Example: '0 9 * * 5' = every Friday at 9:00 AM UTC.
-        """
-        from grug.db.models import ScheduledTask
-        from grug.scheduler.manager import add_cron_job
-        from grug.scheduler.tasks import run_scheduled_prompt
-
-        await _ensure_guild(ctx.deps.guild_id)
-        factory = get_session_factory()
-        async with factory() as session:
-            task = ScheduledTask(
-                guild_id=ctx.deps.guild_id,
-                channel_id=ctx.deps.channel_id,
-                name=name,
-                prompt=prompt,
-                cron_expression=cron_expression,
-                created_by=ctx.deps.user_id,
-            )
-            session.add(task)
-            await session.commit()
-            await session.refresh(task)
-            task_id = task.id
-
-        add_cron_job(
-            run_scheduled_prompt,
-            cron_expression=cron_expression,
-            job_id=f"task_{task_id}",
-            args=[task_id, ctx.deps.guild_id, ctx.deps.channel_id, prompt],
-        )
-        return f"🔁 Recurring task **{name}** scheduled ({cron_expression}) — ID: {task_id}."
-
+    # Conversation history search (standalone — too small to extract).
     @agent.tool
     async def search_conversation_history(
         ctx: RunContext[GrugDeps], query: str, k: int = 3
     ) -> str:
-        """Search the archived conversation history for past events, decisions, and lore.
+        """Search archived conversation history for past events, decisions, and lore.
 
         Use when the user asks about something that may have happened in a previous
-        session or earlier in the campaign (e.g. 'what did we decide about the dragon?',
-        'what happened last time we visited the city?').
+        session or earlier in the campaign.
         """
         archiver = ConversationArchiver()
         results = await archiver.search(
@@ -304,184 +103,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
         ]
         return "📜 From the chronicles:\n\n" + "\n\n---\n\n".join(parts)
 
-    # ----------------------------------------------------------------- glossary
-    from grug.agent.tools.glossary_tools import register_glossary_tools
-
-    register_glossary_tools(agent)
-
-    # --------------------------------------------------------------- characters
-    @agent.tool
-    async def get_character_sheet(ctx: RunContext[GrugDeps]) -> str:
-        """Retrieve the current user's active character sheet.
-
-        Use when asked about the user's character, stats, abilities,
-        inventory, HP, or any other character-specific information.
-        Returns an error string if no active character is set.
-        """
-        import json
-
-        from grug.db.models import Character, UserProfile
-
-        char_id = ctx.deps.active_character_id
-        if char_id is None:
-            factory = get_session_factory()
-            async with factory() as session:
-                profile = (
-                    await session.execute(
-                        select(UserProfile).where(
-                            UserProfile.discord_user_id == ctx.deps.user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if profile is None or profile.active_character_id is None:
-                    return "No active character found. Ask the player to upload a sheet with !character upload."
-                char_id = profile.active_character_id
-
-        factory = get_session_factory()
-        async with factory() as session:
-            character = (
-                await session.execute(select(Character).where(Character.id == char_id))
-            ).scalar_one_or_none()
-
-        if character is None:
-            return "Character not found."
-
-        sd = character.structured_data or {}
-        lines = [
-            f"Character: {character.name}",
-            f"System: {character.system}",
-            f"Structured data: {json.dumps(sd, indent=2)}",
-        ]
-        if character.raw_sheet_text:
-            lines += ["", "Raw sheet text:", character.raw_sheet_text[:3000]]
-        return "\n".join(lines)
-
-    @agent.tool
-    async def update_character_field(
-        ctx: RunContext[GrugDeps], field: str, value: str
-    ) -> str:
-        """Update a specific field in the current user's active character sheet.
-
-        Use when the player's character changes during a session: HP loss/gain,
-        levelling up, acquiring/spending items, learning spells, etc.
-
-        Parameters
-        ----------
-        field:
-            Dot-notation path to the field, e.g. 'hp.current', 'level', 'notes'.
-        value:
-            New value as a string. Numbers and JSON structures are coerced automatically.
-        """
-        import json
-
-        from grug.character.indexer import CharacterIndexer
-        from grug.db.models import Character, UserProfile
-
-        char_id = ctx.deps.active_character_id
-        if char_id is None:
-            factory = get_session_factory()
-            async with factory() as session:
-                profile = (
-                    await session.execute(
-                        select(UserProfile).where(
-                            UserProfile.discord_user_id == ctx.deps.user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if profile is None or profile.active_character_id is None:
-                    return "No active character to update."
-                char_id = profile.active_character_id
-
-        factory = get_session_factory()
-        async with factory() as session:
-            character = (
-                await session.execute(select(Character).where(Character.id == char_id))
-            ).scalar_one_or_none()
-            if character is None:
-                return "Character not found."
-
-            sd = dict(character.structured_data or {})
-            coerced: object = value
-            try:
-                coerced = json.loads(value)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-            # Navigate dot-notation path and set the leaf key.
-            keys = field.split(".")
-            target = sd
-            for key in keys[:-1]:
-                if not isinstance(target, dict):
-                    target = {}
-                target = target.setdefault(key, {})
-            if isinstance(target, dict):
-                target[keys[-1]] = coerced
-
-            character.structured_data = sd
-            await session.commit()
-            await session.refresh(character)
-            raw_text = character.raw_sheet_text or ""
-            character_id = character.id
-
-        # Re-index so semantic search reflects the change.
-        if raw_text:
-            indexer = CharacterIndexer()
-            await indexer.index_character(character_id, raw_text)
-
-        return f"\u2705 Updated {field} = {coerced} for character ID {character_id}."
-
-    @agent.tool
-    async def search_character_knowledge(
-        ctx: RunContext[GrugDeps], query: str, k: int = 4
-    ) -> str:
-        """Search the current user's character sheet for specific information.
-
-        Use when asked about the character's specific abilities, spells,
-        equipment, or traits. Searches the indexed sheet chunks semantically.
-        """
-        from grug.db.models import UserProfile
-        from grug.rag.vector_store import get_vector_store
-
-        char_id = ctx.deps.active_character_id
-        if char_id is None:
-            factory = get_session_factory()
-            async with factory() as session:
-                profile = (
-                    await session.execute(
-                        select(UserProfile).where(
-                            UserProfile.discord_user_id == ctx.deps.user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if profile is None or profile.active_character_id is None:
-                    return "No active character to search."
-                char_id = profile.active_character_id
-
-        store = get_vector_store()
-        chunks = await store.character_query(char_id, query, n_results=k)
-        if not chunks:
-            return "Nothing relevant found in the character sheet."
-        parts = [
-            f"[{i}] (chunk {c['chunk_index']}):\n{c['text']}"
-            for i, c in enumerate(chunks, 1)
-        ]
-        return "\n\n---\n\n".join(parts)
-
     return agent
-
-
-async def _ensure_guild(guild_id: int) -> None:
-    """Ensure a GuildConfig row exists for this guild."""
-    from grug.db.models import GuildConfig
-
-    factory = get_session_factory()
-    async with factory() as session:
-        result = await session.execute(
-            select(GuildConfig).where(GuildConfig.guild_id == guild_id)
-        )
-        if result.scalar_one_or_none() is None:
-            session.add(GuildConfig(guild_id=guild_id))
-            await session.commit()
 
 
 _agent: Agent[GrugDeps, str] | None = None
@@ -495,8 +117,13 @@ def get_agent() -> Agent[GrugDeps, str]:
     return _agent
 
 
+# ------------------------------------------------------------------
+# GrugAgent — thin wrapper with history persistence
+# ------------------------------------------------------------------
+
+
 class GrugAgent:
-    """Thin wrapper around the pydantic-ai Agent that handles history persistence."""
+    """Manages conversation history and delegates to the pydantic-ai Agent."""
 
     def __init__(self) -> None:
         settings = get_settings()
@@ -505,12 +132,11 @@ class GrugAgent:
     async def _load_history(
         self, guild_id: int, channel_id: int
     ) -> list[ModelRequest | ModelResponse]:
-        """Load recent messages, archiving overflow to RAG history when the window fills."""
+        """Load recent messages, archiving overflow to RAG when the window fills."""
         settings = get_settings()
         factory = get_session_factory()
 
         async with factory() as session:
-            # Count total unarchived messages for this channel.
             count_result = await session.execute(
                 select(func.count(ConversationMessage.id)).where(
                     ConversationMessage.guild_id == guild_id,
@@ -522,7 +148,6 @@ class GrugAgent:
 
             overflow = total - self._context_window
             if overflow >= settings.agent_history_archive_batch:
-                # Fetch the oldest overflow messages for archival.
                 overflow_result = await session.execute(
                     select(ConversationMessage)
                     .where(
@@ -554,12 +179,10 @@ class GrugAgent:
                             "Failed to archive conversation history — skipping"
                         )
 
-                    # Mark rows archived regardless of whether summary succeeded.
                     for msg in to_archive:
                         msg.archived = True
                     await session.commit()
 
-            # Load the most recent context_window unarchived messages.
             recent_result = await session.execute(
                 select(ConversationMessage)
                 .where(
@@ -594,6 +217,7 @@ class GrugAgent:
         author_id: int | None = None,
         author_name: str | None = None,
     ) -> None:
+        """Persist a single conversation message."""
         factory = get_session_factory()
         async with factory() as session:
             session.add(

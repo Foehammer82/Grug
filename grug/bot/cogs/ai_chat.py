@@ -7,6 +7,7 @@ from discord.ext import commands
 from sqlalchemy import select
 
 from grug.agent.core import GrugAgent
+from grug.utils import get_campaign_id_for_channel
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class AIChatCog(commands.Cog, name="AI Chat"):
             content = "Hello!"
 
         # Resolve campaign_id for this channel (used for campaign-scoped RAG).
-        campaign_id = await _get_campaign_id_for_channel(message.channel.id)
+        campaign_id = await get_campaign_id_for_channel(message.channel.id)
 
         async with message.channel.typing():
             response = await self._agent.respond(
@@ -135,19 +136,6 @@ def _split_message(text: str, limit: int = 2000) -> list[str]:
         chunks.append(text[:split_at])
         text = text[split_at:].lstrip("\n")
     return chunks
-
-
-async def _get_campaign_id_for_channel(channel_id: int) -> int | None:
-    """Return the campaign_id for a channel, or None if unconfigured."""
-    from grug.db.models import Campaign
-    from grug.db.session import get_session_factory
-
-    factory = get_session_factory()
-    async with factory() as session:
-        result = await session.execute(
-            select(Campaign.id).where(Campaign.channel_id == channel_id)
-        )
-        return result.scalar_one_or_none()
 
 
 async def _get_user_character_context(

@@ -17,6 +17,7 @@ from grug.character.parser import CharacterSheetParser
 from grug.config.settings import get_settings
 from grug.db.models import Campaign, Character, UserProfile
 from grug.db.session import get_session_factory
+from grug.utils import GAME_SYSTEM_LABELS
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +34,6 @@ ALLOWED_EXTENSIONS = {
     ".webp",
 }
 MAX_FILE_SIZE_MB = 20
-
-_SYSTEM_LABELS = {
-    "dnd5e": "D&D 5e",
-    "pf2e": "Pathfinder 2e",
-    "unknown": "Unknown / Homebrew",
-}
 
 
 class CharactersCog(commands.Cog, name="Characters"):
@@ -163,7 +158,7 @@ class CharactersCog(commands.Cog, name="Characters"):
             # Ensure profile exists; make this the active character if none is set.
             await _ensure_user_profile(user_id, default_character_id=character_id)
 
-        system_label = _SYSTEM_LABELS.get(detected_system, detected_system)
+        system_label = GAME_SYSTEM_LABELS.get(detected_system, detected_system)
         char_level = structured_data.get("level")
         char_class = structured_data.get("class_and_subclass") or "?"
         embed = discord.Embed(
@@ -224,7 +219,7 @@ class CharactersCog(commands.Cog, name="Characters"):
         active_id = profile.active_character_id if profile else None
         embed = discord.Embed(title="📜 Your Characters", color=discord.Color.blue())
         for c in characters:
-            system_label = _SYSTEM_LABELS.get(c.system, c.system)
+            system_label = GAME_SYSTEM_LABELS.get(c.system, c.system)
             active_tag = " ★ active" if c.id == active_id else ""
             value = f"System: {system_label}"
             if c.structured_data:
@@ -339,7 +334,7 @@ class CharactersCog(commands.Cog, name="Characters"):
 
 
 # ------------------------------------------------------------------
-# Helpers shared with agent tools
+# Helpers
 # ------------------------------------------------------------------
 
 
@@ -412,7 +407,7 @@ async def _resolve_character(
 def _build_character_embed_and_md(character: Character) -> tuple[discord.Embed, str]:
     """Build a Discord embed and Markdown text for a character sheet."""
     sd = character.structured_data or {}
-    system_label = _SYSTEM_LABELS.get(character.system, character.system)
+    system_label = GAME_SYSTEM_LABELS.get(character.system, character.system)
 
     embed = discord.Embed(title=f"📜 {character.name}", color=discord.Color.blue())
     embed.add_field(name="System", value=system_label, inline=True)

@@ -8,44 +8,6 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 
-def test_base_tool_abc_requires_implementation():
-    """BaseTool ABC raises TypeError when abstract methods are missing."""
-    from grug.agent.tools.base import BaseTool
-
-    with pytest.raises(TypeError):
-        BaseTool()  # type: ignore[abstract]
-
-
-def test_base_tool_concrete_implementation():
-    """A concrete BaseTool subclass can be instantiated and run."""
-    from grug.agent.tools.base import BaseTool
-
-    class MyTool(BaseTool):
-        @property
-        def name(self):
-            return "my_tool"
-
-        @property
-        def description(self):
-            return "A test tool"
-
-        @property
-        def parameters(self):
-            return {
-                "type": "object",
-                "properties": {"q": {"type": "string"}},
-                "required": ["q"],
-            }
-
-        async def run(self, **kwargs):
-            return "result"
-
-    tool = MyTool()
-    assert tool.name == "my_tool"
-    assert tool.description == "A test tool"
-    assert tool.parameters["type"] == "object"
-
-
 def test_grug_agent_builds_with_anthropic(monkeypatch):
     """GrugAgent initialises without error given an Anthropic API key."""
     import grug.agent.core as core

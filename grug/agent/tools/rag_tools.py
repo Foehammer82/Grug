@@ -1,89 +1,62 @@
-"""RAG tools for the Grug agent."""
+"""RAG (document search) tools for the Grug agent.
+
+Registers ``search_documents`` and ``list_documents`` on the pydantic-ai Agent
+following the same ``register_*_tools(agent)`` pattern used by glossary_tools.
+"""
+
+from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING
 
+from pydantic_ai import RunContext
 from sqlalchemy import select
 
-from grug.agent.tools.base import BaseTool
-from grug.db.models import Document
-from grug.db.session import get_session_factory
-from grug.rag.retriever import DocumentRetriever
+if TYPE_CHECKING:
+    from pydantic_ai import Agent
+
+    from grug.agent.core import GrugDeps
 
 logger = logging.getLogger(__name__)
 
 
-class SearchDocumentsTool(BaseTool):
-    """Search indexed guild documents using semantic similarity."""
+def register_rag_tools(agent: "Agent[GrugDeps, str]") -> None:
+    """Register document search and listing tools on *agent*."""
 
-    def __init__(self, guild_id: int) -> None:
-        self._guild_id = guild_id
-        self._retriever = DocumentRetriever()
+    @agent.tool
+    async def search_documents(
+        ctx: RunContext[GrugDeps], query: str, k: int = 5
+    ) -> str:
+        """Search indexed documents using semantic similarity.
 
-    @property
-    def name(self) -> str:
-        return "search_documents"
+        When in a campaign channel or DM with an active campaign, searches
+        campaign-scoped documents first, then falls back to guild-wide results.
+        Use when the user asks about rules, lore, or content from uploaded documents.
+        """
+        from grug.rag.retriever import DocumentRetriever
 
-    @property
-    def description(self) -> str:
-        return (
-            "Search the guild's indexed documents using a semantic similarity query. "
-            "Use this when the user asks about rules, lore, or other content from uploaded documents."
+        retriever = DocumentRetriever()
+        chunks = await retriever.search(
+            ctx.deps.guild_id, query, k=k, campaign_id=ctx.deps.campaign_id
         )
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "The search query",
-                },
-                "k": {
-                    "type": "integer",
-                    "description": "Number of results to return (default 5)",
-                    "default": 5,
-                },
-            },
-            "required": ["query"],
-        }
-
-    async def run(self, query: str, k: int = 5, **_: Any) -> str:
-        chunks = self._retriever.search(self._guild_id, query, k=k)
         if not chunks:
             return "No relevant documents found."
-        parts = []
-        for i, chunk in enumerate(chunks, 1):
-            parts.append(
-                f"[{i}] From **{chunk['filename']}** (chunk {chunk['chunk_index']}):\n{chunk['text']}"
-            )
+        parts = [
+            f"[{i}] From **{c['filename']}** (chunk {c['chunk_index']}):\n{c['text']}"
+            for i, c in enumerate(chunks, 1)
+        ]
         return "\n\n---\n\n".join(parts)
 
+    @agent.tool
+    async def list_documents(ctx: RunContext[GrugDeps]) -> str:
+        """List all documents that have been indexed for this server."""
+        from grug.db.models import Document
+        from grug.db.session import get_session_factory
 
-class ListDocumentsTool(BaseTool):
-    """List documents indexed for this guild."""
-
-    def __init__(self, guild_id: int) -> None:
-        self._guild_id = guild_id
-
-    @property
-    def name(self) -> str:
-        return "list_documents"
-
-    @property
-    def description(self) -> str:
-        return "List all documents that have been indexed for this server."
-
-    @property
-    def parameters(self) -> dict[str, Any]:
-        return {"type": "object", "properties": {}, "required": []}
-
-    async def run(self, **_: Any) -> str:
         factory = get_session_factory()
         async with factory() as session:
             result = await session.execute(
-                select(Document).where(Document.guild_id == self._guild_id)
+                select(Document).where(Document.guild_id == ctx.deps.guild_id)
             )
             docs = result.scalars().all()
         if not docs:
