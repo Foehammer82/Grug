@@ -62,14 +62,6 @@ services:
     depends_on:
       - api
 
-  docs:
-    build:
-      context: .
-      dockerfile: docs/Dockerfile
-    restart: unless-stopped
-    ports:
-      - "8080:80"
-
 volumes:
   grug_db:
   grug_chroma:

@@ -39,11 +39,6 @@ jobs:
             context: web
             file: web/Dockerfile
 
-          # MkDocs static-site docs served by nginx.
-          - image: grug-docs
-            context: .
-            file: docs/Dockerfile
-
           # pgvector-enabled Postgres image.
           - image: grug-postgres
             context: postgres
