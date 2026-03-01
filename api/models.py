@@ -25,11 +25,15 @@ class GuildConfig(Base):
     __tablename__ = "guild_configs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    guild_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
     prefix: Mapped[str] = mapped_column(String(10), default="!")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime,
         default=lambda: datetime.now(timezone.utc),
@@ -47,7 +51,9 @@ class Document(Base):
     chroma_collection: Mapped[str] = mapped_column(String(256), nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     uploaded_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class CalendarEvent(Base):
@@ -61,7 +67,9 @@ class CalendarEvent(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class Reminder(Base):
@@ -74,7 +82,9 @@ class Reminder(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     remind_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class ScheduledTask(Base):
@@ -89,7 +99,9 @@ class ScheduledTask(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class GlossaryTerm(Base):
@@ -97,7 +109,9 @@ class GlossaryTerm(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    channel_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
     term: Mapped[str] = mapped_column(String(256), nullable=False)
     definition: Mapped[str] = mapped_column(Text, nullable=False)
     ai_generated: Mapped[bool] = mapped_column(Boolean, default=False)

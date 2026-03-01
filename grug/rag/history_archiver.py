@@ -49,7 +49,12 @@ class ConversationArchiver:
             model=self._model,
             max_tokens=512,
             system=_SUMMARY_SYSTEM,
-            messages=[{"role": "user", "content": f"Conversation to summarise:\n\n{transcript}"}],
+            messages=[
+                {
+                    "role": "user",
+                    "content": f"Conversation to summarise:\n\n{transcript}",
+                }
+            ],
         )
         return response.content[0].text.strip()
 
@@ -80,8 +85,12 @@ class ConversationArchiver:
             return ""
 
         summary = await self._summarise(messages)
-        start_time = messages[0].get("created_at", datetime.now(timezone.utc).isoformat())
-        end_time = messages[-1].get("created_at", datetime.now(timezone.utc).isoformat())
+        start_time = messages[0].get(
+            "created_at", datetime.now(timezone.utc).isoformat()
+        )
+        end_time = messages[-1].get(
+            "created_at", datetime.now(timezone.utc).isoformat()
+        )
 
         doc_id = str(uuid.uuid4())
         await self._store.history_upsert(
@@ -106,7 +115,8 @@ class ConversationArchiver:
         )
         return summary
 
-    async def search(self, guild_id: int, channel_id: int, query: str, k: int = 3) -> list[dict]:
+    async def search(
+        self, guild_id: int, channel_id: int, query: str, k: int = 3
+    ) -> list[dict]:
         """Return the top-k relevant history summaries for *query*."""
         return await self._store.history_query(guild_id, channel_id, query, k)
-

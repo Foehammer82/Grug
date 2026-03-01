@@ -2,6 +2,7 @@
 
 import logging
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from grug.config.settings import get_settings
@@ -46,10 +47,34 @@ async def init_db() -> None:
 
 
 async def _create_all_sqlite() -> None:
-    """Create all SQLite tables via SQLAlchemy metadata (no Alembic needed)."""
+    """Create all SQLite tables via SQLAlchemy metadata (no Alembic needed).
+
+    Also applies incremental column additions for existing tables so that
+    upgrading an existing installation does not require a full migration tool.
+    """
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+    # Incremental migrations: add new nullable columns to existing tables without
+    # breaking existing data.  Each ALTER TABLE is idempotent — it catches the
+    # OperationalError that SQLite raises when the column already exists.
+    async with get_engine().connect() as conn:
+        for ddl in _SQLITE_INCREMENTAL_DDLS:
+            try:
+                await conn.execute(text(ddl))
+                await conn.commit()
+            except Exception:
+                # Column already exists — safe to ignore.
+                await conn.rollback()
+
     logger.info("SQLite schema initialised via create_all.")
+
+
+# Each entry is a DDL statement that is safe to run against an already-migrated
+# database (the surrounding try/except makes them idempotent).
+_SQLITE_INCREMENTAL_DDLS: list[str] = [
+    "ALTER TABLE documents ADD COLUMN campaign_id INTEGER NULL",
+]
 
 
 async def _run_alembic_migrations() -> None:

@@ -77,6 +77,12 @@ class Settings(BaseSettings):
         description="Max number of per-channel history summaries kept in the vector store (oldest pruned beyond this)",
     )
 
+    # File storage — uploaded character sheets are persisted here.
+    file_data_dir: str = Field(
+        default="./file_data",
+        description="Directory to store uploaded character sheet files",
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 

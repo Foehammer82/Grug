@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_db(mock_session, object_id: int):
     """Configure mock_session.refresh to stamp a primary-key ID onto the object."""
 
@@ -26,12 +27,15 @@ def _make_db(mock_session, object_id: int):
 # Tool metadata
 # ---------------------------------------------------------------------------
 
+
 def test_tool_names_and_required_params():
     """Each scheduling tool reports its expected name and required parameters."""
-    with patch("grug.agent.tools.scheduling_tools._ensure_guild"), \
-         patch("grug.agent.tools.scheduling_tools.get_session_factory"), \
-         patch("grug.agent.tools.scheduling_tools.add_cron_job"), \
-         patch("grug.agent.tools.scheduling_tools.add_date_job"):
+    with (
+        patch("grug.agent.tools.scheduling_tools._ensure_guild"),
+        patch("grug.agent.tools.scheduling_tools.get_session_factory"),
+        patch("grug.agent.tools.scheduling_tools.add_cron_job"),
+        patch("grug.agent.tools.scheduling_tools.add_date_job"),
+    ):
         from grug.agent.tools.scheduling_tools import (
             CreateCalendarEventTool,
             CreateReminderTool,
@@ -50,6 +54,7 @@ def test_tool_names_and_required_params():
 # CreateCalendarEventTool
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_create_calendar_event_tool_persists_record(mock_db_session):
     """run() inserts a CalendarEvent row with the correct field values."""
@@ -58,8 +63,13 @@ async def test_create_calendar_event_tool_persists_record(mock_db_session):
     mock_factory, mock_session = mock_db_session
     _make_db(mock_session, object_id=99)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.tools.scheduling_tools._ensure_guild"):
+    with (
+        patch(
+            "grug.agent.tools.scheduling_tools.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("grug.agent.tools.scheduling_tools._ensure_guild"),
+    ):
         from grug.agent.tools.scheduling_tools import CreateCalendarEventTool
 
         tool = CreateCalendarEventTool(guild_id=1, user_id=2)
@@ -85,8 +95,13 @@ async def test_create_calendar_event_tool_commits(mock_db_session):
     mock_factory, mock_session = mock_db_session
     _make_db(mock_session, object_id=1)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.tools.scheduling_tools._ensure_guild"):
+    with (
+        patch(
+            "grug.agent.tools.scheduling_tools.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("grug.agent.tools.scheduling_tools._ensure_guild"),
+    ):
         from grug.agent.tools.scheduling_tools import CreateCalendarEventTool
 
         tool = CreateCalendarEventTool(guild_id=1, user_id=2)
@@ -98,6 +113,7 @@ async def test_create_calendar_event_tool_commits(mock_db_session):
 # ---------------------------------------------------------------------------
 # ListCalendarEventsTool
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_list_calendar_events_tool_formats_output(mock_db_session):
@@ -125,7 +141,10 @@ async def test_list_calendar_events_tool_formats_output(mock_db_session):
     result_mock.scalars.return_value.all.return_value = fake_events
     mock_session.execute = AsyncMock(return_value=result_mock)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory):
+    with patch(
+        "grug.agent.tools.scheduling_tools.get_session_factory",
+        return_value=mock_factory,
+    ):
         from grug.agent.tools.scheduling_tools import ListCalendarEventsTool
 
         tool = ListCalendarEventsTool(guild_id=1)
@@ -143,7 +162,10 @@ async def test_list_calendar_events_tool_empty(mock_db_session):
     result_mock.scalars.return_value.all.return_value = []
     mock_session.execute = AsyncMock(return_value=result_mock)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory):
+    with patch(
+        "grug.agent.tools.scheduling_tools.get_session_factory",
+        return_value=mock_factory,
+    ):
         from grug.agent.tools.scheduling_tools import ListCalendarEventsTool
 
         tool = ListCalendarEventsTool(guild_id=1)
@@ -156,6 +178,7 @@ async def test_list_calendar_events_tool_empty(mock_db_session):
 # CreateReminderTool
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_create_reminder_tool_schedules_date_job(mock_db_session):
     """run() persists a Reminder row and schedules a one-time job with the correct ID."""
@@ -164,13 +187,20 @@ async def test_create_reminder_tool_schedules_date_job(mock_db_session):
     mock_factory, mock_session = mock_db_session
     _make_db(mock_session, object_id=7)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.tools.scheduling_tools._ensure_guild"), \
-         patch("grug.agent.tools.scheduling_tools.add_date_job") as mock_add_date:
+    with (
+        patch(
+            "grug.agent.tools.scheduling_tools.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("grug.agent.tools.scheduling_tools._ensure_guild"),
+        patch("grug.agent.tools.scheduling_tools.add_date_job") as mock_add_date,
+    ):
         from grug.agent.tools.scheduling_tools import CreateReminderTool
 
         tool = CreateReminderTool(guild_id=1, user_id=2, channel_id=3)
-        result = await tool.run(message="Bring snacks!", remind_at="2026-05-01T18:00:00")
+        result = await tool.run(
+            message="Bring snacks!", remind_at="2026-05-01T18:00:00"
+        )
 
     mock_session.add.assert_called_once()
     reminder_arg = mock_session.add.call_args[0][0]
@@ -185,14 +215,18 @@ async def test_create_reminder_tool_schedules_date_job(mock_db_session):
 @pytest.mark.asyncio
 async def test_create_reminder_tool_default_user(mock_db_session):
     """run() targets the tool owner when no explicit user_id is given."""
-    from grug.db.models import Reminder
 
     mock_factory, mock_session = mock_db_session
     _make_db(mock_session, object_id=1)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.tools.scheduling_tools._ensure_guild"), \
-         patch("grug.agent.tools.scheduling_tools.add_date_job"):
+    with (
+        patch(
+            "grug.agent.tools.scheduling_tools.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("grug.agent.tools.scheduling_tools._ensure_guild"),
+        patch("grug.agent.tools.scheduling_tools.add_date_job"),
+    ):
         from grug.agent.tools.scheduling_tools import CreateReminderTool
 
         tool = CreateReminderTool(guild_id=1, user_id=42, channel_id=3)
@@ -206,6 +240,7 @@ async def test_create_reminder_tool_default_user(mock_db_session):
 # CreateScheduledTaskTool
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_create_scheduled_task_tool_schedules_cron(mock_db_session):
     """run() persists a ScheduledTask row and schedules a cron job."""
@@ -214,9 +249,14 @@ async def test_create_scheduled_task_tool_schedules_cron(mock_db_session):
     mock_factory, mock_session = mock_db_session
     _make_db(mock_session, object_id=3)
 
-    with patch("grug.agent.tools.scheduling_tools.get_session_factory", return_value=mock_factory), \
-         patch("grug.agent.tools.scheduling_tools._ensure_guild"), \
-         patch("grug.agent.tools.scheduling_tools.add_cron_job") as mock_add_cron:
+    with (
+        patch(
+            "grug.agent.tools.scheduling_tools.get_session_factory",
+            return_value=mock_factory,
+        ),
+        patch("grug.agent.tools.scheduling_tools._ensure_guild"),
+        patch("grug.agent.tools.scheduling_tools.add_cron_job") as mock_add_cron,
+    ):
         from grug.agent.tools.scheduling_tools import CreateScheduledTaskTool
 
         tool = CreateScheduledTaskTool(guild_id=1, channel_id=2, user_id=5)

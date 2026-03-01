@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # Settings
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def mock_settings(monkeypatch):
     """Inject required env vars and reset the _settings singleton for every test.
@@ -19,6 +20,7 @@ def mock_settings(monkeypatch):
     monkeypatch.setenv("DISCORD_TOKEN", "test-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     import grug.config.settings as s
+
     s._settings = None
     yield
     s._settings = None
@@ -27,6 +29,7 @@ def mock_settings(monkeypatch):
 # ---------------------------------------------------------------------------
 # Database
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_db_session():
@@ -61,6 +64,7 @@ def mock_db_session():
 # ChromaDB
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def mock_chromadb():
     """Patch ``chromadb.PersistentClient`` and yield the mock client instance.
@@ -82,6 +86,7 @@ def mock_chromadb():
 # ---------------------------------------------------------------------------
 # Anthropic
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def mock_anthropic():
@@ -105,6 +110,7 @@ def mock_anthropic():
 # ---------------------------------------------------------------------------
 # Conversation-message factory
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def make_messages():

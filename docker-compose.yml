@@ -28,10 +28,12 @@ services:
     volumes:
       - grug_db:/app/data
       - grug_chroma:/app/chroma_data
+      - grug_files:/app/file_data
     environment:
       # DATABASE_URL is read from .env — no default here so the .env value wins.
       # Set CHROMA_PERSIST_DIR only when using the SQLite/Chroma profile.
       - CHROMA_PERSIST_DIR=/app/chroma_data
+      - FILE_DATA_DIR=/app/file_data
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,4 +63,5 @@ services:
 volumes:
   grug_db:
   grug_chroma:
+  grug_files:
   grug_postgres_data:

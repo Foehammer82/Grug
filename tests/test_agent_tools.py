@@ -49,12 +49,21 @@ def test_base_tool_concrete_implementation():
 def test_grug_agent_builds_with_anthropic(monkeypatch):
     """GrugAgent initialises without error given an Anthropic API key."""
     import grug.agent.core as core
+
     # Reset cached agent
     core._agent = None
     # Patch AgentProvider so no real API call is made
-    with patch("pydantic_ai.providers.anthropic.AnthropicProvider.__init__", return_value=None), \
-         patch("pydantic_ai.models.anthropic.AnthropicModel.__init__", return_value=None):
+    with (
+        patch(
+            "pydantic_ai.providers.anthropic.AnthropicProvider.__init__",
+            return_value=None,
+        ),
+        patch(
+            "pydantic_ai.models.anthropic.AnthropicModel.__init__", return_value=None
+        ),
+    ):
         from grug.agent.core import GrugAgent
+
         agent = GrugAgent()
         assert agent._context_window == 20
     core._agent = None
@@ -82,8 +91,10 @@ def test_mcp_tools_build_servers(monkeypatch):
     mock_server_cls = MagicMock(return_value=MagicMock())
     with patch("pydantic_ai.mcp.MCPServerStdio", mock_server_cls):
         from grug.agent.tools import mcp_tools
+
         # Force reimport to pick up the mock
         import importlib
+
         importlib.reload(mcp_tools)
         configs = [{"command": "npx", "args": ["-y", "some-server"]}]
         servers = mcp_tools.build_mcp_servers(configs=configs)
@@ -94,10 +105,10 @@ def test_mcp_tools_build_servers(monkeypatch):
 # ConversationMessage.archived field
 # ---------------------------------------------------------------------------
 
+
 def test_conversation_message_has_archived_field():
     """ConversationMessage model exposes an archived column defaulting to False."""
     from grug.db.models import ConversationMessage
-    import sqlalchemy as sa
 
     table = ConversationMessage.__table__
     assert "archived" in table.c
@@ -109,10 +120,12 @@ def test_conversation_message_has_archived_field():
 # GrugAgent._load_history — archival trigger
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_load_history_triggers_archival_on_overflow(monkeypatch):
     """When unarchived message count exceeds window + batch, archiver is called."""
     import grug.config.settings as s
+
     s._settings = None
     monkeypatch.setenv("DISCORD_TOKEN", "t")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
@@ -135,7 +148,7 @@ async def test_load_history_triggers_archival_on_overflow(monkeypatch):
         m.archived = False
         return m
 
-    overflow_msgs = [_msg(i) for i in range(5)]   # 5 overflow messages
+    overflow_msgs = [_msg(i) for i in range(5)]  # 5 overflow messages
     recent_msgs = [_msg(i + 5) for i in range(5)]  # 5 in-window messages
 
     # Mock scoped execute results: count → overflow fetch → recent fetch
@@ -169,17 +182,20 @@ async def test_load_history_triggers_archival_on_overflow(monkeypatch):
 
     import importlib
     from grug.agent import core as agent_core
+
     importlib.reload(agent_core)
 
-    with patch.object(agent_core, "get_session_factory", return_value=mock_factory), \
-         patch.object(agent_core, "ConversationArchiver", return_value=mock_archiver):
+    with (
+        patch.object(agent_core, "get_session_factory", return_value=mock_factory),
+        patch.object(agent_core, "ConversationArchiver", return_value=mock_archiver),
+    ):
         grug_agent = agent_core.GrugAgent()
         await grug_agent._load_history(guild_id=1, channel_id=1)
 
     mock_archiver.archive.assert_awaited_once()
     archive_args = mock_archiver.archive.call_args.args
-    assert archive_args[0] == 1   # guild_id
-    assert archive_args[1] == 1   # channel_id
+    assert archive_args[0] == 1  # guild_id
+    assert archive_args[1] == 1  # channel_id
     assert len(archive_args[2]) == 5  # overflow messages
 
     s._settings = None
@@ -189,6 +205,7 @@ async def test_load_history_triggers_archival_on_overflow(monkeypatch):
 async def test_load_history_skips_archival_below_batch_threshold(monkeypatch):
     """Archiver is NOT called when overflow is smaller than the batch size."""
     import grug.config.settings as s
+
     s._settings = None
     monkeypatch.setenv("DISCORD_TOKEN", "t")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
@@ -236,10 +253,13 @@ async def test_load_history_skips_archival_below_batch_threshold(monkeypatch):
 
     import importlib
     from grug.agent import core as agent_core
+
     importlib.reload(agent_core)
 
-    with patch.object(agent_core, "get_session_factory", return_value=mock_factory), \
-         patch.object(agent_core, "ConversationArchiver", return_value=mock_archiver):
+    with (
+        patch.object(agent_core, "get_session_factory", return_value=mock_factory),
+        patch.object(agent_core, "ConversationArchiver", return_value=mock_archiver),
+    ):
         grug_agent = agent_core.GrugAgent()
         await grug_agent._load_history(guild_id=1, channel_id=1)
 
@@ -250,6 +270,7 @@ async def test_load_history_skips_archival_below_batch_threshold(monkeypatch):
 # ---------------------------------------------------------------------------
 # search_conversation_history tool
 # ---------------------------------------------------------------------------
+
 
 def test_search_conversation_history_tool_formats_results():
     """search_conversation_history returns a formatted chronicle string."""
@@ -267,12 +288,21 @@ def test_search_conversation_history_tool_formats_results():
     with patch("grug.agent.core.ConversationArchiver", return_value=mock_archiver):
         from grug.agent import core as agent_core
         import importlib
+
         importlib.reload(agent_core)
 
         # Locate the registered tool function by name directly from the built agent.
         agent_core._agent = None
-        with patch("pydantic_ai.providers.anthropic.AnthropicProvider.__init__", return_value=None), \
-             patch("pydantic_ai.models.anthropic.AnthropicModel.__init__", return_value=None):
+        with (
+            patch(
+                "pydantic_ai.providers.anthropic.AnthropicProvider.__init__",
+                return_value=None,
+            ),
+            patch(
+                "pydantic_ai.models.anthropic.AnthropicModel.__init__",
+                return_value=None,
+            ),
+        ):
             built_agent = agent_core.get_agent()
 
     tool_names = list(built_agent._function_toolset.tools)

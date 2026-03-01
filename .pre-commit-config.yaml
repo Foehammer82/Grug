@@ -1,0 +1,29 @@
+repos:
+  # Standard hooks for general hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: debug-statements
+
+  # Ruff for linting + formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.10
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Alembic migration check — only runs when model files are touched
+  - repo: local
+    hooks:
+      - id: alembic-check
+        name: alembic migrations up to date
+        language: system
+        entry: uv run python scripts/check_alembic.py
+        pass_filenames: false
+        files: ^grug/db/(models|pg_models)\.py$

@@ -8,9 +8,8 @@ Cosine similarity is used for all queries (<=> operator).
 """
 
 import logging
-import uuid
 
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from grug.db.pg_models import ConversationHistoryEmbedding, DocumentChunkEmbedding
@@ -38,7 +37,9 @@ class PGVectorStore:
     ) -> None:
         embeddings = embedder.embed(texts)
         async with self._session_factory() as session:
-            for chunk_id, text_content, meta, embedding in zip(ids, texts, metadatas, embeddings):
+            for chunk_id, text_content, meta, embedding in zip(
+                ids, texts, metadatas, embeddings
+            ):
                 # Upsert: update if chunk_id already exists, otherwise insert.
                 existing = await session.execute(
                     select(DocumentChunkEmbedding).where(
@@ -78,7 +79,9 @@ class PGVectorStore:
             stmt = (
                 select(DocumentChunkEmbedding)
                 .where(DocumentChunkEmbedding.guild_id == guild_id)
-                .order_by(DocumentChunkEmbedding.embedding.cosine_distance(query_embedding))
+                .order_by(
+                    DocumentChunkEmbedding.embedding.cosine_distance(query_embedding)
+                )
                 .limit(n_results)
             )
             if document_id is not None:
@@ -223,7 +226,9 @@ class PGVectorStore:
                     ConversationHistoryEmbedding.channel_id == channel_id,
                 )
                 .order_by(
-                    ConversationHistoryEmbedding.embedding.cosine_distance(query_embedding)
+                    ConversationHistoryEmbedding.embedding.cosine_distance(
+                        query_embedding
+                    )
                 )
                 .limit(k)
             )
@@ -239,3 +244,89 @@ class PGVectorStore:
             }
             for row in rows
         ]
+
+    # ------------------------------------------------------------------
+    # Character sheets
+    # ------------------------------------------------------------------
+    # Character chunks are stored in the same DocumentChunkEmbedding table
+    # using guild_id=0 as a sentinel namespace and document_id=character_id
+    # as the discriminator.  This avoids a separate table while keeping
+    # character data isolated from real guild documents.
+
+    _CHARACTER_GUILD_SENTINEL = 0
+
+    async def character_upsert(
+        self,
+        character_id: int,
+        ids: list[str],
+        texts: list[str],
+        metadatas: list[dict],
+    ) -> None:
+        embeddings = embedder.embed(texts)
+        async with self._session_factory() as session:
+            for chunk_id, text_content, meta, embedding in zip(
+                ids, texts, metadatas, embeddings
+            ):
+                existing = await session.execute(
+                    select(DocumentChunkEmbedding).where(
+                        DocumentChunkEmbedding.chunk_id == chunk_id
+                    )
+                )
+                row = existing.scalar_one_or_none()
+                if row is None:
+                    row = DocumentChunkEmbedding(
+                        guild_id=self._CHARACTER_GUILD_SENTINEL,
+                        chunk_id=chunk_id,
+                        document_id=character_id,
+                        filename=f"character_{character_id}",
+                        description="",
+                        chunk_index=meta.get("chunk_index", 0),
+                        total_chunks=meta.get("total_chunks", 1),
+                        content=text_content,
+                        embedding=embedding,
+                    )
+                    session.add(row)
+                else:
+                    row.content = text_content
+                    row.embedding = embedding
+            await session.commit()
+
+    async def character_query(
+        self,
+        character_id: int,
+        query: str,
+        n_results: int,
+    ) -> list[dict]:
+        query_embedding = embedder.embed([query])[0]
+        async with self._session_factory() as session:
+            stmt = (
+                select(DocumentChunkEmbedding)
+                .where(
+                    DocumentChunkEmbedding.guild_id == self._CHARACTER_GUILD_SENTINEL,
+                    DocumentChunkEmbedding.document_id == character_id,
+                )
+                .order_by(
+                    DocumentChunkEmbedding.embedding.cosine_distance(query_embedding)
+                )
+                .limit(n_results)
+            )
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+        return [
+            {
+                "text": row.content,
+                "chunk_index": row.chunk_index,
+                "distance": 0.0,
+            }
+            for row in rows
+        ]
+
+    async def character_delete_all(self, character_id: int) -> None:
+        async with self._session_factory() as session:
+            await session.execute(
+                delete(DocumentChunkEmbedding).where(
+                    DocumentChunkEmbedding.guild_id == self._CHARACTER_GUILD_SENTINEL,
+                    DocumentChunkEmbedding.document_id == character_id,
+                )
+            )
+            await session.commit()

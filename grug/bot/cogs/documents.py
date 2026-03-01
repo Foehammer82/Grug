@@ -4,7 +4,6 @@ import logging
 import tempfile
 from pathlib import Path
 
-import aiofiles
 import discord
 from discord.ext import commands
 from sqlalchemy import select
@@ -28,7 +27,9 @@ class DocumentsCog(commands.Cog, name="Documents"):
 
     @commands.command(name="upload_doc", aliases=["add_doc"])
     @commands.has_permissions(manage_guild=True)
-    async def upload_document(self, ctx: commands.Context, *, description: str = "") -> None:
+    async def upload_document(
+        self, ctx: commands.Context, *, description: str = ""
+    ) -> None:
         """Upload and index a text document. Attach the file to this command.
 
         Usage: !upload_doc [description]
@@ -49,7 +50,9 @@ class DocumentsCog(commands.Cog, name="Documents"):
 
         size_mb = attachment.size / (1024 * 1024)
         if size_mb > MAX_FILE_SIZE_MB:
-            await ctx.send(f"File too big! Max {MAX_FILE_SIZE_MB} MB. Grug brain small. 🧠")
+            await ctx.send(
+                f"File too big! Max {MAX_FILE_SIZE_MB} MB. Grug brain small. 🧠"
+            )
             return
 
         async with ctx.typing():

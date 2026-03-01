@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 # SearchDocumentsTool
 # ---------------------------------------------------------------------------
 
+
 def test_search_documents_tool_metadata():
     """SearchDocumentsTool has the expected name and parameter schema."""
     with patch("grug.agent.tools.rag_tools.DocumentRetriever"):
@@ -26,7 +27,11 @@ async def test_search_documents_tool_returns_formatted_results():
     """run() formats retrieved chunks as a numbered list with filename and text."""
     fake_chunks = [
         {"filename": "rulebook.pdf", "chunk_index": 0, "text": "Attack rolls use d20."},
-        {"filename": "rulebook.pdf", "chunk_index": 1, "text": "Saving throws are contested."},
+        {
+            "filename": "rulebook.pdf",
+            "chunk_index": 1,
+            "text": "Saving throws are contested.",
+        },
     ]
 
     with patch("grug.agent.tools.rag_tools.DocumentRetriever") as mock_retriever_cls:
@@ -66,6 +71,7 @@ async def test_search_documents_tool_returns_empty_message():
 # ListDocumentsTool
 # ---------------------------------------------------------------------------
 
+
 def test_list_documents_tool_metadata():
     """ListDocumentsTool has the expected name."""
     from grug.agent.tools.rag_tools import ListDocumentsTool
@@ -82,14 +88,20 @@ async def test_list_documents_tool_returns_documents(mock_db_session):
     mock_factory, mock_session = mock_db_session
 
     fake_docs = [
-        MagicMock(spec=Document, filename="spellbook.pdf", chunk_count=5, description=None),
-        MagicMock(spec=Document, filename="map.pdf", chunk_count=3, description="World map"),
+        MagicMock(
+            spec=Document, filename="spellbook.pdf", chunk_count=5, description=None
+        ),
+        MagicMock(
+            spec=Document, filename="map.pdf", chunk_count=3, description="World map"
+        ),
     ]
     result_mock = MagicMock()
     result_mock.scalars.return_value.all.return_value = fake_docs
     mock_session.execute = AsyncMock(return_value=result_mock)
 
-    with patch("grug.agent.tools.rag_tools.get_session_factory", return_value=mock_factory):
+    with patch(
+        "grug.agent.tools.rag_tools.get_session_factory", return_value=mock_factory
+    ):
         from grug.agent.tools.rag_tools import ListDocumentsTool
 
         tool = ListDocumentsTool(guild_id=42)
@@ -110,7 +122,9 @@ async def test_list_documents_tool_empty_guild(mock_db_session):
     result_mock.scalars.return_value.all.return_value = []
     mock_session.execute = AsyncMock(return_value=result_mock)
 
-    with patch("grug.agent.tools.rag_tools.get_session_factory", return_value=mock_factory):
+    with patch(
+        "grug.agent.tools.rag_tools.get_session_factory", return_value=mock_factory
+    ):
         from grug.agent.tools.rag_tools import ListDocumentsTool
 
         tool = ListDocumentsTool(guild_id=99)

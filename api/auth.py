@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import httpx
-from jose import JWTError, jwt
+from jose import jwt
 
 from .config import settings
 
@@ -18,8 +18,7 @@ def build_discord_oauth_url(state: str = "") -> str:
         f"client_id={settings.discord_client_id}"
         f"&redirect_uri={settings.discord_redirect_uri}"
         "&response_type=code"
-        "&scope=identify+guilds"
-        + (f"&state={state}" if state else "")
+        "&scope=identify+guilds" + (f"&state={state}" if state else "")
     )
     return f"https://discord.com/api/oauth2/authorize?{params}"
 

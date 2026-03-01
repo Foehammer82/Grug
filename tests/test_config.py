@@ -7,7 +7,6 @@ environment variable they want to exercise.
 """
 
 import json
-import pytest
 
 
 def test_settings_defaults():
@@ -30,6 +29,7 @@ def test_settings_mcp_config_json_parsing(monkeypatch):
     monkeypatch.setenv("MCP_SERVER_CONFIGS", mcp_config)
 
     import grug.config.settings as s
+
     s._settings = None
     from grug.config.settings import get_settings
 
@@ -43,6 +43,7 @@ def test_settings_custom_model(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-opus-20240229")
 
     import grug.config.settings as s
+
     s._settings = None
     from grug.config.settings import get_settings
 
@@ -65,6 +66,7 @@ def test_settings_history_archive_overrides(monkeypatch):
     monkeypatch.setenv("AGENT_HISTORY_MAX_SUMMARIES", "50")
 
     import grug.config.settings as s
+
     s._settings = None
     from grug.config.settings import get_settings
 

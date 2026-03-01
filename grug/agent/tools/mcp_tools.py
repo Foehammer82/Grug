@@ -43,7 +43,9 @@ def build_mcp_servers(configs: list[dict[str, Any]] | None = None):
                     env=cfg.get("env"),
                 )
             )
-            logger.info("Configured MCP server: %s %s", cfg["command"], cfg.get("args", []))
+            logger.info(
+                "Configured MCP server: %s %s", cfg["command"], cfg.get("args", [])
+            )
         except Exception as exc:
             logger.error("Failed to create MCP server from config %s: %s", cfg, exc)
     return servers

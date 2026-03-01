@@ -68,6 +68,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     model = AnthropicModel(settings.anthropic_model, provider=provider)
 
     from grug.agent.tools.mcp_tools import build_mcp_servers
+
     toolsets = build_mcp_servers() or None
 
     agent: Agent[GrugDeps, str] = Agent(
@@ -80,7 +81,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
 
     # ------------------------------------------------------------------ tools
     @agent.tool
-    async def search_documents(ctx: RunContext[GrugDeps], query: str, k: int = 5) -> str:
+    async def search_documents(
+        ctx: RunContext[GrugDeps], query: str, k: int = 5
+    ) -> str:
         """Search the guild's indexed documents using semantic similarity.
 
         Use when the user asks about rules, lore, or content from uploaded documents.
@@ -128,7 +131,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
         """Create a calendar event for the guild. Times must be in ISO-8601 format."""
         from datetime import datetime
 
-        from grug.db.models import CalendarEvent, GuildConfig
+        from grug.db.models import CalendarEvent
 
         await _ensure_guild(ctx.deps.guild_id)
         start = datetime.fromisoformat(start_time)
@@ -258,7 +261,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
         return f"🔁 Recurring task **{name}** scheduled ({cron_expression}) — ID: {task_id}."
 
     @agent.tool
-    async def search_conversation_history(ctx: RunContext[GrugDeps], query: str, k: int = 3) -> str:
+    async def search_conversation_history(
+        ctx: RunContext[GrugDeps], query: str, k: int = 3
+    ) -> str:
         """Search the archived conversation history for past events, decisions, and lore.
 
         Use when the user asks about something that may have happened in a previous
@@ -266,7 +271,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
         'what happened last time we visited the city?').
         """
         archiver = ConversationArchiver()
-        results = await archiver.search(ctx.deps.guild_id, ctx.deps.channel_id, query, k=k)
+        results = await archiver.search(
+            ctx.deps.guild_id, ctx.deps.channel_id, query, k=k
+        )
         if not results:
             return "No relevant conversation history found in the chronicles."
         parts = [
@@ -274,8 +281,10 @@ def _build_agent() -> Agent[GrugDeps, str]:
             for i, r in enumerate(results, 1)
         ]
         return "📜 From the chronicles:\n\n" + "\n\n---\n\n".join(parts)
+
     # ----------------------------------------------------------------- glossary
     from grug.agent.tools.glossary_tools import register_glossary_tools
+
     register_glossary_tools(agent)
     return agent
 
@@ -350,7 +359,9 @@ class GrugAgent:
                             "role": m.role,
                             "content": m.content,
                             "author_name": m.author_name,
-                            "created_at": m.created_at.isoformat() if m.created_at else "",
+                            "created_at": m.created_at.isoformat()
+                            if m.created_at
+                            else "",
                         }
                         for m in to_archive
                     ]
@@ -358,7 +369,9 @@ class GrugAgent:
                         archiver = ConversationArchiver()
                         await archiver.archive(guild_id, channel_id, archive_dicts)
                     except Exception:
-                        logger.exception("Failed to archive conversation history — skipping")
+                        logger.exception(
+                            "Failed to archive conversation history — skipping"
+                        )
 
                     # Mark rows archived regardless of whether summary succeeded.
                     for msg in to_archive:
@@ -381,7 +394,11 @@ class GrugAgent:
         messages: list[ModelRequest | ModelResponse] = []
         for row in rows:
             if row.role == "user":
-                content = f"{row.author_name}: {row.content}" if row.author_name else row.content
+                content = (
+                    f"{row.author_name}: {row.content}"
+                    if row.author_name
+                    else row.content
+                )
                 messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
@@ -419,7 +436,9 @@ class GrugAgent:
         message: str,
     ) -> str:
         """Process a user message and return Grug's response."""
-        await self._save_message(guild_id, channel_id, "user", message, user_id, username)
+        await self._save_message(
+            guild_id, channel_id, "user", message, user_id, username
+        )
 
         history = await self._load_history(guild_id, channel_id)
         deps = GrugDeps(

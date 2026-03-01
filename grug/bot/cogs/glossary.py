@@ -59,7 +59,9 @@ class GlossaryCog(commands.Cog, name="Glossary"):
             )
             return
 
-        embed = discord.Embed(title=f"📖 Glossary: '{term}'", color=discord.Color.blurple())
+        embed = discord.Embed(
+            title=f"📖 Glossary: '{term}'", color=discord.Color.blurple()
+        )
         seen: set[str] = set()
         for m in matches:
             key = m.term.lower()
@@ -116,6 +118,7 @@ class GlossaryCog(commands.Cog, name="Glossary"):
                 return
 
             from grug.db.models import GuildConfig
+
             cfg_result = await session.execute(
                 select(GuildConfig).where(GuildConfig.guild_id == guild_id)
             )
@@ -228,7 +231,9 @@ class GlossaryCog(commands.Cog, name="Glossary"):
 
     # ---------------------------------------------------------------------- list
 
-    @glossary_group.command(name="list", description="List glossary terms for this server")
+    @glossary_group.command(
+        name="list", description="List glossary terms for this server"
+    )
     @app_commands.describe(
         channel="Optional: list only terms for a specific channel",
         page="Page number (default: 1)",
@@ -277,7 +282,9 @@ class GlossaryCog(commands.Cog, name="Glossary"):
                 source = "🤖→👤"
             else:
                 source = "👤"
-            short_def = t.definition[:80] + "…" if len(t.definition) > 80 else t.definition
+            short_def = (
+                t.definition[:80] + "…" if len(t.definition) > 80 else t.definition
+            )
             embed.add_field(
                 name=f"{source} {t.term} ({scope})",
                 value=short_def,

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from grug.agent.tools.base import BaseTool
 from grug.db.models import CalendarEvent, GuildConfig, Reminder, ScheduledTask
 from grug.db.session import get_session_factory
-from grug.scheduler.manager import add_cron_job, add_date_job, get_scheduler
+from grug.scheduler.manager import add_cron_job, add_date_job
 from grug.scheduler.tasks import run_scheduled_prompt, send_reminder
 
 logger = logging.getLogger(__name__)
@@ -40,7 +40,9 @@ class CreateCalendarEventTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Create a calendar event for the guild. Times should be in ISO-8601 format."
+        return (
+            "Create a calendar event for the guild. Times should be in ISO-8601 format."
+        )
 
     @property
     def parameters(self) -> dict[str, Any]:
@@ -252,9 +254,7 @@ class CreateScheduledTaskTool(BaseTool):
             "required": ["name", "prompt", "cron_expression"],
         }
 
-    async def run(
-        self, name: str, prompt: str, cron_expression: str, **_: Any
-    ) -> str:
+    async def run(self, name: str, prompt: str, cron_expression: str, **_: Any) -> str:
         await _ensure_guild(self._guild_id)
         factory = get_session_factory()
         async with factory() as session:

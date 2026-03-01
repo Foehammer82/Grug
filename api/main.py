@@ -19,7 +19,15 @@ from .auth import (
 from .config import settings
 from .database import get_db
 from .deps import get_current_user
-from .models import CalendarEvent, Document, GlossaryTerm, GlossaryTermHistory, GuildConfig, Reminder, ScheduledTask
+from .models import (
+    CalendarEvent,
+    Document,
+    GlossaryTerm,
+    GlossaryTermHistory,
+    GuildConfig,
+    Reminder,
+    ScheduledTask,
+)
 from .schemas import (
     CalendarEventOut,
     DiscordChannelOut,
@@ -70,7 +78,9 @@ async def discord_callback(code: str, response: Response) -> dict[str, str]:
         "username": user["username"],
         "discriminator": user.get("discriminator", "0"),
         "avatar": user.get("avatar"),
-        "guilds": [{"id": g["id"], "name": g["name"], "icon": g.get("icon")} for g in guilds],
+        "guilds": [
+            {"id": g["id"], "name": g["name"], "icon": g.get("icon")} for g in guilds
+        ],
     }
     jwt_token = create_jwt(payload)
     response.set_cookie(
@@ -108,7 +118,9 @@ async def logout(response: Response) -> dict[str, str]:
 def _assert_guild_member(guild_id: str, user: dict[str, Any]) -> None:
     guild_ids = {g["id"] for g in user.get("guilds", [])}
     if str(guild_id) not in guild_ids:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this guild")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this guild"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +157,9 @@ async def get_guild_config(
     db: AsyncSession = Depends(get_db),
 ) -> GuildConfig:
     _assert_guild_member(str(guild_id), user)
-    result = await db.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
+    result = await db.execute(
+        select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+    )
     cfg = result.scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=404, detail="Guild config not found")
@@ -160,7 +174,9 @@ async def update_guild_config(
     db: AsyncSession = Depends(get_db),
 ) -> GuildConfig:
     _assert_guild_member(str(guild_id), user)
-    result = await db.execute(select(GuildConfig).where(GuildConfig.guild_id == guild_id))
+    result = await db.execute(
+        select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+    )
     cfg = result.scalar_one_or_none()
     if cfg is None:
         raise HTTPException(status_code=404, detail="Guild config not found")
@@ -208,7 +224,9 @@ async def list_tasks(
 ) -> list[ScheduledTask]:
     _assert_guild_member(str(guild_id), user)
     result = await db.execute(
-        select(ScheduledTask).where(ScheduledTask.guild_id == guild_id).order_by(ScheduledTask.created_at)
+        select(ScheduledTask)
+        .where(ScheduledTask.guild_id == guild_id)
+        .order_by(ScheduledTask.created_at)
     )
     return list(result.scalars().all())
 
@@ -223,7 +241,9 @@ async def toggle_task(
 ) -> ScheduledTask:
     _assert_guild_member(str(guild_id), user)
     result = await db.execute(
-        select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.guild_id == guild_id)
+        select(ScheduledTask).where(
+            ScheduledTask.id == task_id, ScheduledTask.guild_id == guild_id
+        )
     )
     task = result.scalar_one_or_none()
     if task is None:
@@ -243,7 +263,9 @@ async def delete_task(
 ) -> None:
     _assert_guild_member(str(guild_id), user)
     result = await db.execute(
-        select(ScheduledTask).where(ScheduledTask.id == task_id, ScheduledTask.guild_id == guild_id)
+        select(ScheduledTask).where(
+            ScheduledTask.id == task_id, ScheduledTask.guild_id == guild_id
+        )
     )
     task = result.scalar_one_or_none()
     if task is None:
@@ -265,7 +287,9 @@ async def list_documents(
 ) -> list[Document]:
     _assert_guild_member(str(guild_id), user)
     result = await db.execute(
-        select(Document).where(Document.guild_id == guild_id).order_by(Document.created_at)
+        select(Document)
+        .where(Document.guild_id == guild_id)
+        .order_by(Document.created_at)
     )
     return list(result.scalars().all())
 
@@ -301,7 +325,9 @@ async def list_reminders(
 ) -> list[Reminder]:
     _assert_guild_member(str(guild_id), user)
     result = await db.execute(
-        select(Reminder).where(Reminder.guild_id == guild_id).order_by(Reminder.remind_at)
+        select(Reminder)
+        .where(Reminder.guild_id == guild_id)
+        .order_by(Reminder.remind_at)
     )
     return list(result.scalars().all())
 
@@ -329,7 +355,9 @@ async def list_guild_channels(
             headers={"Authorization": f"Bot {bot_token}"},
         )
     if resp.status_code != 200:
-        raise HTTPException(status_code=502, detail="Failed to fetch channels from Discord")
+        raise HTTPException(
+            status_code=502, detail="Failed to fetch channels from Discord"
+        )
     channels = resp.json()
     # Only return text channels (type 0) and announcement channels (type 5)
     return [
@@ -361,7 +389,9 @@ async def list_glossary_terms(
     return list(result.scalars().all())
 
 
-@app.post("/api/guilds/{guild_id}/glossary", response_model=GlossaryTermOut, status_code=201)
+@app.post(
+    "/api/guilds/{guild_id}/glossary", response_model=GlossaryTermOut, status_code=201
+)
 async def create_glossary_term(
     guild_id: int,
     body: GlossaryTermCreate,

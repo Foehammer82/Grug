@@ -101,6 +101,36 @@ class VectorStore(Protocol):
         """
         ...
 
+    # ------------------------------------------------------------------
+    # Character sheets (per-character collections)
+    # ------------------------------------------------------------------
+
+    async def character_upsert(
+        self,
+        character_id: int,
+        ids: list[str],
+        texts: list[str],
+        metadatas: list[dict],
+    ) -> None:
+        """Insert or update character sheet chunks for *character_id*."""
+        ...
+
+    async def character_query(
+        self,
+        character_id: int,
+        query: str,
+        n_results: int,
+    ) -> list[dict]:
+        """Semantic search over a character's sheet chunks.
+
+        Returns a list of dicts with keys: text, chunk_index, distance.
+        """
+        ...
+
+    async def character_delete_all(self, character_id: int) -> None:
+        """Delete all indexed chunks for a character (e.g. on re-upload)."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Singleton factory
@@ -130,6 +160,8 @@ def get_vector_store() -> VectorStore:
         else:
             from grug.rag.backends.chroma_store import ChromaVectorStore
 
-            logger.info("Vector backend: ChromaDB (path=%s)", settings.chroma_persist_dir)
+            logger.info(
+                "Vector backend: ChromaDB (path=%s)", settings.chroma_persist_dir
+            )
             _store = ChromaVectorStore(settings.chroma_persist_dir)
     return _store

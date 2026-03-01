@@ -121,8 +121,12 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_conversation_messages_guild_id", "conversation_messages", ["guild_id"])
-    op.create_index("ix_conversation_messages_channel_id", "conversation_messages", ["channel_id"])
+    op.create_index(
+        "ix_conversation_messages_guild_id", "conversation_messages", ["guild_id"]
+    )
+    op.create_index(
+        "ix_conversation_messages_channel_id", "conversation_messages", ["channel_id"]
+    )
 
     # ------------------------------------------------------------------
     # Vector embedding tables (pgvector-only)
@@ -146,7 +150,9 @@ def upgrade() -> None:
         "ix_doc_chunk_embeddings_guild_id", "document_chunk_embeddings", ["guild_id"]
     )
     op.create_index(
-        "ix_doc_chunk_embeddings_document_id", "document_chunk_embeddings", ["document_id"]
+        "ix_doc_chunk_embeddings_document_id",
+        "document_chunk_embeddings",
+        ["document_id"],
     )
     # IVFFlat cosine index — speeds up nearest-neighbour search.
     op.execute(
@@ -173,7 +179,9 @@ def upgrade() -> None:
         sa.UniqueConstraint("summary_id"),
     )
     op.create_index(
-        "ix_conv_history_embeddings_guild_id", "conversation_history_embeddings", ["guild_id"]
+        "ix_conv_history_embeddings_guild_id",
+        "conversation_history_embeddings",
+        ["guild_id"],
     )
     op.create_index(
         "ix_conv_history_embeddings_channel_id",

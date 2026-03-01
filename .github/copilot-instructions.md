@@ -40,6 +40,34 @@ Grug is a self-hosted AI agent designed to assist with TTRPGs (Tabletop Role-Pla
 - Tests should cover both happy paths and edge cases.
 - Run existing tests before submitting changes: `uv run pytest tests/`.
 
+## Database Migrations (Alembic)
+
+Alembic is used **only for Postgres deployments**. SQLite uses `create_all` and never needs migrations.
+
+### Rules
+- **Any time an ORM model changes** (in `grug/db/models.py` or `grug/db/pg_models.py`), a new migration must be generated and committed alongside the model change.
+- Never alter the database schema by hand — always go through Alembic.
+- Always review auto-generated migration files before committing; autogenerate misses `Vector` columns, `IVFFlat` indexes, and `CREATE EXTENSION` statements — add those manually.
+- Use `uv run alembic` for all Alembic commands (never bare `alembic`).
+
+### Workflow for schema changes
+1. Update the ORM model in `grug/db/models.py` or `grug/db/pg_models.py`.
+2. Auto-generate a migration: `uv run alembic revision --autogenerate -m "brief_description"`
+3. Review and edit the generated file in `alembic/versions/`.
+4. Apply locally: `uv run alembic upgrade head`
+5. Verify: `uv run alembic current`
+6. Test round-trip: `uv run alembic downgrade -1` then `uv run alembic upgrade head`
+7. Commit both the model change and the migration file together.
+
+### Checking migration state
+```bash
+uv run alembic current        # what revision the DB is at
+uv run alembic history --verbose  # full history
+uv run alembic check          # fail if models have un-migrated changes (needs DB)
+```
+
+For the full command reference and pgvector-specific patterns, consult the `alembic-migrations` agent skill (`.github/skills/alembic-migrations/SKILL.md`).
+
 ## Forbidden Practices
 
 - Do not introduce unnecessary dependencies or frameworks.

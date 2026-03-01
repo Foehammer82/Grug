@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 # _history_collection_name
 # ---------------------------------------------------------------------------
 
+
 def test_history_collection_name():
     """History collections use a distinct suffix from document collections."""
     from grug.rag.backends.chroma_store import _history_collection_name
@@ -34,8 +35,11 @@ def test_history_collection_name_uniqueness():
 # _summarise
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-async def test_summarise_formats_transcript(make_messages, mock_chromadb, mock_anthropic):
+async def test_summarise_formats_transcript(
+    make_messages, mock_chromadb, mock_anthropic
+):
     """_summarise sends a transcript with role/name prefixes to Anthropic."""
     messages = make_messages(3)
 
@@ -44,6 +48,7 @@ async def test_summarise_formats_transcript(make_messages, mock_chromadb, mock_a
     mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
 
     from grug.rag import history_archiver
+
     importlib.reload(history_archiver)
     archiver = history_archiver.ConversationArchiver()
     archiver._anthropic = mock_anthropic
@@ -60,8 +65,18 @@ async def test_summarise_formats_transcript(make_messages, mock_chromadb, mock_a
 async def test_summarise_uses_author_name_for_users(mock_chromadb, mock_anthropic):
     """User messages are labelled with author_name, not generic 'user'."""
     messages = [
-        {"role": "user", "content": "We attack!", "author_name": "Thorin", "created_at": ""},
-        {"role": "assistant", "content": "Roll for initiative.", "author_name": None, "created_at": ""},
+        {
+            "role": "user",
+            "content": "We attack!",
+            "author_name": "Thorin",
+            "created_at": "",
+        },
+        {
+            "role": "assistant",
+            "content": "Roll for initiative.",
+            "author_name": None,
+            "created_at": "",
+        },
     ]
 
     mock_response = MagicMock()
@@ -69,13 +84,16 @@ async def test_summarise_uses_author_name_for_users(mock_chromadb, mock_anthropi
     mock_anthropic.messages.create = AsyncMock(return_value=mock_response)
 
     from grug.rag import history_archiver
+
     importlib.reload(history_archiver)
     archiver = history_archiver.ConversationArchiver()
     archiver._anthropic = mock_anthropic
 
     await archiver._summarise(messages)
 
-    transcript = mock_anthropic.messages.create.call_args.kwargs["messages"][0]["content"]
+    transcript = mock_anthropic.messages.create.call_args.kwargs["messages"][0][
+        "content"
+    ]
     assert "Thorin:" in transcript
     assert "Assistant:" in transcript
 
@@ -84,10 +102,14 @@ async def test_summarise_uses_author_name_for_users(mock_chromadb, mock_anthropi
 # archive
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
-async def test_archive_empty_messages_returns_empty_string(mock_chromadb, mock_anthropic):
+async def test_archive_empty_messages_returns_empty_string(
+    mock_chromadb, mock_anthropic
+):
     """Archiving an empty message list short-circuits and returns ''."""
     from grug.rag import history_archiver
+
     importlib.reload(history_archiver)
     archiver = history_archiver.ConversationArchiver()
     archiver._anthropic = mock_anthropic
@@ -99,7 +121,9 @@ async def test_archive_empty_messages_returns_empty_string(mock_chromadb, mock_a
 
 
 @pytest.mark.asyncio
-async def test_archive_stores_summary_in_chromadb(make_messages, mock_chromadb, mock_anthropic):
+async def test_archive_stores_summary_in_chromadb(
+    make_messages, mock_chromadb, mock_anthropic
+):
     """archive calls ChromaDB upsert with the summary text and correct metadata."""
     messages = make_messages(4)
 
@@ -112,6 +136,7 @@ async def test_archive_stores_summary_in_chromadb(make_messages, mock_chromadb, 
     mock_chromadb.get_or_create_collection.return_value = mock_collection
 
     from grug.rag import history_archiver
+
     importlib.reload(history_archiver)
     archiver = history_archiver.ConversationArchiver()
 
@@ -130,6 +155,7 @@ async def test_archive_stores_summary_in_chromadb(make_messages, mock_chromadb, 
 # ---------------------------------------------------------------------------
 # _prune_oldest
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_prune_oldest_does_nothing_under_cap():
@@ -159,10 +185,7 @@ async def test_prune_oldest_removes_excess():
 
     mock_store = AsyncMock()
     # 7 summaries with max_summaries=5 — expect 2 oldest deleted.
-    pairs = [
-        (f"id_{i}", {"start_time": f"2026-01-{i + 1:02d}"})
-        for i in range(7)
-    ]
+    pairs = [(f"id_{i}", {"start_time": f"2026-01-{i + 1:02d}"}) for i in range(7)]
     mock_store.history_get.return_value = pairs
 
     archiver = ConversationArchiver(store=mock_store)
@@ -180,6 +203,7 @@ async def test_prune_oldest_removes_excess():
 # ---------------------------------------------------------------------------
 # search
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_search_returns_formatted_results():
@@ -222,4 +246,3 @@ async def test_search_returns_empty_list_on_store_error():
     except RuntimeError:
         results = []
     assert results == []
-

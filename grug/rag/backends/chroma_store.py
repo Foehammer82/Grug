@@ -10,7 +10,6 @@ thread pool via asyncio.to_thread so the event loop is never blocked.
 
 import asyncio
 import logging
-from functools import partial
 
 import chromadb
 
@@ -29,6 +28,10 @@ def _history_collection_name(guild_id: int) -> str:
     return f"guild_{guild_id}{_HISTORY_SUFFIX}"
 
 
+def _character_collection_name(character_id: int) -> str:
+    return f"character_{character_id}"
+
+
 class ChromaVectorStore:
     """VectorStore implementation backed by an embedded ChromaDB instance."""
 
@@ -43,11 +46,18 @@ class ChromaVectorStore:
         return self._client
 
     def _doc_collection(self, guild_id: int):
-        return self._get_client().get_or_create_collection(name=_collection_name(guild_id))
+        return self._get_client().get_or_create_collection(
+            name=_collection_name(guild_id)
+        )
 
     def _history_collection(self, guild_id: int):
         return self._get_client().get_or_create_collection(
             name=_history_collection_name(guild_id)
+        )
+
+    def _character_collection(self, character_id: int):
+        return self._get_client().get_or_create_collection(
+            name=_character_collection_name(character_id)
         )
 
     # ------------------------------------------------------------------
@@ -65,7 +75,9 @@ class ChromaVectorStore:
             col = self._doc_collection(guild_id)
             # Provide explicit embeddings so the same model is used as pgvector.
             embeddings = embedder.embed(texts)
-            col.upsert(ids=ids, documents=texts, metadatas=metadatas, embeddings=embeddings)
+            col.upsert(
+                ids=ids, documents=texts, metadatas=metadatas, embeddings=embeddings
+            )
 
         await asyncio.to_thread(_sync)
 
@@ -151,7 +163,12 @@ class ChromaVectorStore:
         def _sync():
             col = self._history_collection(guild_id)
             embedding = embedder.embed([summary])[0]
-            col.upsert(ids=[id], documents=[summary], metadatas=[metadata], embeddings=[embedding])
+            col.upsert(
+                ids=[id],
+                documents=[summary],
+                metadatas=[metadata],
+                embeddings=[embedding],
+            )
 
         await asyncio.to_thread(_sync)
 
@@ -215,3 +232,68 @@ class ChromaVectorStore:
             return summaries
 
         return await asyncio.to_thread(_sync)
+
+    # ------------------------------------------------------------------
+    # Character sheets
+    # ------------------------------------------------------------------
+
+    async def character_upsert(
+        self,
+        character_id: int,
+        ids: list[str],
+        texts: list[str],
+        metadatas: list[dict],
+    ) -> None:
+        def _sync():
+            col = self._character_collection(character_id)
+            embeddings = embedder.embed(texts)
+            col.upsert(
+                ids=ids, documents=texts, metadatas=metadatas, embeddings=embeddings
+            )
+
+        await asyncio.to_thread(_sync)
+
+    async def character_query(
+        self,
+        character_id: int,
+        query: str,
+        n_results: int,
+    ) -> list[dict]:
+        def _sync():
+            col = self._character_collection(character_id)
+            query_embedding = embedder.embed([query])[0]
+            try:
+                results = col.query(
+                    query_embeddings=[query_embedding],
+                    n_results=n_results,
+                    include=["documents", "metadatas", "distances"],
+                )
+            except Exception as exc:
+                logger.warning("ChromaDB character query failed: %s", exc)
+                return []
+            chunks = []
+            for doc, meta, dist in zip(
+                results["documents"][0],
+                results["metadatas"][0],
+                results["distances"][0],
+            ):
+                chunks.append(
+                    {
+                        "text": doc,
+                        "chunk_index": meta.get("chunk_index", 0),
+                        "distance": dist,
+                    }
+                )
+            return chunks
+
+        return await asyncio.to_thread(_sync)
+
+    async def character_delete_all(self, character_id: int) -> None:
+        def _sync():
+            name = _character_collection_name(character_id)
+            try:
+                self._get_client().delete_collection(name)
+            except Exception:
+                pass
+
+        await asyncio.to_thread(_sync)

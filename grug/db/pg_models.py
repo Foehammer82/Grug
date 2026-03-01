@@ -23,13 +23,17 @@ class DocumentChunkEmbedding(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     document_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    chunk_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)  # UUID
+    chunk_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, unique=True
+    )  # UUID
     filename: Mapped[str] = mapped_column(String(512), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=True)
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     total_chunks: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(EMBEDDING_DIM), nullable=False
+    )
 
 
 class ConversationHistoryEmbedding(Base):
@@ -40,9 +44,13 @@ class ConversationHistoryEmbedding(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    summary_id: Mapped[str] = mapped_column(String(36), nullable=False, unique=True)  # UUID
+    summary_id: Mapped[str] = mapped_column(
+        String(36), nullable=False, unique=True
+    )  # UUID
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     message_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     start_time: Mapped[str] = mapped_column(String(64), nullable=False, default="")
     end_time: Mapped[str] = mapped_column(String(64), nullable=False, default="")
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIM), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(
+        Vector(EMBEDDING_DIM), nullable=False
+    )

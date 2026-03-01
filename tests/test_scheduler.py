@@ -2,7 +2,6 @@
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
 
 
 def test_add_cron_job_valid():
@@ -33,6 +32,7 @@ def test_add_cron_job_invalid_expression():
 def test_remove_nonexistent_job():
     """Removing a non-existent job returns False without raising."""
     from grug.scheduler.manager import remove_job
+
     result = remove_job("does_not_exist_xyz")
     assert result is False
 

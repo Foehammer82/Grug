@@ -16,7 +16,7 @@ import pytest
 @pytest.fixture()
 async def db_session():
     """In-memory async SQLite session for glossary tests."""
-    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
     from grug.db.models import Base
 
@@ -126,16 +126,26 @@ async def test_channel_and_guild_scoped_terms_coexist(db_session):
     now = datetime.now(timezone.utc)
     db_session.add(
         GlossaryTerm(
-            guild_id=444, channel_id=None, term="sword",
-            definition="Guild sword.", ai_generated=False,
-            originally_ai_generated=False, created_by=1, updated_at=now,
+            guild_id=444,
+            channel_id=None,
+            term="sword",
+            definition="Guild sword.",
+            ai_generated=False,
+            originally_ai_generated=False,
+            created_by=1,
+            updated_at=now,
         )
     )
     db_session.add(
         GlossaryTerm(
-            guild_id=444, channel_id=777, term="sword",
-            definition="Channel sword.", ai_generated=False,
-            originally_ai_generated=False, created_by=1, updated_at=now,
+            guild_id=444,
+            channel_id=777,
+            term="sword",
+            definition="Channel sword.",
+            ai_generated=False,
+            originally_ai_generated=False,
+            created_by=1,
+            updated_at=now,
         )
     )
     await db_session.commit()
@@ -209,6 +219,7 @@ async def test_api_patch_semantics(db_session, ai_term):
     assert ai_term.originally_ai_generated is True
 
     from sqlalchemy import select
+
     result = await db_session.execute(
         select(GlossaryTermHistory).where(GlossaryTermHistory.term_id == ai_term.id)
     )
@@ -306,7 +317,9 @@ async def test_agent_can_create_new_term():
 
         upsert_fn = test_agent._function_toolset.tools["upsert_glossary_term"].function
 
-        result = await upsert_fn(FakeCtx(), term="vorpal", definition="Exceptionally sharp.")
+        result = await upsert_fn(
+            FakeCtx(), term="vorpal", definition="Exceptionally sharp."
+        )
         assert "add" in result.lower() or "vorpal" in result
         fake_session.add.assert_called_once()
         fake_session.commit.assert_called_once()

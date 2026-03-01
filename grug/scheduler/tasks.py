@@ -23,7 +23,9 @@ async def run_scheduled_prompt(
 
     channel = bot.get_channel(channel_id)
     if channel is None:
-        logger.warning("Channel %d not found for scheduled task %d", channel_id, task_id)
+        logger.warning(
+            "Channel %d not found for scheduled task %d", channel_id, task_id
+        )
         return
 
     agent = GrugAgent()
@@ -44,14 +46,18 @@ async def run_scheduled_prompt(
 
     factory = get_session_factory()
     async with factory() as session:
-        result = await session.execute(select(ScheduledTask).where(ScheduledTask.id == task_id))
+        result = await session.execute(
+            select(ScheduledTask).where(ScheduledTask.id == task_id)
+        )
         task = result.scalar_one_or_none()
         if task:
             task.last_run = datetime.now(timezone.utc)
             await session.commit()
 
 
-async def send_reminder(reminder_id: int, channel_id: int, user_id: int, message: str) -> None:
+async def send_reminder(
+    reminder_id: int, channel_id: int, user_id: int, message: str
+) -> None:
     """Send a reminder to a channel and mark it sent."""
     from grug.bot.client import get_bot
     from grug.db.session import get_session_factory
@@ -70,7 +76,9 @@ async def send_reminder(reminder_id: int, channel_id: int, user_id: int, message
 
     factory = get_session_factory()
     async with factory() as session:
-        result = await session.execute(select(Reminder).where(Reminder.id == reminder_id))
+        result = await session.execute(
+            select(Reminder).where(Reminder.id == reminder_id)
+        )
         reminder = result.scalar_one_or_none()
         if reminder:
             reminder.sent = True

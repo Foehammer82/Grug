@@ -15,7 +15,9 @@ CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
 
 
-def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
+def _chunk_text(
+    text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
+) -> list[str]:
     """Split text into overlapping chunks."""
     # Normalise whitespace
     text = re.sub(r"\n{3,}", "\n\n", text)
@@ -65,7 +67,12 @@ class DocumentIndexer:
             for i, _ in enumerate(chunks)
         ]
         await self._store.doc_upsert(guild_id, ids, chunks, metadatas)
-        logger.info("Indexed %d chunks from %s for guild %d", len(chunks), file_path.name, guild_id)
+        logger.info(
+            "Indexed %d chunks from %s for guild %d",
+            len(chunks),
+            file_path.name,
+            guild_id,
+        )
         return len(chunks)
 
     async def delete_document(self, guild_id: int, document_id: int) -> None:

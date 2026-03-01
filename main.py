@@ -87,6 +87,7 @@ async def main() -> None:
         await bot.start(settings.discord_token)
     finally:
         from grug.scheduler.manager import stop_scheduler
+
         stop_scheduler()
 
 

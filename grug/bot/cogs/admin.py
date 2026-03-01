@@ -8,8 +8,8 @@ from discord.ext import commands
 from sqlalchemy import select
 
 from grug.config.settings import get_settings
-from grug.db.models import CalendarEvent, GuildConfig, Reminder, ScheduledTask
-from grug.db.session import get_session_factory, init_db
+from grug.db.models import CalendarEvent, GuildConfig, ScheduledTask
+from grug.db.session import get_session_factory
 from grug.scheduler.manager import get_scheduler, remove_job
 
 logger = logging.getLogger(__name__)
@@ -65,6 +65,7 @@ class AdminCog(commands.Cog, name="Admin"):
         Usage: !set_timezone America/New_York
         """
         import zoneinfo
+
         try:
             zoneinfo.ZoneInfo(timezone)
         except Exception:

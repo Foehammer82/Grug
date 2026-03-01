@@ -24,4 +24,6 @@ class DocumentRetriever:
 
         Returns a list of dicts with keys: text, filename, chunk_index, distance.
         """
-        return await self._store.doc_query(guild_id, query, n_results=k, document_id=document_id)
+        return await self._store.doc_query(
+            guild_id, query, n_results=k, document_id=document_id
+        )

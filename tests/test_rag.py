@@ -1,11 +1,10 @@
 """Tests for RAG text chunking."""
 
-import pytest
-
 
 def test_chunk_text_basic():
     """Text shorter than chunk_size is returned as a single chunk."""
     from grug.rag.indexer import _chunk_text
+
     text = "Hello, world!"
     chunks = _chunk_text(text, chunk_size=100, overlap=10)
     assert chunks == ["Hello, world!"]
@@ -14,6 +13,7 @@ def test_chunk_text_basic():
 def test_chunk_text_splits_long_text():
     """Long text is split into multiple overlapping chunks."""
     from grug.rag.indexer import _chunk_text
+
     text = "A" * 2500
     chunks = _chunk_text(text, chunk_size=1000, overlap=200)
     assert len(chunks) >= 3
@@ -25,6 +25,7 @@ def test_chunk_text_splits_long_text():
 def test_chunk_text_overlap():
     """Consecutive chunks share overlapping content."""
     from grug.rag.indexer import _chunk_text
+
     text = "x" * 1500
     chunks = _chunk_text(text, chunk_size=1000, overlap=200)
     assert len(chunks) == 2
@@ -36,4 +37,5 @@ def test_chunk_text_overlap():
 def test_chunk_empty_text():
     """Empty text returns an empty list."""
     from grug.rag.indexer import _chunk_text
+
     assert _chunk_text("") == []

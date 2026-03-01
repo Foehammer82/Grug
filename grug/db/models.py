@@ -8,6 +8,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
 )
@@ -24,18 +25,112 @@ class GuildConfig(Base):
     __tablename__ = "guild_configs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    guild_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
     prefix: Mapped[str] = mapped_column(String(10), default="!")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc)
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     events: Mapped[list["CalendarEvent"]] = relationship(back_populates="guild")
     reminders: Mapped[list["Reminder"]] = relationship(back_populates="guild")
-    scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(back_populates="guild")
+    scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(
+        back_populates="guild"
+    )
+
+
+class Campaign(Base):
+    """A TTRPG campaign linked to a specific Discord channel.
+
+    One channel = one campaign. This is the primary scoping boundary for
+    documents, memory, and character associations.
+    """
+
+    __tablename__ = "campaigns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    # channel_id is unique — one channel can only host one campaign.
+    channel_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Detected or manually set system tag, e.g. 'dnd5e', 'pf2e', 'unknown'.
+    system: Mapped[str] = mapped_column(String(128), default="unknown")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
+
+
+class Character(Base):
+    """A player character sheet owned by a Discord user."""
+
+    __tablename__ = "characters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Discord snowflake of the player who owns this character.
+    owner_discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True
+    )
+    # Optional link to a campaign; characters can exist without one.
+    campaign_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Detected game system, e.g. 'dnd5e', 'pf2e', 'unknown'.
+    system: Mapped[str] = mapped_column(String(128), default="unknown")
+    # Full text of the sheet as extracted at upload time.
+    raw_sheet_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Structured JSON extracted by the parser (stats, abilities, etc.).
+    structured_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Relative path within the grug_files volume, e.g. characters/123/fighter.pdf
+    file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    campaign: Mapped["Campaign | None"] = relationship(back_populates="characters")
+
+
+class UserProfile(Base):
+    """Persistent profile for a Discord user, tracking their active character."""
+
+    __tablename__ = "user_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
+    # The character the user has set as active for DM sessions.
+    active_character_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("characters.id", use_alter=True, name="fk_user_active_character"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
+    active_character: Mapped["Character | None"] = relationship(
+        "Character", foreign_keys=[active_character_id]
+    )
 
 
 class Document(Base):
@@ -50,7 +145,11 @@ class Document(Base):
     chroma_collection: Mapped[str] = mapped_column(String(256), nullable=False)
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     uploaded_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    # Optional campaign association; NULL means document is guild-wide.
+    campaign_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
 
 class CalendarEvent(Base):
@@ -68,7 +167,9 @@ class CalendarEvent(Base):
     end_time: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
 
@@ -87,7 +188,9 @@ class Reminder(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     remind_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="reminders")
 
@@ -108,7 +211,9 @@ class ScheduledTask(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="scheduled_tasks")
 
@@ -121,12 +226,19 @@ class ConversationMessage(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    role: Mapped[str] = mapped_column(String(32), nullable=False)  # user / assistant / tool
+    role: Mapped[str] = mapped_column(
+        String(32), nullable=False
+    )  # user / assistant / tool
     content: Mapped[str] = mapped_column(Text, nullable=False)
     author_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     author_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
-    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
+    archived: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc)
+    )
+
 
 class GlossaryTerm(Base):
     """A guild- or channel-scoped glossary term for campaign/server-specific definitions.
@@ -141,7 +253,9 @@ class GlossaryTerm(Base):
     guild_id: Mapped[int] = mapped_column(
         BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
     )
-    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    channel_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
     term: Mapped[str] = mapped_column(String(256), nullable=False)
     definition: Mapped[str] = mapped_column(Text, nullable=False)
     # True while the agent owns this definition; flipped to False on any human edit.

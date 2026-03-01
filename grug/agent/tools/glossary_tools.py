@@ -93,7 +93,9 @@ def register_glossary_tools(agent: "Agent[GrugDeps, str]") -> None:
             result = await session.execute(
                 select(GlossaryTerm).where(
                     GlossaryTerm.guild_id == ctx.deps.guild_id,
-                    GlossaryTerm.channel_id.is_(None),  # agent writes are always guild-wide
+                    GlossaryTerm.channel_id.is_(
+                        None
+                    ),  # agent writes are always guild-wide
                     GlossaryTerm.term.ilike(term),
                 )
             )
