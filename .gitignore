@@ -25,3 +25,6 @@ build/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# MkDocs build output
+site/
