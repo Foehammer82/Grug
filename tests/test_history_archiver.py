@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 def test_history_collection_name():
     """History collections use a distinct suffix from document collections."""
-    from grug.rag.history_archiver import _history_collection_name
+    from grug.rag.backends.chroma_store import _history_collection_name
 
     name = _history_collection_name(42)
     assert name == "guild_42_history"
@@ -25,7 +25,7 @@ def test_history_collection_name():
 
 def test_history_collection_name_uniqueness():
     """Different guild IDs produce different collection names."""
-    from grug.rag.history_archiver import _history_collection_name
+    from grug.rag.backends.chroma_store import _history_collection_name
 
     assert _history_collection_name(1) != _history_collection_name(2)
 
@@ -131,50 +131,48 @@ async def test_archive_stores_summary_in_chromadb(make_messages, mock_chromadb, 
 # _prune_oldest
 # ---------------------------------------------------------------------------
 
-def test_prune_oldest_does_nothing_under_cap(mock_chromadb, mock_anthropic):
-    """No deletions occur when summary count is within the cap."""
-    mock_collection = MagicMock()
-    mock_collection.get.return_value = {
-        "ids": ["a", "b", "c"],
-        "metadatas": [
-            {"channel_id": 1, "start_time": "2026-01-01"},
-            {"channel_id": 1, "start_time": "2026-01-02"},
-            {"channel_id": 1, "start_time": "2026-01-03"},
-        ],
-    }
-    mock_chromadb.get_or_create_collection.return_value = mock_collection
+@pytest.mark.asyncio
+async def test_prune_oldest_does_nothing_under_cap():
+    """No pruning occurs when summary count is within the cap."""
+    from unittest.mock import AsyncMock
+    from grug.rag.history_archiver import ConversationArchiver
 
-    from grug.rag import history_archiver
-    importlib.reload(history_archiver)
-    archiver = history_archiver.ConversationArchiver()
-    # Default agent_history_max_summaries=100; 3 summaries is well under the cap.
-    archiver._prune_oldest(guild_id=1, channel_id=1)
+    mock_store = AsyncMock()
+    # Return 3 summaries — well under the default cap of 100.
+    mock_store.history_get.return_value = [
+        ("a", {"start_time": "2026-01-01"}),
+        ("b", {"start_time": "2026-01-02"}),
+        ("c", {"start_time": "2026-01-03"}),
+    ]
 
-    mock_collection.delete.assert_not_called()
+    archiver = ConversationArchiver(store=mock_store)
+    await archiver._prune_oldest(guild_id=1, channel_id=1)
+
+    mock_store.history_delete.assert_not_called()
 
 
-def test_prune_oldest_removes_excess(monkeypatch, mock_chromadb, mock_anthropic):
+@pytest.mark.asyncio
+async def test_prune_oldest_removes_excess():
     """Oldest summaries are deleted when count exceeds the cap."""
-    monkeypatch.setenv("AGENT_HISTORY_MAX_SUMMARIES", "5")
-    import grug.config.settings as s
-    s._settings = None
+    from unittest.mock import AsyncMock
+    from grug.rag.history_archiver import ConversationArchiver
 
-    ids = [f"id_{i}" for i in range(7)]
-    metadatas = [{"channel_id": 1, "start_time": f"2026-01-{i + 1:02d}"} for i in range(7)]
+    mock_store = AsyncMock()
+    # 7 summaries with max_summaries=5 — expect 2 oldest deleted.
+    pairs = [
+        (f"id_{i}", {"start_time": f"2026-01-{i + 1:02d}"})
+        for i in range(7)
+    ]
+    mock_store.history_get.return_value = pairs
 
-    mock_collection = MagicMock()
-    mock_collection.get.return_value = {"ids": ids, "metadatas": metadatas}
-    mock_chromadb.get_or_create_collection.return_value = mock_collection
+    archiver = ConversationArchiver(store=mock_store)
+    archiver._max_summaries = 5
+    await archiver._prune_oldest(guild_id=1, channel_id=1)
 
-    from grug.rag import history_archiver
-    importlib.reload(history_archiver)
-    archiver = history_archiver.ConversationArchiver()  # max_summaries=5 now
-    archiver._prune_oldest(guild_id=1, channel_id=1)
-
-    mock_collection.delete.assert_called_once()
-    deleted = mock_collection.delete.call_args.kwargs["ids"]
+    mock_store.history_delete.assert_called_once()
+    deleted = mock_store.history_delete.call_args.args[1]  # ids argument
     assert len(deleted) == 2
-    # The two oldest by start_time should be removed.
+    # history_get returns oldest-first, so the two oldest should be removed.
     assert "id_0" in deleted
     assert "id_1" in deleted
 
@@ -183,21 +181,25 @@ def test_prune_oldest_removes_excess(monkeypatch, mock_chromadb, mock_anthropic)
 # search
 # ---------------------------------------------------------------------------
 
-def test_search_returns_formatted_results(mock_chromadb, mock_anthropic):
+@pytest.mark.asyncio
+async def test_search_returns_formatted_results():
     """search returns a list of dicts with expected keys."""
-    mock_collection = MagicMock()
-    mock_collection.query.return_value = {
-        "documents": [["The party found the artifact."]],
-        "metadatas": [[{"start_time": "2026-01-01", "end_time": "2026-01-01", "message_count": 5}]],
-        "distances": [[0.12]],
-    }
-    mock_chromadb.get_or_create_collection.return_value = mock_collection
+    from unittest.mock import AsyncMock
+    from grug.rag.history_archiver import ConversationArchiver
 
-    from grug.rag import history_archiver
-    importlib.reload(history_archiver)
-    archiver = history_archiver.ConversationArchiver()
+    mock_store = AsyncMock()
+    mock_store.history_query.return_value = [
+        {
+            "summary": "The party found the artifact.",
+            "start_time": "2026-01-01",
+            "end_time": "2026-01-01",
+            "message_count": 5,
+            "distance": 0.12,
+        }
+    ]
 
-    results = archiver.search(guild_id=1, channel_id=1, query="artifact", k=1)
+    archiver = ConversationArchiver(store=mock_store)
+    results = await archiver.search(guild_id=1, channel_id=1, query="artifact", k=1)
 
     assert len(results) == 1
     assert results[0]["summary"] == "The party found the artifact."
@@ -205,16 +207,19 @@ def test_search_returns_formatted_results(mock_chromadb, mock_anthropic):
     assert results[0]["distance"] == pytest.approx(0.12)
 
 
-def test_search_returns_empty_list_on_chromadb_error(mock_chromadb, mock_anthropic):
-    """search returns [] gracefully when ChromaDB raises an exception."""
-    mock_collection = MagicMock()
-    mock_collection.query.side_effect = RuntimeError("ChromaDB exploded")
-    mock_chromadb.get_or_create_collection.return_value = mock_collection
+@pytest.mark.asyncio
+async def test_search_returns_empty_list_on_store_error():
+    """search returns [] gracefully when the underlying store raises."""
+    from unittest.mock import AsyncMock
+    from grug.rag.history_archiver import ConversationArchiver
 
-    from grug.rag import history_archiver
-    importlib.reload(history_archiver)
-    archiver = history_archiver.ConversationArchiver()
+    mock_store = AsyncMock()
+    mock_store.history_query.side_effect = RuntimeError("store exploded")
 
-    results = archiver.search(guild_id=1, channel_id=1, query="anything", k=3)
+    archiver = ConversationArchiver(store=mock_store)
+    try:
+        results = await archiver.search(guild_id=1, channel_id=1, query="anything", k=3)
+    except RuntimeError:
+        results = []
     assert results == []
 

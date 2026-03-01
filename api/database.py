@@ -6,7 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from .config import settings
 
-engine = create_async_engine(settings.database_url, echo=False)
+_engine_kwargs: dict = {"echo": False}
+if settings.database_url.startswith("postgresql"):
+    _engine_kwargs.update({"pool_size": 5, "max_overflow": 10, "pool_pre_ping": True})
+
+engine = create_async_engine(settings.database_url, **_engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
 

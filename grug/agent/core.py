@@ -81,7 +81,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
         from grug.rag.retriever import DocumentRetriever
 
         retriever = DocumentRetriever()
-        chunks = retriever.search(ctx.deps.guild_id, query, k=k)
+        chunks = await retriever.search(ctx.deps.guild_id, query, k=k)
         if not chunks:
             return "No relevant documents found."
         parts = [
@@ -259,7 +259,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
         'what happened last time we visited the city?').
         """
         archiver = ConversationArchiver()
-        results = archiver.search(ctx.deps.guild_id, ctx.deps.channel_id, query, k=k)
+        results = await archiver.search(ctx.deps.guild_id, ctx.deps.channel_id, query, k=k)
         if not results:
             return "No relevant conversation history found in the chronicles."
         parts = [

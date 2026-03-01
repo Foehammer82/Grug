@@ -1,26 +1,19 @@
-"""Document retrieval for RAG using ChromaDB."""
+"""Document retrieval for RAG — backend-agnostic via VectorStore."""
 
 import logging
 
-import chromadb
-
-from grug.config.settings import get_settings
+from grug.rag.vector_store import VectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
 
 
 class DocumentRetriever:
-    """Retrieves relevant document chunks from ChromaDB."""
+    """Retrieves relevant document chunks from the configured vector store."""
 
-    def __init__(self) -> None:
-        settings = get_settings()
-        self._client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
+    def __init__(self, store: VectorStore | None = None) -> None:
+        self._store = store or get_vector_store()
 
-    def _get_collection(self, guild_id: int):
-        # Uses ChromaDB's built-in default embedding function (all-MiniLM-L6-v2 via ONNX)
-        return self._client.get_or_create_collection(name=f"guild_{guild_id}")
-
-    def search(
+    async def search(
         self,
         guild_id: int,
         query: str,
@@ -31,32 +24,4 @@ class DocumentRetriever:
 
         Returns a list of dicts with keys: text, filename, chunk_index, distance.
         """
-        collection = self._get_collection(guild_id)
-        where = {"document_id": document_id} if document_id is not None else None
-        try:
-            results = collection.query(
-                query_texts=[query],
-                n_results=k,
-                where=where,
-                include=["documents", "metadatas", "distances"],
-            )
-        except Exception as exc:
-            logger.warning("ChromaDB query failed: %s", exc)
-            return []
-
-        chunks: list[dict] = []
-        for doc, meta, dist in zip(
-            results["documents"][0],
-            results["metadatas"][0],
-            results["distances"][0],
-        ):
-            chunks.append(
-                {
-                    "text": doc,
-                    "filename": meta.get("filename", "unknown"),
-                    "description": meta.get("description", ""),
-                    "chunk_index": meta.get("chunk_index", 0),
-                    "distance": dist,
-                }
-            )
-        return chunks
+        return await self._store.doc_query(guild_id, query, n_results=k, document_id=document_id)

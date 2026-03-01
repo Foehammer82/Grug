@@ -1,4 +1,4 @@
-"""Document indexing for RAG using ChromaDB."""
+"""Document indexing for RAG — backend-agnostic via VectorStore."""
 
 import logging
 import re
@@ -6,19 +6,13 @@ import uuid
 from pathlib import Path
 
 import aiofiles
-import chromadb
 
-from grug.config.settings import get_settings
+from grug.rag.vector_store import VectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
-
-
-def _collection_name(guild_id: int) -> str:
-    """Return a stable ChromaDB collection name for a guild."""
-    return f"guild_{guild_id}"
 
 
 def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> list[str]:
@@ -39,15 +33,10 @@ def _chunk_text(text: str, chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OV
 
 
 class DocumentIndexer:
-    """Indexes text documents into ChromaDB for a guild."""
+    """Indexes text documents into the configured vector store for a guild."""
 
-    def __init__(self) -> None:
-        settings = get_settings()
-        self._client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
-
-    def _get_collection(self, guild_id: int):
-        # Uses ChromaDB's built-in default embedding function (all-MiniLM-L6-v2 via ONNX)
-        return self._client.get_or_create_collection(name=_collection_name(guild_id))
+    def __init__(self, store: VectorStore | None = None) -> None:
+        self._store = store or get_vector_store()
 
     async def index_file(
         self,
@@ -64,7 +53,6 @@ class DocumentIndexer:
         if not chunks:
             return 0
 
-        collection = self._get_collection(guild_id)
         ids = [str(uuid.uuid4()) for _ in chunks]
         metadatas = [
             {
@@ -76,21 +64,16 @@ class DocumentIndexer:
             }
             for i, _ in enumerate(chunks)
         ]
-        collection.upsert(ids=ids, documents=chunks, metadatas=metadatas)
+        await self._store.doc_upsert(guild_id, ids, chunks, metadatas)
         logger.info("Indexed %d chunks from %s for guild %d", len(chunks), file_path.name, guild_id)
         return len(chunks)
 
-    def delete_document(self, guild_id: int, document_id: int) -> None:
+    async def delete_document(self, guild_id: int, document_id: int) -> None:
         """Remove all chunks belonging to a document."""
-        collection = self._get_collection(guild_id)
-        results = collection.get(where={"document_id": document_id})
-        if results["ids"]:
-            collection.delete(ids=results["ids"])
+        ids = await self._store.doc_get_ids(guild_id, document_id)
+        if ids:
+            await self._store.doc_delete(guild_id, ids)
 
-    def delete_guild_collection(self, guild_id: int) -> None:
-        """Remove the entire collection for a guild."""
-        name = _collection_name(guild_id)
-        try:
-            self._client.delete_collection(name)
-        except Exception:
-            pass
+    async def delete_guild_collection(self, guild_id: int) -> None:
+        """Remove all document chunks for an entire guild."""
+        await self._store.guild_delete(guild_id)

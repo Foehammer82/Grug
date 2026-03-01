@@ -15,7 +15,9 @@ COPY . .
 # Create data directories
 RUN mkdir -p /app/chroma_data
 
-ENV DATABASE_URL=sqlite+aiosqlite:///./data/grug.db
+# DATABASE_URL is intentionally NOT set here.
+# Supply it via .env or docker-compose environment so the user controls
+# whether they get SQLite or Postgres without rebuilding the image.
 ENV CHROMA_PERSIST_DIR=/app/chroma_data
 
 VOLUME ["/app/data", "/app/chroma_data"]

@@ -29,11 +29,16 @@ class Settings(BaseSettings):
         description="SQLAlchemy async database URL",
     )
 
-    # ChromaDB
+    # ChromaDB (only relevant when vector_backend == 'chroma')
     chroma_persist_dir: str = Field(
         default="./chroma_data",
         description="Directory to persist ChromaDB data",
     )
+
+    @property
+    def vector_backend(self) -> str:
+        """Derived from DATABASE_URL — 'pgvector' for Postgres, 'chroma' otherwise."""
+        return "pgvector" if self.database_url.startswith("postgresql") else "chroma"
 
     # Scheduler
     scheduler_timezone: str = Field(
@@ -69,7 +74,7 @@ class Settings(BaseSettings):
     )
     agent_history_max_summaries: int = Field(
         default=100,
-        description="Max number of history summaries per channel stored in ChromaDB",
+        description="Max number of per-channel history summaries kept in the vector store (oldest pruned beyond this)",
     )
 
     # Logging

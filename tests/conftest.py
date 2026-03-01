@@ -67,10 +67,16 @@ def mock_chromadb():
 
     The yielded object is the *instance* returned by the patched constructor,
     so tests can configure ``get_or_create_collection``, ``query``, etc. on it.
+    Also resets the vector store singleton so each test gets a fresh instance
+    backed by the mock client.
     """
+    import grug.rag.vector_store as vs
+
     mock_client = MagicMock()
+    vs._store = None  # reset singleton before patching
     with patch("chromadb.PersistentClient", return_value=mock_client):
         yield mock_client
+    vs._store = None  # clean up after the test
 
 
 # ---------------------------------------------------------------------------

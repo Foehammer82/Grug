@@ -135,7 +135,7 @@ class DocumentsCog(commands.Cog, name="Documents"):
                 await ctx.send(f"Grug not find document #{doc_id}. Wrong ID? 🤷")
                 return
             filename = doc.filename
-            self._indexer.delete_document(ctx.guild.id, doc_id)
+            await self._indexer.delete_document(ctx.guild.id, doc_id)
             await session.delete(doc)
             await session.commit()
 
