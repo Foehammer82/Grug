@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   Paper,
   Switch,
@@ -16,16 +17,20 @@ import {
 } from '@mui/material';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import PollingIndicator from '../components/PollingIndicator';
 
 interface ScheduledTask {
   id: number;
   guild_id: number;
   channel_id: number;
-  name: string;
+  type: 'once' | 'recurring';
+  name: string | null;
   prompt: string;
-  cron_expression: string;
+  fire_at: string | null;
+  cron_expression: string | null;
   enabled: boolean;
   last_run: string | null;
+  next_run: string | null;
   created_at: string;
 }
 
@@ -42,13 +47,16 @@ export default function TasksPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
 
-  const { data: tasks, isLoading } = useQuery<ScheduledTask[]>({
+  const POLL_MS = 15_000;
+
+  const { data: tasks, isLoading, dataUpdatedAt } = useQuery<ScheduledTask[]>({
     queryKey: ['tasks', guildId],
     queryFn: async () => {
       const res = await client.get<ScheduledTask[]>(`/api/guilds/${guildId}/tasks`);
       return res.data;
     },
     enabled: !!guildId,
+    refetchInterval: POLL_MS,
   });
 
   const toggleMutation = useMutation({
@@ -67,12 +75,13 @@ export default function TasksPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <Typography variant="body2" color="text.secondary">
-          Recurring automated tasks that run on a cron schedule. Ask Grug in chat to create one,
-          e.g. "every Friday morning, remind the group to submit their session notes".
-          Toggle or delete tasks here.
+          Scheduled tasks — one-off reminders and recurring automated prompts.
+          Ask Grug in chat to create one, e.g. "remind me to check in at 5 PM"
+          or "every Friday morning, post the weekly recap".
         </Typography>
+        <PollingIndicator intervalMs={POLL_MS} dataUpdatedAt={dataUpdatedAt} />
       </Box>
 
       {isLoading ? (
@@ -86,7 +95,7 @@ export default function TasksPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {['Name', 'Cron', 'Enabled', 'Last Run', 'Actions'].map((h) => (
+                {['Type', 'Name / Prompt', 'Schedule', 'Enabled', 'Status', 'Next Run', 'Actions'].map((h) => (
                   <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -94,11 +103,27 @@ export default function TasksPage() {
             <TableBody>
               {tasks.map((t) => (
                 <TableRow key={t.id} hover>
-                  <TableCell>{t.name}</TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                      {t.cron_expression}
-                    </Typography>
+                    <Chip
+                      label={t.type === 'once' ? 'Once' : 'Recurring'}
+                      size="small"
+                      color={t.type === 'once' ? 'info' : 'default'}
+                      variant="outlined"
+                    />
+                  </TableCell>
+                  <TableCell sx={{ maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {t.name ?? t.prompt.slice(0, 60)}
+                  </TableCell>
+                  <TableCell>
+                    {t.type === 'once' ? (
+                      <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
+                        {t.fire_at ? new Date(t.fire_at).toLocaleString() : '—'}
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                        {t.cron_expression ?? '—'}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Switch
@@ -108,7 +133,23 @@ export default function TasksPage() {
                     />
                   </TableCell>
                   <TableCell>
-                    {t.last_run ? new Date(t.last_run).toLocaleString() : '—'}
+                    {t.type === 'once' ? (
+                      <Chip
+                        label={t.last_run ? 'Fired' : 'Pending'}
+                        size="small"
+                        color={t.last_run ? 'default' : 'primary'}
+                        variant={t.last_run ? 'outlined' : 'filled'}
+                      />
+                    ) : (
+                      <Typography variant="body2" color="text.secondary">
+                        {t.last_run ? new Date(t.last_run).toLocaleString() : '—'}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {t.next_run ? new Date(t.next_run).toLocaleString() : '—'}
+                    </Typography>
                   </TableCell>
                   <TableCell>
                     <Button

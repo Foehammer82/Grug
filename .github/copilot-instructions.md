@@ -74,6 +74,22 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not commit secrets, API keys, or credentials to the repository.
 - Do not break backward compatibility without a clear migration path and documentation.
 
+## Domain Concepts — Scheduled Tasks
+
+**Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:
+
+| `type` | Trigger | Post-fire behaviour |
+|---|---|---|
+| `'once'` | Fires once at `fire_at` (datetime) | `enabled` set to `False`, `last_run` updated |
+| `'recurring'` | Fires on `cron_expression` (5-field UTC cron) | `last_run` updated; keeps running |
+
+Key points:
+- The agent creates both types via a **single tool**: `create_scheduled_task` (in `grug/agent/tools/scheduling_tools.py`). Pass `fire_at` for one-shot, `cron_expression` for recurring.
+- Execution is handled by a **single callback**: `execute_scheduled_task(task_id)` (in `grug/scheduler/tasks.py`). Never add a second callback function for task execution.
+- The scheduler sync (`grug/scheduler/sync.py`) re-registers **both** types on startup so neither type is lost on restart.
+- **Never** add a separate `Reminder` model, `send_reminder` function, or `create_reminder` agent tool. Always extend `ScheduledTask`.
+- `name` and `cron_expression` are nullable columns; `name` auto-defaults to first 80 chars of `prompt` for one-shot tasks.
+
 ## API Patterns (FastAPI)
 
 ### PATCH endpoints — nullable field clearing

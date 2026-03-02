@@ -78,12 +78,18 @@ class AdminCog(commands.Cog, name="Admin"):
             await interaction.response.send_message("No scheduled tasks set up yet.")
             return
 
-        embed = discord.Embed(title="🔁 Scheduled Tasks", color=discord.Color.orange())
+        embed = discord.Embed(title="�️ Scheduled Tasks", color=discord.Color.orange())
         for task in tasks:
-            last = task.last_run.isoformat() if task.last_run else "never"
+            label = task.name or task.prompt[:60]
+            if task.type == "once":
+                trigger = f"Once — {task.fire_at.isoformat() if task.fire_at else '?'}"
+                last = "pending"
+            else:
+                trigger = f"Cron: `{task.cron_expression}`"
+                last = task.last_run.isoformat() if task.last_run else "never"
             embed.add_field(
-                name=f"#{task.id} — {task.name}",
-                value=f"Cron: `{task.cron_expression}`\nLast run: {last}",
+                name=f"#{task.id} — {label}",
+                value=f"Type: {task.type} | {trigger}\nLast run: {last}",
                 inline=False,
             )
         await interaction.response.send_message(embed=embed)

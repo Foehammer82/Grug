@@ -92,7 +92,7 @@ function DmButton() {
   return (
     <Tooltip title="Direct Messages" placement="right" arrow>
       <Box
-        onClick={() => navigate('/personal/reminders')}
+        onClick={() => navigate('/personal/tasks')}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{

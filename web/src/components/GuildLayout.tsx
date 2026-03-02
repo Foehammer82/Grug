@@ -5,7 +5,6 @@ import { useGuilds } from '../hooks/useGuilds';
 const TABS = [
   { label: 'Config',     path: 'config' },
   { label: 'Events',     path: 'events' },
-  { label: 'Reminders',  path: 'reminders' },
   { label: 'Tasks',      path: 'tasks' },
   { label: 'Documents',  path: 'documents' },
   { label: 'Glossary',   path: 'glossary' },

@@ -1,8 +1,8 @@
 """Pydantic response schemas for the API."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel, field_serializer
+from pydantic import BaseModel, computed_field, field_serializer
 
 
 class UserOut(BaseModel):
@@ -59,15 +59,50 @@ class ScheduledTaskOut(BaseModel):
     id: int
     guild_id: int
     channel_id: int
-    name: str
+    type: str
+    name: str | None
     prompt: str
-    cron_expression: str
+    fire_at: datetime | None
+    cron_expression: str | None
+    user_id: int | None
     enabled: bool
     last_run: datetime | None
     created_by: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @computed_field
+    @property
+    def next_run(self) -> datetime | None:
+        """Compute the next scheduled trigger time for this task.
+
+        For ``once`` tasks returns ``fire_at`` if the task hasn't fired yet.
+        For ``recurring`` tasks uses APScheduler's ``CronTrigger`` to compute
+        the next fire time from the stored cron expression.
+        """
+        now = datetime.now(timezone.utc)
+        if self.type == "once":
+            if self.fire_at and not self.last_run and self.fire_at > now:
+                return self.fire_at
+        elif self.type == "recurring" and self.cron_expression and self.enabled:
+            try:
+                from apscheduler.triggers.cron import CronTrigger
+
+                parts = self.cron_expression.strip().split()
+                if len(parts) == 5:
+                    minute, hour, day, month, day_of_week = parts
+                    trigger = CronTrigger(
+                        minute=minute,
+                        hour=hour,
+                        day=day,
+                        month=month,
+                        day_of_week=day_of_week,
+                    )
+                    return trigger.get_next_fire_time(None, now)
+            except Exception:
+                pass
+        return None
 
 
 class TaskToggle(BaseModel):
@@ -83,19 +118,6 @@ class DocumentOut(BaseModel):
     chunk_count: int
     uploaded_by: int
     campaign_id: int | None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class ReminderOut(BaseModel):
-    id: int
-    guild_id: int
-    user_id: int
-    channel_id: int
-    message: str
-    remind_at: datetime
-    sent: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

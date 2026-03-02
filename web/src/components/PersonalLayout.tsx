@@ -2,8 +2,7 @@ import { Box, Tab, Tabs, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 
 const TABS = [
-  { label: 'Reminders', path: 'reminders' },
-  { label: 'Tasks',     path: 'tasks' },
+  { label: 'Tasks', path: 'tasks' },
 ];
 
 export default function PersonalLayout() {

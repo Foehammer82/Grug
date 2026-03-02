@@ -40,7 +40,6 @@ class GuildConfig(Base):
     )
 
     events: Mapped[list["CalendarEvent"]] = relationship(back_populates="guild")
-    reminders: Mapped[list["Reminder"]] = relationship(back_populates="guild")
     scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(
         back_populates="guild"
     )
@@ -177,29 +176,13 @@ class CalendarEvent(Base):
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
 
 
-class Reminder(Base):
-    """A reminder for a user."""
-
-    __tablename__ = "reminders"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    guild_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
-    )
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    guild: Mapped["GuildConfig"] = relationship(back_populates="reminders")
-
-
 class ScheduledTask(Base):
-    """A recurring agent task (e.g. 'tell a joke every Friday at 9am')."""
+    """A scheduled agent task — either a one-shot reminder (type='once') or a
+    recurring automated prompt (type='recurring').
+
+    * ``type='once'``:      fires once at ``fire_at``; set ``enabled=False`` after firing.
+    * ``type='recurring'``: fires on ``cron_expression``; updates ``last_run`` each time.
+    """
 
     __tablename__ = "scheduled_tasks"
 
@@ -208,9 +191,18 @@ class ScheduledTask(Base):
         BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
     )
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # 'once' | 'recurring'
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default="recurring")
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    cron_expression: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Populated for type='once'
+    fire_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Populated for type='recurring'
+    cron_expression: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Discord user who requested the task (primarily used for type='once')
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

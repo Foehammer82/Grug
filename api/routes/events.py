@@ -1,4 +1,4 @@
-"""Event, task, and reminder routes."""
+"""Event and task routes."""
 
 from datetime import datetime, timezone
 from typing import Any
@@ -10,11 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.deps import assert_guild_member, get_current_user, get_db
 from api.schemas import (
     CalendarEventOut,
-    ReminderOut,
     ScheduledTaskOut,
     TaskToggle,
 )
-from grug.db.models import CalendarEvent, Reminder, ScheduledTask
+from grug.db.models import CalendarEvent, ScheduledTask
 
 router = APIRouter(tags=["events"])
 
@@ -105,24 +104,3 @@ async def delete_task(
         raise HTTPException(status_code=404, detail="Task not found")
     await db.delete(task)
     await db.commit()
-
-
-# --------------------------------------------------------------------------- #
-# Reminders                                                                    #
-# --------------------------------------------------------------------------- #
-
-
-@router.get("/api/guilds/{guild_id}/reminders", response_model=list[ReminderOut])
-async def list_reminders(
-    guild_id: int,
-    user: dict[str, Any] = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[Reminder]:
-    """List reminders for a guild, ordered by reminder time."""
-    assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(Reminder)
-        .where(Reminder.guild_id == guild_id)
-        .order_by(Reminder.remind_at)
-    )
-    return list(result.scalars().all())

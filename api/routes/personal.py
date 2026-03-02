@@ -11,50 +11,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import get_current_user, get_db
-from api.schemas import ReminderOut, ScheduledTaskOut, TaskToggle
-from grug.db.models import Reminder, ScheduledTask
+from api.schemas import ScheduledTaskOut, TaskToggle
+from grug.db.models import ScheduledTask
 
 router = APIRouter(prefix="/api/personal", tags=["personal"])
 
 _DM_GUILD_ID = 0
-
-
-# --------------------------------------------------------------------------- #
-# Reminders                                                                    #
-# --------------------------------------------------------------------------- #
-
-
-@router.get("/reminders", response_model=list[ReminderOut])
-async def list_personal_reminders(
-    user: dict[str, Any] = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> list[Reminder]:
-    """List reminders created via DMs with Grug."""
-    result = await db.execute(
-        select(Reminder)
-        .where(Reminder.guild_id == _DM_GUILD_ID)
-        .order_by(Reminder.remind_at)
-    )
-    return list(result.scalars().all())
-
-
-@router.delete("/reminders/{reminder_id}", status_code=204)
-async def delete_personal_reminder(
-    reminder_id: int,
-    user: dict[str, Any] = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    """Delete a personal reminder."""
-    result = await db.execute(
-        select(Reminder).where(
-            Reminder.id == reminder_id, Reminder.guild_id == _DM_GUILD_ID
-        )
-    )
-    reminder = result.scalar_one_or_none()
-    if reminder is None:
-        raise HTTPException(status_code=404, detail="Reminder not found")
-    await db.delete(reminder)
-    await db.commit()
 
 
 # --------------------------------------------------------------------------- #

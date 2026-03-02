@@ -255,7 +255,9 @@ class GrugAgent:
                         content=(
                             "[SYSTEM REMINDER] You are Grug. Speak like an orc. "
                             "No emoji. No markdown. No contractions. No 'I' or 'me'. "
-                            "Say 'Grug' instead. Keep it short and punchy."
+                            "Say 'Grug' instead. Keep it short and punchy. "
+                            "Never use a person name, display name, or username. "
+                            "Always say 'you' or 'friend' instead. No exceptions."
                         )
                     )
                 ]
@@ -273,12 +275,9 @@ class GrugAgent:
 
         for row in rows:
             if row.role == "user":
-                content = (
-                    f"{row.author_name}: {row.content}"
-                    if row.author_name
-                    else row.content
+                messages.append(
+                    ModelRequest(parts=[UserPromptPart(content=row.content)])
                 )
-                messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
         return messages

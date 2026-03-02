@@ -6,14 +6,15 @@ schedule it to run periodically so any drift is automatically corrected.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
 from grug.db.models import ScheduledTask
 from grug.db.session import get_session_factory
-from grug.scheduler.manager import add_cron_job, get_scheduler
-from grug.scheduler.tasks import run_scheduled_prompt
+from grug.scheduler.manager import add_cron_job, add_date_job, get_scheduler
+from grug.scheduler.tasks import execute_scheduled_task
 from grug.utils import ensure_guild
 
 if TYPE_CHECKING:
@@ -31,7 +32,8 @@ async def run_sync(bot: "commands.Bot", *, sync_commands: bool = False) -> None:
     Steps:
       1. Ensure every guild Grug is in has a ``GuildConfig`` DB row.
       2. Reconcile APScheduler jobs with enabled ``ScheduledTask`` DB rows —
-         add missing jobs and remove orphaned ones.
+         add missing jobs and remove orphaned ones.  Both ``once`` and
+         ``recurring`` task types are handled.
       3. Optionally sync the Discord slash-command tree (only on startup to
          avoid Discord's rate limits on repeated tree syncs).
 
@@ -61,6 +63,7 @@ async def run_sync(bot: "commands.Bot", *, sync_commands: bool = False) -> None:
     # ------------------------------------------------------------------
     try:
         factory = get_session_factory()
+        now = datetime.now(timezone.utc)
         async with factory() as session:
             result = await session.execute(
                 select(ScheduledTask).where(ScheduledTask.enabled.is_(True))
@@ -75,23 +78,65 @@ async def run_sync(bot: "commands.Bot", *, sync_commands: bool = False) -> None:
 
         for task in db_tasks:
             job_id = f"task_{task.id}"
-            expected_job_ids.add(job_id)
-            if job_id not in existing_job_ids:
-                try:
-                    add_cron_job(
-                        run_scheduled_prompt,
-                        cron_expression=task.cron_expression,
-                        job_id=job_id,
-                        args=[task.id, task.guild_id, task.channel_id, task.prompt],
+
+            if task.type == "once":
+                # Skip one-shot tasks that have already fired or have no fire time.
+                if task.fire_at is None or task.last_run is not None:
+                    continue
+                # Skip if the fire time is already in the past (missed entirely).
+                if task.fire_at <= now:
+                    logger.warning(
+                        "Sync: one-shot task %d fire_at is in the past (%s); skipping re-register",
+                        task.id,
+                        task.fire_at.isoformat(),
                     )
-                    tasks_added += 1
-                    logger.info(
-                        "Sync: registered missing task %d (%s)", task.id, task.name
+                    continue
+                expected_job_ids.add(job_id)
+                if job_id not in existing_job_ids:
+                    try:
+                        add_date_job(
+                            execute_scheduled_task,
+                            run_date=task.fire_at,
+                            job_id=job_id,
+                            args=[task.id],
+                        )
+                        tasks_added += 1
+                        logger.info(
+                            "Sync: registered missing one-shot task %d", task.id
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Sync: failed to register one-shot task %d", task.id
+                        )
+
+            else:  # 'recurring'
+                if not task.cron_expression:
+                    logger.warning(
+                        "Sync: recurring task %d has no cron_expression; skipping",
+                        task.id,
                     )
-                except Exception:
-                    logger.exception(
-                        "Sync: failed to register task %d (%s)", task.id, task.name
-                    )
+                    continue
+                expected_job_ids.add(job_id)
+                if job_id not in existing_job_ids:
+                    try:
+                        add_cron_job(
+                            execute_scheduled_task,
+                            cron_expression=task.cron_expression,
+                            job_id=job_id,
+                            args=[task.id],
+                        )
+                        tasks_added += 1
+                        logger.info(
+                            "Sync: registered missing recurring task %d (%s)",
+                            task.id,
+                            task.name,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "Sync: failed to register recurring task %d (%s)",
+                            task.id,
+                            task.name,
+                        )
 
         # Remove APScheduler jobs whose DB task no longer exists or is disabled.
         for job_id in existing_job_ids:
