@@ -34,6 +34,15 @@
 
 <!-- e.g. dashboard improvements, character sheet viewer, campaign manager -->
 
+- **Character Sheet Manager (Pathfinder 2e first):** A full mobile-friendly character sheet web UI so players can manage characters from the Grug app instead of a third-party phone app. Target Pathfinder 2e as the initial system, then expand.
+  - Full PF2e character sheet UI (stats, skills, feats, spells, inventory, conditions/effects)
+  - DM console: apply conditions, buffs, debuffs, damage, or other effects to any player character in the guild
+  - Integrated dice roller — roll attacks, saves, skill checks, etc. with results optionally posted to a Discord channel (configurable per roll or as a session default)
+  - Grug AI embedded contextually throughout the sheet: explain a feat, look up a rule, narrate a roll, suggest actions in combat, or make character changes via chat ("level me up", "what should I take for my next skill feat?")
+  - Characters linked to Discord guild + user so Grug can reference live sheet data during Discord chat (e.g. auto-resolve "do I succeed on a DC 18 Perception check?" using actual modifiers)
+  - Share a character sheet with the table as a read-only link
+  - Stretch: plug-in model to support D&D 5e and other systems alongside PF2e
+
 - **Events — RSVP & Attendance Tracking:** Add an RSVP model (`event_id`, `user_id`, `status: attending|maybe|declined`, `note`) so group members can confirm attendance for each event/occurrence. Show RSVP status in the EventDetailModal.
 - **Events — Per-Occurrence Overrides:** Allow rescheduling or cancelling individual occurrences of a recurring event without touching the series. Requires an `event_exceptions` table (keyed on `event_id` + `original_start`) storing overrides like a different time, a cancellation flag, or a note.
 - **Events — Item/Planning Notes:** Let users attach notes or items to an event (e.g. "Blake is bringing snacks", "need to prep encounter maps"). Could be a simple `event_notes` table or a JSON column.
@@ -48,6 +57,8 @@
 ### Integrations
 
 <!-- e.g. VTT integrations (Foundry, Roll20), external rule databases, character importers -->
+
+- **Character Sheet ↔ Discord Bridge:** Tie the Character Sheet Manager (see Web UI) to Discord — post dice rolls to the session channel, allow the DM to apply effects from Discord, and let Grug reference live character data mid-conversation without the player having to spell out their modifiers.
 
 ### Auth & Access Control
 

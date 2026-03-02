@@ -1,6 +1,7 @@
 import BrightnessAutoOutlinedIcon from '@mui/icons-material/BrightnessAutoOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
@@ -106,6 +107,13 @@ export default function NavBar() {
           </Typography>
 
           <Box sx={{ flexGrow: 1 }} />
+
+          {/* Roadmap */}
+          <Tooltip title="Roadmap">
+            <IconButton onClick={() => navigate('/roadmap')} size="small" sx={{ color: 'text.secondary' }}>
+              <MapOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
 
           {/* Invite Grug to a server */}
           {canInvite && inviteData?.url && (

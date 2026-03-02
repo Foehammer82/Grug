@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
 import GuildLayout from './components/GuildLayout';
+import PublicLayout from './components/PublicLayout';
 import AdminPage from './pages/AdminPage';
 import DashboardPage from './pages/DashboardPage';
 import DocumentsPage from './pages/DocumentsPage';
@@ -12,12 +13,16 @@ import PersonalLayout from './components/PersonalLayout';
 import NotFoundPage from './pages/NotFoundPage';
 import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
+import RoadmapPage from './pages/RoadmapPage';
 import TasksPage from './pages/TasksPage';
 
 function App() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      <Route element={<PublicLayout />}>
+        <Route path="/roadmap" element={<RoadmapPage />} />
+      </Route>
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/admin" element={<AdminPage />} />

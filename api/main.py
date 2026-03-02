@@ -12,6 +12,7 @@ from api.deps import get_current_user
 from api.routes import (
     admin,
     auth,
+    campaigns,
     documents,
     events,
     glossary,
@@ -47,4 +48,5 @@ app.include_router(events.router, dependencies=_auth_required)
 app.include_router(personal.router, dependencies=_auth_required)
 app.include_router(documents.router, dependencies=_auth_required)
 app.include_router(glossary.router, dependencies=_auth_required)
+app.include_router(campaigns.router, dependencies=_auth_required)
 app.include_router(admin.router, dependencies=_auth_required)

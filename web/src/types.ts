@@ -87,6 +87,33 @@ export interface Document {
   created_at: string;
 }
 
+/* ── Campaigns ───────────────────────────────────────────────────── */
+
+export interface Campaign {
+  id: number;
+  guild_id: string;
+  channel_id: string;
+  name: string;
+  system: string;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+}
+
+/* ── Characters ───────────────────────────────────────────────────── */
+
+export interface Character {
+  id: number;
+  owner_discord_user_id: number;
+  campaign_id: number | null;
+  name: string;
+  system: string;
+  structured_data: Record<string, unknown> | null;
+  file_path: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 /* ── Table styling ────────────────────────────────────────────────── */
 
 /** Standardised header-cell styling for data tables. */

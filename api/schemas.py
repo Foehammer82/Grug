@@ -251,6 +251,25 @@ class CampaignOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("guild_id", "channel_id", "created_by")
+    def serialize_snowflakes(self, v: int) -> str:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v)
+
+
+class CampaignCreate(BaseModel):
+    name: str
+    system: str = "unknown"
+    # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
+    channel_id: str | int
+
+
+class CampaignUpdate(BaseModel):
+    name: str | None = None
+    system: str | None = None
+    is_active: bool | None = None
+    channel_id: str | int | None = None
+
 
 class CharacterOut(BaseModel):
     id: int
