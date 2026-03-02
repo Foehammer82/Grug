@@ -17,7 +17,7 @@ from grug.utils import get_campaign_id_for_channel
 logger = logging.getLogger(__name__)
 
 MAX_FILE_SIZE_MB = 10
-ALLOWED_EXTENSIONS = {".txt", ".md", ".rst"}
+ALLOWED_EXTENSIONS = {".txt", ".md", ".rst", ".pdf"}
 
 
 class DocumentsCog(commands.Cog, name="Documents"):
@@ -52,7 +52,7 @@ class DocumentsCog(commands.Cog, name="Documents"):
         if ext not in ALLOWED_EXTENSIONS:
             await interaction.response.send_message(
                 f"Grug only understand text files ({', '.join(sorted(ALLOWED_EXTENSIONS))}). "
-                f"No understand {ext}!",
+                f"No understand {ext}! 🦴",
                 ephemeral=True,
             )
             return

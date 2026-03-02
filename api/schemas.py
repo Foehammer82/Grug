@@ -109,6 +109,23 @@ class TaskToggle(BaseModel):
     enabled: bool
 
 
+class ScheduledTaskCreate(BaseModel):
+    type: str  # 'once' | 'recurring'
+    name: str | None = None
+    prompt: str
+    fire_at: datetime | None = None
+    cron_expression: str | None = None
+    enabled: bool = True
+
+
+class CronFromTextRequest(BaseModel):
+    text: str
+
+
+class CronFromTextOut(BaseModel):
+    cron_expression: str
+
+
 class DocumentOut(BaseModel):
     id: int
     guild_id: int
@@ -121,6 +138,10 @@ class DocumentOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class DocumentUpdate(BaseModel):
+    description: str | None = None
 
 
 class GlossaryTermOut(BaseModel):

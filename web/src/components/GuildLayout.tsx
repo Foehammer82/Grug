@@ -1,4 +1,5 @@
-import { Box, Tab, Tabs, Typography } from '@mui/material';
+import { Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
+import { useState } from 'react';
 import { Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useGuilds } from '../hooks/useGuilds';
 
@@ -14,8 +15,17 @@ export default function GuildLayout() {
   const { guildId } = useParams<{ guildId: string }>();
   const navigate = useNavigate();
   const { data: guilds } = useGuilds();
+  const [copied, setCopied] = useState(false);
 
   const guild = guilds?.find((g) => g.id === guildId);
+
+  function handleCopyId() {
+    if (!guildId) return;
+    navigator.clipboard.writeText(guildId).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
 
   // Determine active tab from the current URL segment
   const lastSegment = location.pathname.split('/').pop() ?? '';
@@ -29,9 +39,29 @@ export default function GuildLayout() {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header area */}
       <Box sx={{ px: 4, pt: 3, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 1.5 }}>
-          {guild?.name ?? 'Loading…'}
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 1.5 }}>
+          <Typography variant="h5" fontWeight={700}>
+            {guild?.name ?? 'Loading…'}
+          </Typography>
+          {guildId && (
+            <Tooltip title={copied ? 'Copied!' : 'Click to copy'} placement="right">
+              <Typography
+                variant="caption"
+                color="text.disabled"
+                onClick={handleCopyId}
+                sx={{
+                  fontFamily: 'monospace',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  lineHeight: 1,
+                  '&:hover': { color: 'text.secondary' },
+                }}
+              >
+                {guildId}
+              </Typography>
+            </Tooltip>
+          )}
+        </Box>
         <Tabs
           value={activeTab === -1 ? 0 : activeTab}
           onChange={handleTabChange}

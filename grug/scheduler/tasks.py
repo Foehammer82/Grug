@@ -78,7 +78,9 @@ async def execute_scheduled_task(task_id: int) -> None:
         )
         task = result.scalar_one_or_none()
         if task:
-            task.last_run = now
             if task_type == "once":
-                task.enabled = False
+                # One-shot tasks are deleted after firing to keep history clean.
+                await session.delete(task)
+            else:
+                task.last_run = now
             await session.commit()

@@ -1,16 +1,23 @@
-"""Document routes — list and delete indexed documents."""
+"""Document routes — list, upload, edit, and delete indexed documents."""
 
+import tempfile
+from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import assert_guild_member, get_current_user, get_db
-from api.schemas import DocumentOut
+from api.schemas import DocumentOut, DocumentUpdate
 from grug.db.models import Document
+from grug.rag.indexer import DocumentIndexer
 
 router = APIRouter(tags=["documents"])
+
+_ALLOWED_EXTENSIONS = {".txt", ".md", ".rst", ".pdf"}
+_MAX_SIZE_MB = 10
+_indexer = DocumentIndexer()
 
 
 @router.get("/api/guilds/{guild_id}/documents", response_model=list[DocumentOut])
@@ -29,6 +36,88 @@ async def list_documents(
     return list(result.scalars().all())
 
 
+@router.post(
+    "/api/guilds/{guild_id}/documents", response_model=DocumentOut, status_code=201
+)
+async def upload_document(
+    guild_id: int,
+    file: UploadFile,
+    description: str = "",
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Document:
+    """Upload and index a text document for RAG retrieval."""
+    assert_guild_member(guild_id, user)
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(_ALLOWED_EXTENSIONS))}",
+        )
+
+    contents = await file.read()
+    size_mb = len(contents) / (1024 * 1024)
+    if size_mb > _MAX_SIZE_MB:
+        raise HTTPException(
+            status_code=422,
+            detail=f"File exceeds {_MAX_SIZE_MB} MB limit.",
+        )
+
+    uploader_id = int(user["id"])
+
+    doc = Document(
+        guild_id=guild_id,
+        filename=file.filename,
+        description=description or None,
+        chroma_collection=f"guild_{guild_id}",
+        chunk_count=0,
+        uploaded_by=uploader_id,
+        campaign_id=None,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / (file.filename or "upload")
+        tmp_path.write_bytes(contents)
+        chunk_count = await _indexer.index_file(
+            guild_id=guild_id,
+            file_path=tmp_path,
+            document_id=doc.id,
+            description=description or None,
+        )
+
+    doc.chunk_count = chunk_count
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+@router.patch("/api/guilds/{guild_id}/documents/{doc_id}", response_model=DocumentOut)
+async def update_document(
+    guild_id: int,
+    doc_id: int,
+    body: DocumentUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Document:
+    """Update a document's description."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(Document).where(Document.id == doc_id, Document.guild_id == guild_id)
+    )
+    doc = result.scalar_one_or_none()
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if "description" in body.model_fields_set:
+        doc.description = body.description
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
 @router.delete("/api/guilds/{guild_id}/documents/{doc_id}", status_code=204)
 async def delete_document(
     guild_id: int,
@@ -44,5 +133,6 @@ async def delete_document(
     doc = result.scalar_one_or_none()
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
+    await _indexer.delete_document(guild_id, doc_id)
     await db.delete(doc)
     await db.commit()

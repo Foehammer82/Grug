@@ -91,30 +91,6 @@ export default function GuildConfigPage() {
         Settings for this Discord server. Changes save instantly.
       </Typography>
 
-      {/* Read-only info */}
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: 'auto 1fr',
-          columnGap: 4,
-          rowGap: 1,
-          alignItems: 'baseline',
-        }}
-      >
-        {([
-          ['Guild ID', String(config.guild_id)],
-        ] as [string, string][]).map(([label, value]) => (
-          <>
-            <Typography key={label + '-l'} variant="body2" fontWeight={600} color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-              {label}
-            </Typography>
-            <Typography key={label + '-v'} variant="body2" color="text.primary" sx={{ fontFamily: 'monospace' }}>
-              {value}
-            </Typography>
-          </>
-        ))}
-      </Box>
-
       {/* Live-edit fields */}
       <Stack spacing={2.5}>
         <Autocomplete
