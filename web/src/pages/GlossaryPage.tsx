@@ -1,19 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Collapse,
+  Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
+  Paper,
+  Select,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import client from '../api/client';
-import NavBar from '../components/NavBar';
 import { useAuth } from '../hooks/useAuth';
+import { useGuildContext } from '../hooks/useGuildContext';
+import type { DiscordChannel } from '../types';
 
 interface GlossaryTerm {
   id: number;
-  guild_id: number;
-  channel_id: number | null;
+  guild_id: string;
+  channel_id: string | null;
   term: string;
   definition: string;
   ai_generated: boolean;
   originally_ai_generated: boolean;
-  created_by: number;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -21,53 +38,25 @@ interface GlossaryTerm {
 interface HistoryEntry {
   id: number;
   term_id: number;
-  guild_id: number;
+  guild_id: string;
   old_term: string;
   old_definition: string;
   old_ai_generated: boolean;
-  changed_by: number;
+  changed_by: string;
   changed_at: string;
 }
 
-interface DiscordChannel {
-  id: string;
-  name: string;
-  type: number;
+function SourceChip({ term }: { term: GlossaryTerm }) {
+  if (term.ai_generated) return <Chip label="🤖 AI" size="small" color="secondary" />;
+  if (term.originally_ai_generated) return <Chip label="🤖→👤 Edited" size="small" color="warning" />;
+  return <Chip label="👤 Human" size="small" color="success" />;
 }
-
-function sourceBadge(term: GlossaryTerm): { label: string; color: string } {
-  if (term.ai_generated) return { label: '🤖 AI', color: '#8B5CF6' };
-  if (term.originally_ai_generated) return { label: '🤖→👤 AI-origin (edited)', color: '#D97706' };
-  return { label: '👤 Human', color: '#059669' };
-}
-
-const btn: React.CSSProperties = {
-  padding: '0.4rem 1rem',
-  background: '#5865F2',
-  color: '#fff',
-  border: 'none',
-  borderRadius: 4,
-  cursor: 'pointer',
-};
-const dangerBtn: React.CSSProperties = { ...btn, background: '#ed4245' };
-const ghostBtn: React.CSSProperties = {
-  ...btn,
-  background: 'transparent',
-  color: '#5865F2',
-  border: '1px solid #5865F2',
-};
-const inputStyle: React.CSSProperties = {
-  display: 'block',
-  width: '100%',
-  padding: '0.5rem',
-  marginTop: 4,
-  boxSizing: 'border-box',
-};
 
 export default function GlossaryPage() {
   useAuth();
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
+  const { isAdmin } = useGuildContext();
 
   const [filterChannel, setFilterChannel] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
@@ -88,9 +77,9 @@ export default function GlossaryPage() {
     enabled: !!guildId,
   });
 
-  const channelName = (id: number | null): string => {
+  const channelName = (id: string | null): string => {
     if (!id) return 'Server-wide';
-    const ch = channels.find((c) => c.id === String(id));
+    const ch = channels.find((c) => c.id === id);
     return ch ? `#${ch.name}` : `#${id}`;
   };
 
@@ -120,7 +109,7 @@ export default function GlossaryPage() {
       await client.post(`/api/guilds/${guildId}/glossary`, {
         term: newTerm,
         definition: newDef,
-        channel_id: newChannel ? parseInt(newChannel) : null,
+        channel_id: newChannel || null,
       });
     },
     onSuccess: () => {
@@ -155,226 +144,209 @@ export default function GlossaryPage() {
   });
 
   return (
-    <>
-      <NavBar />
-      <main style={{ padding: '2rem', maxWidth: 900 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
-          <h2 style={{ margin: 0 }}>Glossary</h2>
-          <button style={btn} onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Cancel' : '+ Add Term'}
-          </button>
-        </div>
+    <Stack spacing={2} sx={{ maxWidth: 900 }}>
+      {/* Section header */}
+      <Typography variant="body2" color="text.secondary">
+        Server-specific terms and definitions Grug knows about. Grug automatically adds
+        entries when he encounters new lore or rulings in chat. You can also add terms
+        manually and override anything Grug has written.
+      </Typography>
 
-        {/* Channel filter */}
-        <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <label htmlFor="channelFilter" style={{ fontWeight: 600 }}>
-            Filter by channel:
-          </label>
-          <select
-            id="channelFilter"
+      {/* Toolbar */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <InputLabel id="channel-filter-label">Filter by channel</InputLabel>
+          <Select
+            labelId="channel-filter-label"
             value={filterChannel}
+            label="Filter by channel"
             onChange={(e) => setFilterChannel(e.target.value)}
-            style={{ padding: '0.4rem' }}
           >
-            <option value="">All scopes</option>
+            <MenuItem value="">All scopes</MenuItem>
             {channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                #{c.name}
-              </option>
+              <MenuItem key={c.id} value={c.id}>#{c.name}</MenuItem>
             ))}
-          </select>
-        </div>
+          </Select>
+        </FormControl>
+        <Box sx={{ flexGrow: 1 }} />
+        {isAdmin && (
+          <Button variant="contained" size="small" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? 'Cancel' : '+ Add Term'}
+          </Button>
+        )}
+      </Box>
 
-        {/* Add term form */}
-        {showForm && (
-          <form
-            onSubmit={(e) => {
+      {/* Add term form */}
+      <Collapse in={showForm} unmountOnExit>
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} gutterBottom>New Term</Typography>
+          <Stack
+            component="form"
+            spacing={2}
+            onSubmit={(e: React.FormEvent) => {
               e.preventDefault();
               createMutation.mutate();
             }}
-            style={{
-              background: '#f6f6f6',
-              padding: '1rem',
-              borderRadius: 8,
-              marginBottom: '1.5rem',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
-            }}
           >
-            <h3 style={{ margin: 0 }}>New Term</h3>
-            <label>
-              Term
-              <input
-                required
-                value={newTerm}
-                onChange={(e) => setNewTerm(e.target.value)}
-                style={inputStyle}
-              />
-            </label>
-            <label>
-              Definition
-              <textarea
-                required
-                value={newDef}
-                onChange={(e) => setNewDef(e.target.value)}
-                style={{ ...inputStyle, minHeight: 80 }}
-              />
-            </label>
-            <label>
-              Channel scope (optional)
-              <select
+            <TextField
+              label="Term"
+              size="small"
+              required
+              value={newTerm}
+              onChange={(e) => setNewTerm(e.target.value)}
+            />
+            <TextField
+              label="Definition"
+              size="small"
+              required
+              multiline
+              minRows={3}
+              value={newDef}
+              onChange={(e) => setNewDef(e.target.value)}
+            />
+            <FormControl size="small">
+              <InputLabel id="new-channel-label">Channel scope</InputLabel>
+              <Select
+                labelId="new-channel-label"
                 value={newChannel}
+                label="Channel scope"
                 onChange={(e) => setNewChannel(e.target.value)}
-                style={inputStyle}
               >
-                <option value="">Server-wide</option>
+                <MenuItem value="">Server-wide</MenuItem>
                 {channels.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    #{c.name}
-                  </option>
+                  <MenuItem key={c.id} value={c.id}>#{c.name}</MenuItem>
                 ))}
-              </select>
-            </label>
-            <button type="submit" style={btn} disabled={createMutation.isPending}>
-              {createMutation.isPending ? 'Saving…' : 'Save'}
-            </button>
-            {createMutation.isError && <p style={{ color: 'red' }}>Error saving term.</p>}
-          </form>
-        )}
+              </Select>
+            </FormControl>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Button type="submit" variant="contained" size="small" disabled={createMutation.isPending}>
+                {createMutation.isPending ? 'Saving…' : 'Save'}
+              </Button>
+              {createMutation.isError && (
+                <Typography color="error" variant="caption">Error saving term.</Typography>
+              )}
+            </Box>
+          </Stack>
+        </Paper>
+      </Collapse>
 
-        {/* Term list */}
-        {isLoading && <p>Loading…</p>}
-        {!isLoading && terms.length === 0 && <p>No glossary terms yet.</p>}
-        {terms.map((t) => {
-          const badge = sourceBadge(t);
-          return (
-            <div
-              key={t.id}
-              style={{
-                border: '1px solid #e0e0e0',
-                borderRadius: 8,
-                padding: '1rem',
-                marginBottom: '0.75rem',
+      {/* Term list */}
+      {isLoading && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+          <CircularProgress />
+        </Box>
+      )}
+      {!isLoading && terms.length === 0 && (
+        <Typography color="text.secondary">No glossary terms yet.</Typography>
+      )}
+
+      {terms.map((t) => (
+        <Paper key={t.id} variant="outlined" sx={{ p: 2 }}>
+          {editId === t.id ? (
+            <Stack
+              component="form"
+              spacing={2}
+              onSubmit={(e: React.FormEvent) => {
+                e.preventDefault();
+                editMutation.mutate();
               }}
             >
-              {editId === t.id ? (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    editMutation.mutate();
-                  }}
-                  style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}
-                >
-                  <input
-                    value={editTerm}
-                    onChange={(e) => setEditTerm(e.target.value)}
-                    placeholder={t.term}
-                    style={inputStyle}
-                  />
-                  <textarea
-                    value={editDef}
-                    onChange={(e) => setEditDef(e.target.value)}
-                    placeholder={t.definition}
-                    style={{ ...inputStyle, minHeight: 60 }}
-                  />
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <button type="submit" style={btn} disabled={editMutation.isPending}>
-                      Save
-                    </button>
-                    <button type="button" style={ghostBtn} onClick={() => setEditId(null)}>
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'baseline',
-                      gap: '0.75rem',
-                      flexWrap: 'wrap',
+              <TextField
+                label="Term"
+                size="small"
+                value={editTerm}
+                onChange={(e) => setEditTerm(e.target.value)}
+                placeholder={t.term}
+              />
+              <TextField
+                label="Definition"
+                size="small"
+                multiline
+                minRows={2}
+                value={editDef}
+                onChange={(e) => setEditDef(e.target.value)}
+                placeholder={t.definition}
+              />
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button type="submit" variant="contained" size="small" disabled={editMutation.isPending}>
+                  Save
+                </Button>
+                <Button variant="outlined" size="small" onClick={() => setEditId(null)}>
+                  Cancel
+                </Button>
+              </Box>
+            </Stack>
+          ) : (
+            <>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+                <Typography fontWeight={600}>{t.term}</Typography>
+                <Typography variant="caption" color="text.secondary">{channelName(t.channel_id)}</Typography>
+                <SourceChip term={t} />
+              </Box>
+              <Typography variant="body2" sx={{ mb: 1.5 }}>{t.definition}</Typography>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                {isAdmin && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setEditId(t.id);
+                      setEditTerm(t.term);
+                      setEditDef(t.definition);
                     }}
                   >
-                    <strong style={{ fontSize: '1.05rem' }}>{t.term}</strong>
-                    <span style={{ fontSize: '0.8rem', color: '#777' }}>
-                      {channelName(t.channel_id)}
-                    </span>
-                    <span style={{ fontSize: '0.8rem', color: badge.color }}>{badge.label}</span>
-                  </div>
-                  <p style={{ margin: '0.4rem 0 0.75rem' }}>{t.definition}</p>
-                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                    <button
-                      style={ghostBtn}
-                      onClick={() => {
-                        setEditId(t.id);
-                        setEditTerm(t.term);
-                        setEditDef(t.definition);
-                      }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      style={ghostBtn}
-                      onClick={() =>
-                        setHistoryTermId(historyTermId === t.id ? null : t.id)
-                      }
-                    >
-                      {historyTermId === t.id ? 'Hide History' : 'History'}
-                    </button>
-                    <button
-                      style={dangerBtn}
-                      onClick={() => {
-                        if (window.confirm(`Delete "${t.term}"?`)) deleteMutation.mutate(t.id);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                    Edit
+                  </Button>
+                )}
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setHistoryTermId(historyTermId === t.id ? null : t.id)}
+                >
+                  {historyTermId === t.id ? 'Hide History' : 'History'}
+                </Button>
+                {isAdmin && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => {
+                      if (window.confirm(`Delete "${t.term}"?`)) deleteMutation.mutate(t.id);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </Box>
 
-                  {/* Inline history panel */}
-                  {historyTermId === t.id && (
-                    <div
-                      style={{
-                        marginTop: '0.75rem',
-                        background: '#f9f9f9',
-                        borderRadius: 6,
-                        padding: '0.75rem',
-                      }}
-                    >
-                      <strong>Change history</strong>
-                      {history.length === 0 && (
-                        <p style={{ margin: '0.5rem 0 0', color: '#999' }}>No history yet.</p>
-                      )}
-                      {history.map((h) => (
-                        <div
-                          key={h.id}
-                          style={{
-                            borderTop: '1px solid #eee',
-                            paddingTop: '0.5rem',
-                            marginTop: '0.5rem',
-                            fontSize: '0.875rem',
-                          }}
-                        >
-                          <div>
-                            <strong>Was:</strong> {h.old_term} — {h.old_definition}
-                          </div>
-                          <div style={{ color: '#777' }}>
-                            {new Date(h.changed_at).toLocaleString()} · changed by{' '}
-                            {h.changed_by === 0 ? '🤖 AI' : `user ${h.changed_by}`}
-                            {h.old_ai_generated && ' · was AI-generated'}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+              {/* Inline history panel */}
+              <Collapse in={historyTermId === t.id} unmountOnExit>
+                <Box sx={{ mt: 2, p: 1.5, bgcolor: 'action.hover', borderRadius: 1 }}>
+                  <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                    Change history
+                  </Typography>
+                  {history.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">No history yet.</Typography>
                   )}
-                </>
-              )}
-            </div>
-          );
-        })}
-      </main>
-    </>
+                  {history.map((h) => (
+                    <Box key={h.id}>
+                      <Divider sx={{ my: 1 }} />
+                      <Typography variant="body2">
+                        <strong>Was:</strong> {h.old_term} — {h.old_definition}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(h.changed_at).toLocaleString()} · changed by{' '}
+                        {h.changed_by === '0' ? '🤖 AI' : `user ${h.changed_by}`}
+                        {h.old_ai_generated && ' · was AI-generated'}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Collapse>
+            </>
+          )}
+        </Paper>
+      ))}
+    </Stack>
   );
 }

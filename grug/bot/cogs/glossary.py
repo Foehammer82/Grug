@@ -117,13 +117,9 @@ class GlossaryCog(commands.Cog, name="Glossary"):
                 )
                 return
 
-            from grug.db.models import GuildConfig
+            from grug.utils import ensure_guild
 
-            cfg_result = await session.execute(
-                select(GuildConfig).where(GuildConfig.guild_id == guild_id)
-            )
-            if cfg_result.scalar_one_or_none() is None:
-                session.add(GuildConfig(guild_id=guild_id))
+            await ensure_guild(guild_id)
 
             entry = GlossaryTerm(
                 guild_id=guild_id,

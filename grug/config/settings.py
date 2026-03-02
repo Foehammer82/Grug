@@ -11,17 +11,22 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", populate_by_name=True
+    )
 
     # Discord
     discord_token: str = Field(default="", description="Discord bot token")
-    discord_prefix: str = Field(default="!", description="Command prefix")
 
     # Anthropic
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
     anthropic_model: str = Field(
-        default="claude-sonnet-4-6",
+        default="claude-haiku-4-5",
         description="Anthropic model to use",
+    )
+    anthropic_big_brain_model: str = Field(
+        default="claude-sonnet-4-6",
+        description="More capable model for complex extraction and summarization tasks",
     )
 
     # Discord OAuth (used by the web API; optional for bot-only deployments)
@@ -57,10 +62,10 @@ class Settings(BaseSettings):
         description="SQLAlchemy async database URL (Postgres required)",
     )
 
-    # Scheduler
-    scheduler_timezone: str = Field(
+    # General
+    default_timezone: str = Field(
         default="UTC",
-        description="Default timezone for scheduled tasks",
+        description="Default timezone used for new guild configs and scheduled tasks",
     )
 
     # MCP servers — stored as a JSON string in the env var
@@ -98,6 +103,22 @@ class Settings(BaseSettings):
         description="Archive all conversation history on startup (useful for testing prompt changes)",
     )
 
+    # Admin — comma-separated list of Discord user IDs that are Grug super-admins.
+    grug_super_admin_ids_raw: str = Field(
+        default="",
+        alias="grug_super_admin_ids",
+        description="Discord user IDs with global admin access (comma-separated)",
+    )
+
+    @property
+    def grug_super_admin_ids(self) -> list[str]:
+        """Parse the comma-separated raw string into a list of user IDs."""
+        return [
+            uid.strip()
+            for uid in self.grug_super_admin_ids_raw.split(",")
+            if uid.strip()
+        ]
+
     # File storage — uploaded character sheets are persisted here.
     file_data_dir: str = Field(
         default="./file_data",
@@ -106,9 +127,6 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
-
-
-_settings: Settings | None = None
 
 
 @cache

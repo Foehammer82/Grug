@@ -48,11 +48,11 @@ All Grug settings are read from environment variables at startup. The recommende
 
 ---
 
-## Scheduling
+## General
 
 | Variable | Default | Description |
 |---|---|---|
-| `SCHEDULER_TIMEZONE` | `UTC` | Default timezone for scheduled tasks when no guild-specific timezone is set. Use IANA tz names (e.g. `America/New_York`). |
+| `DEFAULT_TIMEZONE` | `UTC` | Default timezone applied to new guild configs and scheduled tasks. Use IANA tz names (e.g. `America/New_York`). |
 
 ---
 

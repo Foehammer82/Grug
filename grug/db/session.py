@@ -1,6 +1,8 @@
 """Async SQLAlchemy session management."""
 
 import logging
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -33,6 +35,21 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
     return _session_factory
 
 
+@asynccontextmanager
+async def get_session() -> AsyncIterator[AsyncSession]:
+    """Async context-manager helper for a DB session.
+
+    Works both as a FastAPI dependency (via ``Depends``) and as a standalone
+    context manager::
+
+        async with get_session() as session:
+            ...
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        yield session
+
+
 async def init_db() -> None:
     """Run Alembic migrations to bring the Postgres schema up to date."""
     await _run_alembic_migrations()
@@ -47,9 +64,6 @@ async def _run_alembic_migrations() -> None:
     def _upgrade(cfg: Config) -> None:
         command.upgrade(cfg, "head")
 
-    # Build the config without pointing at alembic.ini so that alembic's
-    # fileConfig() is never called — which would otherwise kill all existing
-    # log handlers that main.py set up.
     settings = get_settings()
     alembic_cfg = Config()
     alembic_cfg.set_main_option("script_location", "alembic")
@@ -62,10 +76,3 @@ async def _run_alembic_migrations() -> None:
     logger.info("Running Alembic migrations (upgrade head)...")
     await asyncio.to_thread(_upgrade, alembic_cfg)
     logger.info("Postgres schema up to date (alembic upgrade head).")
-
-
-async def get_session() -> AsyncSession:  # type: ignore[return]
-    """Async context-manager helper for a DB session."""
-    factory = get_session_factory()
-    async with factory() as session:
-        yield session

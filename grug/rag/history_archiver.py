@@ -33,7 +33,7 @@ class ConversationArchiver:
         settings = get_settings()
         self._store = store or get_vector_store()
         self._anthropic = AsyncAnthropic(api_key=settings.anthropic_api_key)
-        self._model = settings.anthropic_model
+        self._model = settings.anthropic_big_brain_model
         self._max_summaries = settings.agent_history_max_summaries
 
     async def _summarise(self, messages: list[dict]) -> str:

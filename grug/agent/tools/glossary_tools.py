@@ -24,7 +24,7 @@ def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
     """Register all glossary tools on the provided pydantic-ai Agent."""
 
     @agent.tool
-    async def lookup_glossary_term(ctx: RunContext, term: str) -> str:
+    async def lookup_glossary_term(ctx: RunContext[GrugDeps], term: str) -> str:
         """Look up a term in this guild's glossary.
 
         Returns the best matching definition, preferring a channel-level definition
@@ -70,7 +70,7 @@ def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
 
     @agent.tool
     async def upsert_glossary_term(
-        ctx: RunContext,
+        ctx: RunContext[GrugDeps],
         term: str,
         definition: str,
     ) -> str:
@@ -123,7 +123,7 @@ def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
                 existing.definition = definition
                 existing.updated_at = datetime.now(timezone.utc)
                 await session.commit()
-                return f"📖 Grug update glossary: **{term}** — {definition}"
+                return f"Glossary updated: '{term}' = {definition}"
             else:
                 # New term — ensure guild config exists first.
                 from grug.utils import ensure_guild
@@ -141,4 +141,4 @@ def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
                 )
                 session.add(new_term)
                 await session.commit()
-                return f"📖 Grug add to glossary: **{term}** — {definition}"
+                return f"New glossary term added: '{term}' = {definition}"

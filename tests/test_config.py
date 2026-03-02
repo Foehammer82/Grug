@@ -17,7 +17,6 @@ def test_settings_defaults():
     assert settings.discord_token == "test-token"
     assert settings.anthropic_api_key == "test-key"
     assert settings.anthropic_model == "claude-3-5-sonnet-20241022"
-    assert settings.discord_prefix == "!"
     assert settings.agent_max_iterations == 10
     assert settings.agent_context_window == 20
     assert settings.mcp_server_configs == []
