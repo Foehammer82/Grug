@@ -9,6 +9,7 @@ import GuildConfigPage from './pages/GuildConfigPage';
 import LoginPage from './pages/LoginPage';
 import PersonalLayout from './components/PersonalLayout';
 import NotFoundPage from './pages/NotFoundPage';
+import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import TasksPage from './pages/TasksPage';
 
@@ -19,7 +20,8 @@ function App() {
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/personal" element={<PersonalLayout />}>
-          <Route index element={<Navigate to="tasks" replace />} />
+          <Route index element={<Navigate to="config" replace />} />
+          <Route path="config" element={<PersonalConfigPage />} />
           <Route path="tasks" element={<PersonalTasksPage />} />
         </Route>
         <Route path="/guilds/:guildId" element={<GuildLayout />}>

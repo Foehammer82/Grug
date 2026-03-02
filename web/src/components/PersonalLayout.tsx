@@ -2,6 +2,7 @@ import { Box, Tab, Tabs, Typography } from '@mui/material';
 import { Outlet, useNavigate } from 'react-router-dom';
 
 const TABS = [
+  { label: 'Config', path: 'config' },
   { label: 'Tasks', path: 'tasks' },
 ];
 
