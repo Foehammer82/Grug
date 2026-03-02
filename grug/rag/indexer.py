@@ -73,8 +73,7 @@ class DocumentIndexer:
         Text extraction (and OCR for image-only PDFs) is CPU-bound; it is
         offloaded to a thread pool executor so it does not block the event loop.
         """
-        loop = asyncio.get_event_loop()
-        text = await loop.run_in_executor(None, _extract_text, file_path)
+        text = await asyncio.to_thread(_extract_text, file_path)
 
         chunks = chunk_text(text)
         if not chunks:

@@ -3,11 +3,11 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db
+from api.deps import assert_guild_member, get_current_user, get_db, get_or_404
 from api.schemas import (
     CalendarEventCreate,
     CalendarEventOut,
@@ -48,7 +48,6 @@ async def list_events(
 
     if start is not None and end is not None:
         # Date-range mode — return expanded occurrences.
-        # Ensure timezone-aware.
         if start.tzinfo is None:
             start = start.replace(tzinfo=timezone.utc)
         if end.tzinfo is None:
@@ -61,11 +60,9 @@ async def list_events(
         occurrences: list[dict] = []
         for ev in events:
             occurrences.extend(expand_event_occurrences(ev, start, end))
-        # Sort by occurrence start.
         occurrences.sort(key=lambda o: o["occurrence_start"])
         return occurrences
     else:
-        # Legacy / simple mode — upcoming non-expanded events.
         now = datetime.now(timezone.utc)
         result = await db.execute(
             select(CalendarEvent)
@@ -137,14 +134,13 @@ async def update_event(
     """Update a calendar event.  Uses ``model_fields_set`` so explicit
     ``null`` clears the field."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(CalendarEvent).where(
-            CalendarEvent.id == event_id, CalendarEvent.guild_id == guild_id
-        )
+    event = await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
     )
-    event = result.scalar_one_or_none()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
 
     for field in body.model_fields_set:
         value = getattr(body, field)
@@ -166,14 +162,13 @@ async def delete_event(
 ) -> None:
     """Delete a calendar event."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(CalendarEvent).where(
-            CalendarEvent.id == event_id, CalendarEvent.guild_id == guild_id
-        )
+    event = await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
     )
-    event = result.scalar_one_or_none()
-    if event is None:
-        raise HTTPException(status_code=404, detail="Event not found")
     await db.delete(event)
     await db.commit()
 
@@ -209,33 +204,10 @@ async def guild_cron_from_text(
 ) -> CronFromTextOut:
     """Convert a plain-English schedule description to a 5-field UTC cron expression."""
     assert_guild_member(guild_id, user)
-    from pydantic import BaseModel as PydanticBase
-    from pydantic_ai import Agent
-    from pydantic_ai.models.anthropic import AnthropicModel
-    from pydantic_ai.providers.anthropic import AnthropicProvider
+    from api.services import parse_cron_from_text
 
-    from grug.config.settings import get_settings
-
-    class _CronResult(PydanticBase):
-        cron_expression: str
-
-    settings = get_settings()
-    provider = AnthropicProvider(api_key=settings.anthropic_api_key)
-    model = AnthropicModel(settings.anthropic_model, provider=provider)
-    agent: Agent[None, _CronResult] = Agent(
-        model,
-        output_type=_CronResult,
-        system_prompt=(
-            "You convert plain-English schedule descriptions into a single 5-field UTC "
-            "cron expression (minute, hour, day-of-month, month, day-of-week). "
-            "Return ONLY the cron_expression field. Do not explain. Examples:\n"
-            "  'every Monday at 9am UTC' -> '0 9 * * 1'\n"
-            "  'every day at midnight' -> '0 0 * * *'\n"
-            "  'every weekday at 5pm UTC' -> '0 17 * * 1-5'"
-        ),
-    )
-    result = await agent.run(body.text)
-    return CronFromTextOut(cron_expression=result.output.cron_expression)
+    cron_expr = await parse_cron_from_text(body.text)
+    return CronFromTextOut(cron_expression=cron_expr)
 
 
 @router.post(
@@ -294,14 +266,13 @@ async def toggle_task(
 ) -> ScheduledTask:
     """Enable or disable a scheduled task."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(ScheduledTask).where(
-            ScheduledTask.id == task_id, ScheduledTask.guild_id == guild_id
-        )
+    task = await get_or_404(
+        db,
+        ScheduledTask,
+        ScheduledTask.id == task_id,
+        ScheduledTask.guild_id == guild_id,
+        detail="Task not found",
     )
-    task = result.scalar_one_or_none()
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
     task.enabled = body.enabled
     await db.commit()
     await db.refresh(task)
@@ -317,13 +288,12 @@ async def delete_task(
 ) -> None:
     """Delete a scheduled task."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(ScheduledTask).where(
-            ScheduledTask.id == task_id, ScheduledTask.guild_id == guild_id
-        )
+    task = await get_or_404(
+        db,
+        ScheduledTask,
+        ScheduledTask.id == task_id,
+        ScheduledTask.guild_id == guild_id,
+        detail="Task not found",
     )
-    task = result.scalar_one_or_none()
-    if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
     await db.delete(task)
     await db.commit()

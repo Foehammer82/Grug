@@ -1,5 +1,6 @@
 """Guild routes — list guilds, config CRUD, and channel proxy."""
 
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
@@ -8,7 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db
+from api.deps import (
+    assert_guild_member,
+    get_bot_token,
+    get_current_user,
+    get_db,
+    get_or_404,
+)
 from api.schemas import (
     ChannelConfigOut,
     ChannelConfigUpdate,
@@ -17,8 +24,9 @@ from api.schemas import (
     GuildConfigUpdate,
     GuildOut,
 )
-from grug.config.settings import get_settings
 from grug.db.models import ChannelConfig, GuildConfig
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["guilds"])
 
@@ -53,33 +61,37 @@ async def get_guild_config(
     guild's system messages channel as configured in Discord.
     """
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+    cfg = await get_or_404(
+        db,
+        GuildConfig,
+        GuildConfig.guild_id == guild_id,
+        detail="Guild config not found",
     )
-    cfg = result.scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=404, detail="Guild config not found")
 
     # Auto-populate announce channel from Discord system channel on first load
     if cfg.announce_channel_id is None:
-        settings = get_settings()
-        bot_token = settings.discord_bot_token or settings.discord_token
-        if bot_token:
-            try:
-                async with httpx.AsyncClient() as http:
-                    resp = await http.get(
-                        f"https://discord.com/api/v10/guilds/{guild_id}",
-                        headers={"Authorization": f"Bot {bot_token}"},
-                    )
-                if resp.status_code == 200:
-                    system_channel_id = resp.json().get("system_channel_id")
-                    if system_channel_id:
-                        cfg.announce_channel_id = int(system_channel_id)
-                        cfg.updated_at = datetime.now(timezone.utc)
-                        await db.commit()
-                        await db.refresh(cfg)
-            except Exception:
-                pass  # Non-fatal; return config as-is
+        try:
+            bot_token = get_bot_token()
+            async with httpx.AsyncClient() as http:
+                resp = await http.get(
+                    f"https://discord.com/api/v10/guilds/{guild_id}",
+                    headers={"Authorization": f"Bot {bot_token}"},
+                )
+            if resp.status_code == 200:
+                system_channel_id = resp.json().get("system_channel_id")
+                if system_channel_id:
+                    cfg.announce_channel_id = int(system_channel_id)
+                    cfg.updated_at = datetime.now(timezone.utc)
+                    await db.commit()
+                    await db.refresh(cfg)
+        except HTTPException:
+            pass  # Bot token not configured — non-fatal
+        except Exception:
+            logger.warning(
+                "Failed to auto-populate announce_channel_id for guild %d",
+                guild_id,
+                exc_info=True,
+            )
 
     return cfg
 
@@ -93,20 +105,19 @@ async def update_guild_config(
 ) -> GuildConfig:
     """Update guild configuration fields."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+    cfg = await get_or_404(
+        db,
+        GuildConfig,
+        GuildConfig.guild_id == guild_id,
+        detail="Guild config not found",
     )
-    cfg = result.scalar_one_or_none()
-    if cfg is None:
-        raise HTTPException(status_code=404, detail="Guild config not found")
-    if body.timezone is not None:
-        cfg.timezone = body.timezone
-    if "announce_channel_id" in body.model_fields_set:
-        # Convert to int here — Python handles large snowflake IDs without precision loss
-        val = body.announce_channel_id
-        cfg.announce_channel_id = int(val) if val is not None else None
-    if "context_cutoff" in body.model_fields_set:
-        cfg.context_cutoff = body.context_cutoff
+
+    for field in body.model_fields_set:
+        value = getattr(body, field)
+        if field == "announce_channel_id" and value is not None:
+            value = int(value)
+        setattr(cfg, field, value)
+
     cfg.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(cfg)
@@ -120,10 +131,7 @@ async def list_guild_channels(
 ) -> list[DiscordChannelOut]:
     """Proxy Discord's channel list so the web UI can display channel names."""
     assert_guild_member(guild_id, user)
-    settings = get_settings()
-    bot_token = settings.discord_bot_token or settings.discord_token
-    if not bot_token:
-        raise HTTPException(status_code=503, detail="Bot token not configured")
+    bot_token = get_bot_token()
     async with httpx.AsyncClient() as http:
         resp = await http.get(
             f"https://discord.com/api/v10/guilds/{guild_id}/channels",
@@ -158,7 +166,6 @@ async def get_channel_config(
     )
     cfg = result.scalar_one_or_none()
     if cfg is None:
-        # Lazily create a default row.
         from grug.utils import ensure_guild
 
         await ensure_guild(guild_id)

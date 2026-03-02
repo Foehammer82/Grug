@@ -11,7 +11,7 @@ async def execute_scheduled_task(task_id: int) -> None:
     Loads the task from the database, runs its prompt through the agent, posts
     the response to the target channel, then updates the task state:
 
-    * ``type='once'``:      sets ``enabled=False`` and ``last_run=now()`` after firing.
+    * ``type='once'``:      deleted after firing to keep the DB tidy.
     * ``type='recurring'``: sets ``last_run=now()`` only.
     """
     from datetime import datetime, timezone

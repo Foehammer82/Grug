@@ -168,7 +168,13 @@ export default function GuildConfigPage() {
           value={config.timezone ?? defaults?.default_timezone ?? 'UTC'}
           onChange={handleTimezoneChange}
           disabled={guildMutation.isPending}
-          renderInput={(params) => <TextField {...params} label="Server Timezone" />}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Server Timezone"
+              helperText="Used for scheduling, event display, and cron expressions. All times are stored in UTC and converted to this timezone when shown."
+            />
+          )}
         />
 
         <Autocomplete
@@ -198,7 +204,11 @@ export default function GuildConfigPage() {
             </Box>
           )}
           renderInput={(params) => (
-            <TextField {...params} label="Bot Channel" />
+            <TextField
+              {...params}
+              label="Bot Channel"
+              helperText="The channel where Grug posts announcements and responds to @mentions by default."
+            />
           )}
         />
 

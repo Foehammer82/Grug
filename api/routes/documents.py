@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db
+from api.deps import assert_guild_member, get_current_user, get_db, get_or_404
 from api.schemas import DocumentOut, DocumentUpdate
 from grug.db.models import Document
 from grug.rag.indexer import DocumentIndexer
@@ -105,12 +105,13 @@ async def update_document(
 ) -> Document:
     """Update a document's description."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(Document).where(Document.id == doc_id, Document.guild_id == guild_id)
+    doc = await get_or_404(
+        db,
+        Document,
+        Document.id == doc_id,
+        Document.guild_id == guild_id,
+        detail="Document not found",
     )
-    doc = result.scalar_one_or_none()
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Document not found")
     if "description" in body.model_fields_set:
         doc.description = body.description
     await db.commit()
@@ -127,12 +128,13 @@ async def delete_document(
 ) -> None:
     """Delete an indexed document."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(Document).where(Document.id == doc_id, Document.guild_id == guild_id)
+    doc = await get_or_404(
+        db,
+        Document,
+        Document.id == doc_id,
+        Document.guild_id == guild_id,
+        detail="Document not found",
     )
-    doc = result.scalar_one_or_none()
-    if doc is None:
-        raise HTTPException(status_code=404, detail="Document not found")
     await _indexer.delete_document(guild_id, doc_id)
     await db.delete(doc)
     await db.commit()
