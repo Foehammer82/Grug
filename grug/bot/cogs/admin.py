@@ -47,6 +47,11 @@ class AdminCog(commands.Cog, name="Admin"):
         )
         embed.add_field(name="Model", value=settings.anthropic_model, inline=True)
         embed.add_field(
+            name="Big Brain Model",
+            value=settings.anthropic_big_brain_model,
+            inline=True,
+        )
+        embed.add_field(
             name="Scheduler",
             value="Running ✅" if scheduler.running else "Stopped ❌",
             inline=True,

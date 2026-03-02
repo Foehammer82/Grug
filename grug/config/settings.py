@@ -22,6 +22,10 @@ class Settings(BaseSettings):
         default="claude-haiku-4-5",
         description="Anthropic model to use",
     )
+    anthropic_big_brain_model: str = Field(
+        default="claude-sonnet-4-6",
+        description="More capable model for complex extraction and summarization tasks",
+    )
 
     # Discord OAuth (used by the web API; optional for bot-only deployments)
     discord_client_id: str = Field(default="", description="Discord OAuth client ID")

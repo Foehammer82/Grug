@@ -45,7 +45,7 @@ class CharactersCog(commands.Cog, name="Characters"):
         settings = get_settings()
         self._parser = CharacterSheetParser(
             anthropic_api_key=settings.anthropic_api_key,
-            anthropic_model=settings.anthropic_model,
+            anthropic_model=settings.anthropic_big_brain_model,
         )
         self._indexer = CharacterIndexer()
         self._file_data_dir = Path(settings.file_data_dir)
