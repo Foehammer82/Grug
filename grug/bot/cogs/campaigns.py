@@ -3,6 +3,7 @@
 import logging
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
@@ -19,61 +20,60 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
 
-    @commands.group(name="campaign", invoke_without_command=True)
-    @commands.guild_only()
-    async def campaign_group(self, ctx: commands.Context) -> None:
-        """Campaign management commands. Use !campaign <subcommand>."""
-        await ctx.send_help(ctx.command)
+    campaign = app_commands.Group(
+        name="campaign",
+        description="Manage campaign-to-channel associations.",
+        guild_only=True,
+    )
 
-    @campaign_group.command(name="create")
-    @commands.has_permissions(manage_guild=True)
-    async def create_campaign(self, ctx: commands.Context, *, name: str) -> None:
-        """Link this channel to a new campaign.
-
-        Usage: !campaign create <name>
-        One channel can only host one campaign.
-        """
+    @campaign.command(name="create", description="Link this channel to a new campaign.")
+    @app_commands.describe(name="The name of the new campaign.")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def create_campaign(
+        self, interaction: discord.Interaction, name: str
+    ) -> None:
         factory = get_session_factory()
         async with factory() as session:
             existing = await session.execute(
-                select(Campaign).where(Campaign.channel_id == ctx.channel.id)
+                select(Campaign).where(Campaign.channel_id == interaction.channel_id)
             )
             if existing.scalar_one_or_none() is not None:
-                await ctx.send(
+                await interaction.response.send_message(
                     "This channel is already linked to a campaign. "
-                    "Use `!campaign info` to see details, or use a different channel."
+                    "Use `/campaign info` to see details, or use a different channel.",
+                    ephemeral=True,
                 )
                 return
 
-            assert ctx.guild is not None  # enforced by @commands.guild_only()
             campaign = Campaign(
-                guild_id=ctx.guild.id,
-                channel_id=ctx.channel.id,
+                guild_id=interaction.guild_id,
+                channel_id=interaction.channel_id,
                 name=name,
                 system="unknown",
                 is_active=True,
-                created_by=ctx.author.id,
+                created_by=interaction.user.id,
             )
             session.add(campaign)
             await session.commit()
             await session.refresh(campaign)
             campaign_id = campaign.id
 
-        await ctx.send(
+        await interaction.response.send_message(
             f"⚔️ Campaign **{name}** created (ID: {campaign_id})!\n"
             "Documents uploaded here will be scoped to this campaign.\n"
-            f"Set the game system: `!campaign set_system <system>`  "
+            f"Set the game system with `/campaign set_system`  "
             f"(options: {', '.join(GAME_SYSTEM_LABELS.keys())})"
         )
 
-    @campaign_group.command(name="info")
-    async def campaign_info(self, ctx: commands.Context) -> None:
-        """Show the campaign linked to this channel."""
-        campaign = await _get_campaign_for_channel(ctx.channel.id)
+    @campaign.command(
+        name="info", description="Show the campaign linked to this channel."
+    )
+    async def campaign_info(self, interaction: discord.Interaction) -> None:
+        campaign = await _get_campaign_for_channel(interaction.channel_id)
         if campaign is None:
-            await ctx.send(
+            await interaction.response.send_message(
                 "No campaign is linked to this channel. "
-                "An admin can create one with `!campaign create <name>`."
+                "An admin can create one with `/campaign create`."
             )
             return
 
@@ -112,21 +112,21 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
         embed.add_field(name="Characters", value=str(len(char_rows)), inline=True)
         embed.add_field(name="Documents", value=str(len(doc_rows)), inline=True)
         embed.add_field(name="Channel", value=f"<#{campaign.channel_id}>", inline=True)
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @campaign_group.command(name="set_system")
-    @commands.has_permissions(manage_guild=True)
-    async def set_system(self, ctx: commands.Context, system: str) -> None:
-        """Set the game system for this channel's campaign.
-
-        Usage: !campaign set_system <system>
-        Systems: dnd5e, pf2e, unknown
-        """
+    @campaign.command(
+        name="set_system",
+        description="Set the game system for this channel's campaign.",
+    )
+    @app_commands.describe(system="The game system (e.g. dnd5e, pf2e, unknown).")
+    @app_commands.checks.has_permissions(manage_guild=True)
+    async def set_system(self, interaction: discord.Interaction, system: str) -> None:
         system = system.lower().strip()
-        campaign = await _get_campaign_for_channel(ctx.channel.id)
+        campaign = await _get_campaign_for_channel(interaction.channel_id)
         if campaign is None:
-            await ctx.send(
-                "No campaign linked to this channel. Create one with `!campaign create`."
+            await interaction.response.send_message(
+                "No campaign linked to this channel. Create one with `/campaign create`.",
+                ephemeral=True,
             )
             return
         factory = get_session_factory()
@@ -139,25 +139,29 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
             row.system = system
             await session.commit()
         label = GAME_SYSTEM_LABELS.get(system, system)
-        await ctx.send(f"🎲 Campaign system updated to **{label}**.")
+        await interaction.response.send_message(
+            f"🎲 Campaign system updated to **{label}**."
+        )
 
-    @campaign_group.command(name="list")
-    async def list_campaigns(self, ctx: commands.Context) -> None:
-        """List all campaigns in this server."""
+    @campaign.command(name="list", description="List all campaigns in this server.")
+    async def list_campaigns(self, interaction: discord.Interaction) -> None:
         factory = get_session_factory()
-        assert ctx.guild is not None  # enforced by @commands.guild_only()
         async with factory() as session:
             campaigns = (
                 (
                     await session.execute(
-                        select(Campaign).where(Campaign.guild_id == ctx.guild.id)
+                        select(Campaign).where(
+                            Campaign.guild_id == interaction.guild_id
+                        )
                     )
                 )
                 .scalars()
                 .all()
             )
         if not campaigns:
-            await ctx.send("No campaigns yet. Use `!campaign create` in any channel.")
+            await interaction.response.send_message(
+                "No campaigns yet. Use `/campaign create` in any channel."
+            )
             return
         embed = discord.Embed(title="⚔️ Campaigns", color=discord.Color.gold())
         for c in campaigns:
@@ -166,7 +170,18 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
             if not c.is_active:
                 value += "\n*(inactive)*"
             embed.add_field(name=c.name, value=value, inline=False)
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
+
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
+        if isinstance(error, app_commands.MissingPermissions):
+            await interaction.response.send_message(
+                "You need the **Manage Server** permission to use that command.",
+                ephemeral=True,
+            )
+        else:
+            raise error
 
 
 async def _get_campaign_for_channel(channel_id: int) -> Campaign | None:

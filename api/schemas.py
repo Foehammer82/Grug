@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 
 class UserOut(BaseModel):
@@ -10,6 +10,10 @@ class UserOut(BaseModel):
     username: str
     discriminator: str
     avatar: str | None = None
+
+
+class DefaultsOut(BaseModel):
+    default_timezone: str
 
 
 class GuildOut(BaseModel):
@@ -20,16 +24,21 @@ class GuildOut(BaseModel):
 
 class GuildConfigOut(BaseModel):
     guild_id: int
-    prefix: str
     timezone: str
     announce_channel_id: int | None
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("announce_channel_id")
+    def serialize_announce_channel_id(self, v: int | None) -> str | None:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v) if v is not None else None
+
 
 class GuildConfigUpdate(BaseModel):
     timezone: str | None = None
-    announce_channel_id: int | None = None
+    # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
+    announce_channel_id: str | int | None = None
 
 
 class CalendarEventOut(BaseModel):

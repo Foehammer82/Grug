@@ -8,10 +8,9 @@ import discord
 
 from grug.bot.client import create_bot, set_bot
 from grug.config.settings import get_settings
-from grug.db.session import get_session_factory, init_db
-from grug.db.models import ScheduledTask
-from grug.scheduler.manager import add_cron_job, start_scheduler
-from grug.scheduler.tasks import run_scheduled_prompt
+from grug.db.session import init_db
+from grug.scheduler.manager import start_scheduler
+from grug.scheduler.sync import run_sync, schedule_periodic_sync
 
 
 def setup_logging(level: str) -> None:
@@ -20,35 +19,6 @@ def setup_logging(level: str) -> None:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
         stream=sys.stdout,
     )
-
-
-async def load_scheduled_tasks(bot) -> None:
-    """Re-register all enabled scheduled tasks from the database on startup."""
-    from sqlalchemy import select
-
-    factory = get_session_factory()
-    async with factory() as session:
-        result = await session.execute(
-            select(ScheduledTask).where(ScheduledTask.enabled.is_(True))  # noqa: E712
-        )
-        tasks = result.scalars().all()
-
-    for task in tasks:
-        job_id = f"task_{task.id}"
-        try:
-            add_cron_job(
-                run_scheduled_prompt,
-                cron_expression=task.cron_expression,
-                job_id=job_id,
-                args=[task.id, task.guild_id, task.channel_id, task.prompt],
-            )
-            logging.getLogger(__name__).info(
-                "Restored scheduled task %d: %s", task.id, task.name
-            )
-        except Exception as exc:
-            logging.getLogger(__name__).warning(
-                "Failed to restore task %d: %s", task.id, exc
-            )
 
 
 async def main() -> None:
@@ -76,7 +46,8 @@ async def main() -> None:
             )
         )
         start_scheduler()
-        await load_scheduled_tasks(bot)
+        await run_sync(bot, sync_commands=True)
+        schedule_periodic_sync(bot)
 
     # Load cogs
     await bot.load_extension("grug.bot.cogs.ai_chat")

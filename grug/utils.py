@@ -8,6 +8,7 @@ import re
 
 from sqlalchemy import select
 
+from grug.config.settings import get_settings
 from grug.db.models import Campaign, GuildConfig
 from grug.db.session import get_session_factory
 
@@ -40,7 +41,10 @@ async def ensure_guild(guild_id: int) -> None:
             select(GuildConfig).where(GuildConfig.guild_id == guild_id)
         )
         if result.scalar_one_or_none() is None:
-            session.add(GuildConfig(guild_id=guild_id))
+            settings = get_settings()
+            session.add(
+                GuildConfig(guild_id=guild_id, timezone=settings.default_timezone)
+            )
             await session.commit()
 
 

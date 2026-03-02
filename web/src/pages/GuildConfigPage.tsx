@@ -1,23 +1,41 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import {
+  Autocomplete,
+  Box,
+  Stack,
+  TextField,
+  Typography,
+} from '@mui/material';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
-import NavBar from '../components/NavBar';
 import { useAuth } from '../hooks/useAuth';
 
 interface GuildConfig {
   guild_id: number;
-  prefix: string;
   timezone: string;
-  announce_channel_id: number | null;
+  // Returned as a string to preserve Discord snowflake precision (> MAX_SAFE_INTEGER)
+  announce_channel_id: string | null;
 }
+
+interface Defaults {
+  default_timezone: string;
+}
+
+interface DiscordChannel {
+  id: string;
+  name: string;
+  type: number;
+}
+
+// Full IANA timezone list from the browser's built-in Intl API
+const TIMEZONES: string[] = Intl.supportedValuesOf('timeZone');
 
 export default function GuildConfigPage() {
   useAuth();
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
 
-  const { data: config, isLoading } = useQuery<GuildConfig>({
+  const { data: config, isLoading: configLoading } = useQuery<GuildConfig>({
     queryKey: ['config', guildId],
     queryFn: async () => {
       const res = await client.get<GuildConfig>(`/api/guilds/${guildId}/config`);
@@ -26,83 +44,132 @@ export default function GuildConfigPage() {
     enabled: !!guildId,
   });
 
-  const [timezone, setTimezone] = useState('');
-  const [channelId, setChannelId] = useState('');
+  const { data: defaults } = useQuery<Defaults>({
+    queryKey: ['defaults'],
+    queryFn: async () => {
+      const res = await client.get<Defaults>('/api/defaults');
+      return res.data;
+    },
+    staleTime: Infinity,
+  });
+
+  const { data: channels, isLoading: channelsLoading, isError: channelsError } = useQuery<DiscordChannel[]>({
+    queryKey: ['channels', guildId],
+    queryFn: async () => {
+      const res = await client.get<DiscordChannel[]>(`/api/guilds/${guildId}/channels`);
+      return res.data;
+    },
+    enabled: !!guildId,
+  });
 
   const mutation = useMutation({
-    mutationFn: async () => {
-      const body: Record<string, unknown> = {};
-      if (timezone) body.timezone = timezone;
-      if (channelId) body.announce_channel_id = parseInt(channelId);
-      await client.patch(`/api/guilds/${guildId}/config`, body);
+    mutationFn: async (patch: Record<string, unknown>) => {
+      await client.patch(`/api/guilds/${guildId}/config`, patch);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['config', guildId] });
-      setTimezone('');
-      setChannelId('');
     },
   });
 
+  function handleTimezoneChange(_: unknown, value: string | null) {
+    if (value) mutation.mutate({ timezone: value });
+  }
+
+  function handleChannelChange(_: unknown, value: DiscordChannel | null) {
+    // Always send the string ID — never parseInt(). Discord snowflake IDs exceed
+    // Number.MAX_SAFE_INTEGER and will be silently mangled by JS if converted to number.
+    mutation.mutate({ announce_channel_id: value?.id ?? null });
+  }
+
+  if (configLoading) return <Typography color="text.secondary">Loading…</Typography>;
+  if (!config) return null;
+
   return (
-    <>
-      <NavBar />
-      <main style={{ padding: '2rem', maxWidth: 600 }}>
-        <h2>Guild Configuration</h2>
-        {isLoading && <p>Loading…</p>}
-        {config && (
-          <table style={{ borderCollapse: 'collapse', width: '100%', marginBottom: '2rem' }}>
-            <tbody>
-              {[
-                ['Guild ID', config.guild_id],
-                ['Prefix', config.prefix],
-                ['Timezone', config.timezone],
-                ['Announce Channel', config.announce_channel_id ?? '—'],
-              ].map(([k, v]) => (
-                <tr key={String(k)}>
-                  <td style={{ padding: '0.5rem', fontWeight: 600, width: 180 }}>{k}</td>
-                  <td style={{ padding: '0.5rem' }}>{String(v)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        <h3>Update Config</h3>
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            mutation.mutate();
+    <Stack spacing={4} sx={{ maxWidth: 520 }}>
+      {/* Section header */}
+      <Typography variant="body2" color="text.secondary">
+        Settings for this Discord server. Changes save instantly.
+      </Typography>
+
+      {/* Read-only info */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'auto 1fr',
+          columnGap: 4,
+          rowGap: 1,
+          alignItems: 'baseline',
+        }}
+      >
+        {([
+          ['Guild ID', String(config.guild_id)],
+        ] as [string, string][]).map(([label, value]) => (
+          <>
+            <Typography key={label + '-l'} variant="body2" fontWeight={600} color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
+              {label}
+            </Typography>
+            <Typography key={label + '-v'} variant="body2" color="text.primary" sx={{ fontFamily: 'monospace' }}>
+              {value}
+            </Typography>
+          </>
+        ))}
+      </Box>
+
+      {/* Live-edit fields */}
+      <Stack spacing={2.5}>
+        <Autocomplete
+          size="small"
+          fullWidth
+          options={TIMEZONES}
+          value={config.timezone ?? defaults?.default_timezone ?? 'UTC'}
+          onChange={handleTimezoneChange}
+          disabled={mutation.isPending}
+          renderInput={(params) => <TextField {...params} label="Server Timezone" />}
+        />
+
+        <Autocomplete
+          size="small"
+          fullWidth
+          options={channels ?? []}
+          loading={channelsLoading}
+          value={channels?.find((c) => c.id === config.announce_channel_id) ?? null}
+          onChange={handleChannelChange}
+          disabled={mutation.isPending}
+          getOptionLabel={(ch) => `#${ch.name}`}
+          filterOptions={(opts, { inputValue }) => {
+            const q = inputValue.toLowerCase();
+            return opts.filter((ch) =>
+              ch.name.toLowerCase().includes(q) || ch.id.includes(q)
+            );
           }}
-          style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
-        >
-          <label>
-            Timezone
-            <input
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              placeholder={config?.timezone ?? 'UTC'}
-              style={{ display: 'block', width: '100%', padding: '0.5rem', marginTop: 4 }}
-            />
-          </label>
-          <label>
-            Announce Channel ID
-            <input
-              value={channelId}
-              onChange={(e) => setChannelId(e.target.value)}
-              placeholder={config?.announce_channel_id?.toString() ?? 'Channel ID'}
-              style={{ display: 'block', width: '100%', padding: '0.5rem', marginTop: 4 }}
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            style={{ padding: '0.6rem 1.5rem', background: '#5865F2', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', alignSelf: 'flex-start' }}
-          >
-            {mutation.isPending ? 'Saving…' : 'Save'}
-          </button>
-          {mutation.isSuccess && <p style={{ color: 'green' }}>Saved!</p>}
-          {mutation.isError && <p style={{ color: 'red' }}>Error saving.</p>}
-        </form>
-      </main>
-    </>
+          isOptionEqualToValue={(a, b) => a.id === b.id}
+          renderOption={(props, ch) => (
+            <Box component="li" {...props} key={ch.id}>
+              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                <span>#{ch.name}</span>
+                <Typography component="span" variant="caption" color="text.disabled">
+                  {ch.id}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+          renderInput={(params) => (
+            <TextField {...params} label="Bot Channel" />
+          )}
+        />
+
+        {channelsError && (
+          <Typography variant="caption" color="warning.main">
+            Could not load channels from Discord — check that the bot token is configured correctly.
+          </Typography>
+        )}
+
+        {mutation.isError && (
+          <Typography variant="caption" color="error.main">
+            Failed to save — please try again.
+          </Typography>
+        )}
+      </Stack>
+    </Stack>
   );
 }

@@ -74,6 +74,30 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not commit secrets, API keys, or credentials to the repository.
 - Do not break backward compatibility without a clear migration path and documentation.
 
+## API Patterns (FastAPI)
+
+### PATCH endpoints — nullable field clearing
+**Never** gate an optional field update with `if body.field is not None`. This silently swallows intentional null-clears. Use `model_fields_set` instead:
+
+```python
+# WRONG — cannot clear a field to null
+if body.announce_channel_id is not None:
+    cfg.announce_channel_id = body.announce_channel_id
+
+# CORRECT — handles explicit null
+if "announce_channel_id" in body.model_fields_set:
+    cfg.announce_channel_id = body.announce_channel_id
+```
+
+### Discord bot token
+The settings object has two token fields: `discord_token` (used by the bot) and `discord_bot_token` (used by the API for Discord proxy calls). In practice they are the same credential. API routes that call the Discord REST API must fall back to `discord_token` when `discord_bot_token` is empty:
+```python
+bot_token = settings.discord_bot_token or settings.discord_token
+```
+
+### Discord system channel
+`GET /guilds/{id}` from the Discord API returns `system_channel_id` — the channel the server admin designated for system messages (joins, boosts, etc). Use this as the default `announce_channel_id` when none is configured.
+
 ## Capturing Pitched Ideas
 
 There are two roadmap documents with distinct purposes:
@@ -92,7 +116,7 @@ When the user corrects a response, points out a mistake, or shares an important 
 - If the correction defines a **reusable capability with scripts or multi-step logic** (e.g. "here is our full deploy workflow"), consider creating or updating an agent skill under `.github/skills/`.
 - After applying the update, briefly confirm what was changed so the user knows the knowledge has been captured.
 
-The goal is for this file and its companion artifacts to remain a living, accurate record of how Grug is built — so future Copilot sessions start from the right context without re-explaining the same things.
+**Self-reminder:** At the natural end of any substantial working session — or when the user explicitly asks — proactively review what was built, fixed, or learned and update these instructions and/or path-scoped instruction files (`.github/instructions/*.instructions.md`) without waiting to be asked. The goal is for this file and its companion artifacts to remain a living, accurate record of how Grug is built — so future Copilot sessions start from the right context without re-explaining the same things.
 
 ## Instructions vs. Prompt Files vs. Agent Skills
 

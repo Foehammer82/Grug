@@ -75,7 +75,7 @@ All configuration is driven by environment variables (or a `.env` file). Key opt
 | `ANTHROPIC_API_KEY` | Yes | — | Anthropic API key |
 | `ANTHROPIC_MODEL` | No | `claude-sonnet-4-6` | Anthropic model to use |
 | `DATABASE_URL` | No | `postgresql+asyncpg://grug:grug@localhost:5432/grug` | SQLAlchemy async DB URL (Postgres + pgvector required) |
-| `SCHEDULER_TIMEZONE` | No | `UTC` | Default timezone for scheduled tasks |
+| `DEFAULT_TIMEZONE` | No | `UTC` | Default timezone for new guild configs and scheduled tasks |
 | `MCP_SERVER_CONFIGS` | No | `[]` | JSON array of MCP server configs |
 | `AGENT_CONTEXT_WINDOW` | No | `20` | Number of recent messages to keep in context |
 | `AGENT_HISTORY_ARCHIVE_BATCH` | No | `10` | Overflow messages needed before archiving to RAG |

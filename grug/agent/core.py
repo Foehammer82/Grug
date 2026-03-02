@@ -69,9 +69,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
         toolsets=toolsets,
     )
 
-    @agent.system_prompt
+    @agent.system_prompt(dynamic=True)
     def _system_prompt(_ctx: RunContext[GrugDeps]) -> str:  # noqa: ARG001
-        """Evaluate the system prompt fresh on every run so `now` stays current."""
+        """Re-evaluate on every run (dynamic=True) so `now` is always current."""
         return SYSTEM_PROMPT.format(now=datetime.now(timezone.utc).isoformat())
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
@@ -84,6 +84,51 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_scheduling_tools(agent)
     register_glossary_tools(agent)
     register_character_tools(agent)
+
+    @agent.tool
+    async def get_current_time(ctx: RunContext[GrugDeps]) -> str:
+        """Return the current time as a timezone-aware ISO-8601 string.
+
+        The time is in the guild's configured local timezone (e.g. US/Eastern),
+        falling back to the server default timezone.  Use this whenever you need
+        to compute a future datetime from a relative expression like "in 5 minutes"
+        or "in two hours", and when telling the user what time something will happen.
+        The returned value includes the UTC offset so it is safe to pass directly
+        to scheduling tools.
+        """
+        import zoneinfo
+
+        from grug.config.settings import get_settings
+        from grug.db.models import GuildConfig
+        from grug.db.session import get_session_factory
+        from sqlalchemy import select
+
+        tz_name: str = get_settings().default_timezone
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                result = await session.execute(
+                    select(GuildConfig.timezone).where(
+                        GuildConfig.guild_id == ctx.deps.guild_id
+                    )
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    tz_name = row
+        except Exception:
+            logger.exception(
+                "get_current_time: failed to load guild timezone, using default"
+            )
+
+        try:
+            tz = zoneinfo.ZoneInfo(tz_name)
+        except Exception:
+            logger.warning(
+                "get_current_time: unknown timezone %r, falling back to UTC", tz_name
+            )
+            tz = zoneinfo.ZoneInfo("UTC")
+
+        return datetime.now(tz).isoformat()
 
     # Conversation history search (standalone — too small to extract).
     @agent.tool

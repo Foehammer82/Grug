@@ -47,7 +47,7 @@ def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
                     )
                 ).scalar_one_or_none()
                 if profile is None or profile.active_character_id is None:
-                    return "No active character found. Ask the player to upload a sheet with !character upload."
+                    return "No active character found. Ask the player to upload a sheet with /character upload."
                 char_id = profile.active_character_id
 
         factory = get_session_factory()
@@ -140,7 +140,7 @@ def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
             indexer = CharacterIndexer()
             await indexer.index_character(character_id, raw_text)
 
-        return f"\u2705 Updated {field} = {coerced} for character ID {character_id}."
+        return f"Updated {field} = {coerced} for character ID {character_id}."
 
     @agent.tool
     async def search_character_knowledge(

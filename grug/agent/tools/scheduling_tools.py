@@ -57,7 +57,9 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
             await session.commit()
             await session.refresh(event)
             event_id = event.id
-        return f"✅ Calendar event **{title}** created (ID: {event_id}, starts {start_time})."
+        return (
+            f"Calendar event '{title}' created (ID: {event_id}, starts {start_time})."
+        )
 
     @agent.tool
     async def list_calendar_events(ctx: RunContext[GrugDeps], limit: int = 10) -> str:
@@ -95,8 +97,17 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
         remind_at: str,
         user_id: int | None = None,
     ) -> str:
-        """Create a reminder sent to the user at the specified time (ISO-8601)."""
-        from datetime import datetime
+        """Schedule a one-time action for the user at the specified time (ISO-8601).
+
+        ``message`` is the prompt that will be sent to Grug at the scheduled time —
+        it should capture what the user actually wants done (e.g. "tell me a joke",
+        "roll initiative for the party", "post the session recap").  Grug will
+        execute that prompt in the channel where the reminder was created.
+
+        Always use UTC for ``remind_at`` (e.g. add the ``+00:00`` suffix).  If the
+        caller omits timezone info, UTC is assumed.
+        """
+        from datetime import datetime, timezone
 
         from grug.db.models import Reminder
         from grug.db.session import get_session_factory
@@ -107,6 +118,9 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
         await ensure_guild(ctx.deps.guild_id)
         target_user = user_id if user_id is not None else ctx.deps.user_id
         run_dt = datetime.fromisoformat(remind_at)
+        # Ensure the datetime is timezone-aware; treat naive datetimes as UTC.
+        if run_dt.tzinfo is None:
+            run_dt = run_dt.replace(tzinfo=timezone.utc)
         factory = get_session_factory()
         async with factory() as session:
             reminder = Reminder(
@@ -125,9 +139,15 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
             send_reminder,
             run_date=run_dt,
             job_id=f"reminder_{reminder_id}",
-            args=[reminder_id, ctx.deps.channel_id, target_user, message],
+            args=[
+                reminder_id,
+                ctx.deps.guild_id,
+                ctx.deps.channel_id,
+                target_user,
+                message,
+            ],
         )
-        return f"⏰ Reminder set for {remind_at} (ID: {reminder_id})."
+        return f"Reminder set for {run_dt.isoformat()} (ID: {reminder_id})."
 
     @agent.tool
     async def create_scheduled_task(
@@ -169,4 +189,4 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
             job_id=f"task_{task_id}",
             args=[task_id, ctx.deps.guild_id, ctx.deps.channel_id, prompt],
         )
-        return f"🔁 Recurring task **{name}** scheduled ({cron_expression}) — ID: {task_id}."
+        return f"Recurring task '{name}' scheduled ({cron_expression}) — ID: {task_id}."

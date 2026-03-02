@@ -123,7 +123,7 @@ def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
                 existing.definition = definition
                 existing.updated_at = datetime.now(timezone.utc)
                 await session.commit()
-                return f"📖 Grug update glossary: **{term}** — {definition}"
+                return f"Glossary updated: '{term}' = {definition}"
             else:
                 # New term — ensure guild config exists first.
                 from grug.utils import ensure_guild
@@ -141,4 +141,4 @@ def register_glossary_tools(agent: Agent[GrugDeps, str]) -> None:
                 )
                 session.add(new_term)
                 await session.commit()
-                return f"📖 Grug add to glossary: **{term}** — {definition}"
+                return f"Glossary entry added: '{term}' = {definition}"

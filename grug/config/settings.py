@@ -15,7 +15,6 @@ class Settings(BaseSettings):
 
     # Discord
     discord_token: str = Field(default="", description="Discord bot token")
-    discord_prefix: str = Field(default="!", description="Command prefix")
 
     # Anthropic
     anthropic_api_key: str = Field(default="", description="Anthropic API key")
@@ -57,10 +56,10 @@ class Settings(BaseSettings):
         description="SQLAlchemy async database URL (Postgres required)",
     )
 
-    # Scheduler
-    scheduler_timezone: str = Field(
+    # General
+    default_timezone: str = Field(
         default="UTC",
-        description="Default timezone for scheduled tasks",
+        description="Default timezone used for new guild configs and scheduled tasks",
     )
 
     # MCP servers — stored as a JSON string in the env var

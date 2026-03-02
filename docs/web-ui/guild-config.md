@@ -14,7 +14,7 @@ The Guild Config page lets server admins update Grug's per-server settings.
 
 ## Settings
 
-### Timezone
+### Server Timezone
 
 Controls how Grug displays times for scheduled tasks and calendar events in your server.
 
@@ -25,12 +25,12 @@ The same timezone can be set via the Discord command [`!set_timezone`](../discor
 
 ---
 
-### Announce channel
+### Bot channel
 
 The channel ID (a number) where Grug will post automated announcements — scheduled task outputs, reminders, and event notifications.
 
 1. Right-click the target channel in Discord → **Copy Channel ID** (Developer Mode must be enabled in Discord settings).
-2. Paste the ID into the **Announce Channel** field.
+2. Paste the ID into the **Bot Channel** field.
 3. Click **Save**.
 
 !!! tip "Enabling Developer Mode in Discord"

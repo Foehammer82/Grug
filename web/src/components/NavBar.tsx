@@ -1,57 +1,139 @@
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import BrightnessAutoOutlinedIcon from '@mui/icons-material/BrightnessAutoOutlined';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
+import LogoutIcon from '@mui/icons-material/Logout';
+import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
+import {
+  AppBar,
+  Avatar,
+  Box,
+  Divider,
+  IconButton,
+  ListItemIcon,
+  Menu,
+  MenuItem,
+  Toolbar,
+  Tooltip,
+  Typography,
+} from '@mui/material';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import grugNb from '../assets/grug_nb.png';
 import client from '../api/client';
+import { useAuth } from '../hooks/useAuth';
+import { ThemePreference, useThemePreference } from '../context/ThemeContext';
 
-const navStyle: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: '1rem',
-  padding: '0.75rem 1.5rem',
-  background: '#5865F2',
-  color: '#fff',
+const THEME_CYCLE: ThemePreference[] = ['light', 'dark', 'system'];
+
+const THEME_ICON: Record<ThemePreference, React.ReactElement> = {
+  light:  <WbSunnyOutlinedIcon fontSize="small" />,
+  dark:   <DarkModeOutlinedIcon fontSize="small" />,
+  system: <BrightnessAutoOutlinedIcon fontSize="small" />,
 };
 
-const linkStyle: React.CSSProperties = { color: '#fff', textDecoration: 'none' };
+const THEME_LABEL: Record<ThemePreference, string> = {
+  light:  'Light mode',
+  dark:   'Dark mode',
+  system: 'System mode',
+};
 
 export default function NavBar() {
   const { data: user } = useAuth();
-  const { guildId } = useParams<{ guildId?: string }>();
   const navigate = useNavigate();
+  const { preference, setPreference } = useThemePreference();
+
+  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
+
+  function cycleTheme() {
+    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(preference) + 1) % THEME_CYCLE.length];
+    setPreference(next);
+  }
 
   const avatarUrl =
     user?.avatar && user?.id
-      ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=32`
-      : null;
+      ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=64`
+      : undefined;
 
   async function handleLogout() {
+    setAnchorEl(null);
     await client.post('/auth/logout');
     navigate('/login');
   }
 
   return (
-    <nav style={navStyle}>
-      <Link to="/dashboard" style={{ ...linkStyle, fontWeight: 700, fontSize: '1.2rem' }}>
-        🪨 Grug
-      </Link>
-      {guildId && (
-        <>
-          <Link to={`/guilds/${guildId}/config`} style={linkStyle}>Config</Link>
-          <Link to={`/guilds/${guildId}/events`} style={linkStyle}>Events</Link>
-          <Link to={`/guilds/${guildId}/tasks`} style={linkStyle}>Tasks</Link>
-          <Link to={`/guilds/${guildId}/documents`} style={linkStyle}>Documents</Link>
-          <Link to={`/guilds/${guildId}/glossary`} style={linkStyle}>Glossary</Link>
-        </>
-      )}
-      <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-        {avatarUrl && <img src={avatarUrl} alt="avatar" style={{ borderRadius: '50%', width: 32, height: 32 }} />}
-        {user && <span>{user.username}</span>}
-        <button
-          onClick={handleLogout}
-          style={{ background: 'transparent', border: '1px solid #fff', color: '#fff', cursor: 'pointer', borderRadius: 4, padding: '0.25rem 0.75rem' }}
-        >
-          Logout
-        </button>
-      </span>
-    </nav>
+    <>
+      <AppBar position="sticky" color="default">
+        <Toolbar sx={{ gap: 1 }}>
+          {/* Grug home button + wordmark */}
+          <Tooltip title="Home">
+            <IconButton onClick={() => navigate('/dashboard')} size="small" sx={{ p: 0.5 }}>
+              <Box
+                component="img"
+                src={grugNb}
+                alt="Home"
+                sx={{ width: 38, height: 38, objectFit: 'contain' }}
+              />
+            </IconButton>
+          </Tooltip>
+
+          <Typography
+            variant="h6"
+            fontWeight={700}
+            sx={{ letterSpacing: '0.02em', color: 'text.primary', cursor: 'default', userSelect: 'none', lineHeight: 1 }}
+          >
+            Grug
+          </Typography>
+          <Typography
+            variant="h6"
+            fontWeight={400}
+            sx={{ color: 'text.secondary', cursor: 'default', userSelect: 'none', lineHeight: 1 }}
+          >
+            AI Agent Admin
+          </Typography>
+
+          <Box sx={{ flexGrow: 1 }} />
+
+          {/* Theme toggle */}
+          <Tooltip title={THEME_LABEL[preference]}>
+            <IconButton onClick={cycleTheme} size="small" sx={{ color: 'text.secondary' }}>
+              {THEME_ICON[preference]}
+            </IconButton>
+          </Tooltip>
+
+          {/* User avatar menu */}
+          {user && (
+            <>
+              <Tooltip title={user.username}>
+                <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small" sx={{ p: 0.5 }}>
+                  <Avatar src={avatarUrl} sx={{ width: 32, height: 32, fontSize: '0.85rem' }}>
+                    {user.username[0].toUpperCase()}
+                  </Avatar>
+                </IconButton>
+              </Tooltip>
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={() => setAnchorEl(null)}
+                transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+                anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
+                slotProps={{ paper: { elevation: 3, sx: { minWidth: 180, mt: 0.5 } } }}
+              >
+                <Box sx={{ px: 2, py: 1 }}>
+                  <Typography variant="subtitle2" fontWeight={700}>{user.username}</Typography>
+                  <Typography variant="caption" color="text.secondary">#{user.discriminator}</Typography>
+                </Box>
+                <Divider />
+                <MenuItem onClick={handleLogout} sx={{ gap: 1, color: 'error.main', mt: 0.5 }}>
+                  <ListItemIcon sx={{ color: 'error.main', minWidth: 'auto' }}>
+                    <LogoutIcon fontSize="small" />
+                  </ListItemIcon>
+                  Logout
+                </MenuItem>
+              </Menu>
+            </>
+          )}
+        </Toolbar>
+      </AppBar>
+
+    </>
   );
 }

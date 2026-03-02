@@ -1,7 +1,19 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+import {
+  Box,
+  Button,
+  CircularProgress,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
 import client from '../api/client';
-import NavBar from '../components/NavBar';
 import { useAuth } from '../hooks/useAuth';
 
 interface Document {
@@ -12,8 +24,13 @@ interface Document {
   created_at: string;
 }
 
-const thStyle: React.CSSProperties = { padding: '0.5rem 0.75rem', textAlign: 'left', background: '#f0f0f0' };
-const tdStyle: React.CSSProperties = { padding: '0.5rem 0.75rem', borderBottom: '1px solid #eee' };
+const HEADER_SX = {
+  fontWeight: 600,
+  textTransform: 'uppercase' as const,
+  fontSize: '0.75rem',
+  letterSpacing: '0.05em',
+  color: 'text.secondary',
+};
 
 export default function DocumentsPage() {
   useAuth();
@@ -37,42 +54,55 @@ export default function DocumentsPage() {
   });
 
   return (
-    <>
-      <NavBar />
-      <main style={{ padding: '2rem' }}>
-        <h2>Indexed Documents</h2>
-        {isLoading && <p>Loading…</p>}
-        {docs && docs.length === 0 && <p>No documents indexed.</p>}
-        {docs && docs.length > 0 && (
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr>
-                {['Filename', 'Description', 'Chunks', 'Added', 'Actions'].map((h) => (
-                  <th key={h} style={thStyle}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {docs.map((d) => (
-                <tr key={d.id}>
-                  <td style={tdStyle}>{d.filename}</td>
-                  <td style={tdStyle}>{d.description ?? '—'}</td>
-                  <td style={tdStyle}>{d.chunk_count}</td>
-                  <td style={tdStyle}>{new Date(d.created_at).toLocaleDateString()}</td>
-                  <td style={tdStyle}>
-                    <button
-                      onClick={() => deleteMutation.mutate(d.id)}
-                      style={{ background: '#e53e3e', color: '#fff', border: 'none', borderRadius: 4, padding: '0.25rem 0.75rem', cursor: 'pointer' }}
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </main>
-    </>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box>
+        <Typography variant="body2" color="text.secondary">
+          Text files indexed for Grug to search during conversation (RAG). When you ask Grug
+          about rules, lore, or campaign notes, Grug looks here first. Upload files using
+          the <strong>/upload_doc</strong> Discord slash command.
+        </Typography>
+      </Box>
+
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : !docs || docs.length === 0 ? (
+        <Typography color="text.secondary">No documents indexed.</Typography>
+      ) : (
+        <TableContainer component={Paper} variant="outlined">
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            {['Filename', 'Description', 'Chunks', 'Added', 'Actions'].map((h) => (
+              <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
+            ))}
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {docs.map((d) => (
+            <TableRow key={d.id} hover>
+              <TableCell>{d.filename}</TableCell>
+              <TableCell>{d.description ?? '—'}</TableCell>
+              <TableCell>{d.chunk_count}</TableCell>
+              <TableCell>{new Date(d.created_at).toLocaleDateString()}</TableCell>
+              <TableCell>
+                <Button
+                  size="small"
+                  color="error"
+                  variant="outlined"
+                  onClick={() => deleteMutation.mutate(d.id)}
+                  disabled={deleteMutation.isPending}
+                >
+                  Delete
+                </Button>
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+        </TableContainer>
+      )}
+    </Box>
   );
 }

@@ -30,6 +30,11 @@ services:
         --reload
         --reload-dir /app/grug
         --reload-dir /app/api
+    environment:
+      # In dev the browser and the OAuth redirect both hit localhost:8000,
+      # and the Vite dev server is on 5173 — override the production defaults.
+      - FRONTEND_URL=http://localhost:5173
+      - WEB_CORS_ORIGINS=http://localhost:5173
 
   web:
     # Swap the production nginx image for a live Vite dev server.
@@ -48,8 +53,9 @@ services:
     ports: !override
       - "5173:5173"
     environment:
-      # Tell Vite to proxy /api requests to the local API container.
-      - VITE_API_URL=http://api:8000
+      # The browser reaches the API directly on localhost:8000 — the Docker
+      # internal hostname (api:8000) is not reachable from the browser.
+      - VITE_API_URL=http://localhost:8000
 
 volumes:
   web_node_modules:

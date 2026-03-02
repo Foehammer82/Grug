@@ -1,7 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
+import {
+  Box,
+  CircularProgress,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
+} from '@mui/material';
 import client from '../api/client';
-import NavBar from '../components/NavBar';
 import { useAuth } from '../hooks/useAuth';
 
 interface CalendarEvent {
@@ -13,8 +24,13 @@ interface CalendarEvent {
   channel_id: number | null;
 }
 
-const thStyle: React.CSSProperties = { padding: '0.5rem 0.75rem', textAlign: 'left', background: '#f0f0f0' };
-const tdStyle: React.CSSProperties = { padding: '0.5rem 0.75rem', borderBottom: '1px solid #eee' };
+const HEADER_SX = {
+  fontWeight: 600,
+  textTransform: 'uppercase' as const,
+  fontSize: '0.75rem',
+  letterSpacing: '0.05em',
+  color: 'text.secondary',
+};
 
 export default function EventsPage() {
   useAuth();
@@ -30,34 +46,43 @@ export default function EventsPage() {
   });
 
   return (
-    <>
-      <NavBar />
-      <main style={{ padding: '2rem' }}>
-        <h2>Upcoming Events</h2>
-        {isLoading && <p>Loading…</p>}
-        {events && events.length === 0 && <p>No upcoming events.</p>}
-        {events && events.length > 0 && (
-          <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-            <thead>
-              <tr>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box>
+        <Typography variant="body2" color="text.secondary">
+          One-off calendar events — sessions, milestones, and other scheduled happenings.
+          Ask Grug in chat to create one, e.g. "schedule a session next Friday at 7pm".
+        </Typography>
+      </Box>
+
+      {isLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : !events || events.length === 0 ? (
+        <Typography color="text.secondary">No upcoming events.</Typography>
+      ) : (
+        <TableContainer component={Paper} variant="outlined">
+          <Table size="small">
+            <TableHead>
+              <TableRow>
                 {['Title', 'Description', 'Start', 'End'].map((h) => (
-                  <th key={h} style={thStyle}>{h}</th>
+                  <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
+              </TableRow>
+            </TableHead>
+            <TableBody>
               {events.map((e) => (
-                <tr key={e.id}>
-                  <td style={tdStyle}>{e.title}</td>
-                  <td style={tdStyle}>{e.description ?? '—'}</td>
-                  <td style={tdStyle}>{new Date(e.start_time).toLocaleString()}</td>
-                  <td style={tdStyle}>{e.end_time ? new Date(e.end_time).toLocaleString() : '—'}</td>
-                </tr>
+                <TableRow key={e.id} hover>
+                  <TableCell>{e.title}</TableCell>
+                  <TableCell>{e.description ?? '—'}</TableCell>
+                  <TableCell>{new Date(e.start_time).toLocaleString()}</TableCell>
+                  <TableCell>{e.end_time ? new Date(e.end_time).toLocaleString() : '—'}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
-        )}
-      </main>
-    </>
+            </TableBody>
+          </Table>
+        </TableContainer>
+      )}
+    </Box>
   );
 }

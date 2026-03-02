@@ -3,6 +3,7 @@
 import logging
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
@@ -131,37 +132,57 @@ class AIChatCog(commands.Cog, name="AI Chat"):
         for chunk in _split_message(response):
             await message.channel.send(chunk)
 
-    @commands.command(name="chat_here", aliases=["always_on"])
-    @commands.has_permissions(manage_channels=True)
-    async def toggle_always_on(self, ctx: commands.Context) -> None:
-        """Toggle Grug responding to every message in this channel (manage channels required)."""
-        cid = ctx.channel.id
+    @app_commands.command(
+        name="chat_here",
+        description="Toggle Grug responding to every message in this channel.",
+    )
+    @app_commands.checks.has_permissions(manage_channels=True)
+    async def toggle_always_on(self, interaction: discord.Interaction) -> None:
+        cid = interaction.channel_id
         if cid in _ALWAYS_RESPOND_CHANNELS:
             _ALWAYS_RESPOND_CHANNELS.discard(cid)
-            await ctx.send("Grug go quiet now. Only respond when mentioned.")
+            await interaction.response.send_message(
+                "Grug go quiet now. Only respond when mentioned."
+            )
         else:
             _ALWAYS_RESPOND_CHANNELS.add(cid)
-            await ctx.send("Grug listen to everything in this channel now! 👂")
+            await interaction.response.send_message(
+                "Grug listen to everything in this channel now! 👂"
+            )
 
-    @commands.command(name="clear_history")
-    @commands.has_permissions(manage_messages=True)
-    async def clear_history(self, ctx: commands.Context) -> None:
-        """Clear Grug's conversation history for this channel."""
+    @app_commands.command(
+        name="clear_history",
+        description="Clear Grug's conversation history for this channel.",
+    )
+    @app_commands.checks.has_permissions(manage_messages=True)
+    async def clear_history(self, interaction: discord.Interaction) -> None:
         from grug.db.session import get_session_factory
         from grug.db.models import ConversationMessage
         from sqlalchemy import delete
 
-        guild_id = ctx.guild.id if ctx.guild else _DM_GUILD_ID
+        guild_id = interaction.guild_id if interaction.guild_id else _DM_GUILD_ID
         factory = get_session_factory()
         async with factory() as session:
             await session.execute(
                 delete(ConversationMessage).where(
                     ConversationMessage.guild_id == guild_id,
-                    ConversationMessage.channel_id == ctx.channel.id,
+                    ConversationMessage.channel_id == interaction.channel_id,
                 )
             )
             await session.commit()
-        await ctx.send("Grug forget everything said here. Fresh start! 🧹")
+        await interaction.response.send_message(
+            "Grug forget everything said here. Fresh start! 🧹"
+        )
+
+    async def cog_app_command_error(
+        self, interaction: discord.Interaction, error: app_commands.AppCommandError
+    ) -> None:
+        if isinstance(error, app_commands.MissingPermissions):
+            await interaction.response.send_message(
+                "You don't have permission to use that command.", ephemeral=True
+            )
+        else:
+            raise error
 
 
 def _split_message(text: str, limit: int = 2000) -> list[str]:
