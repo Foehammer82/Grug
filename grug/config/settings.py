@@ -11,7 +11,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=".env", extra="ignore", populate_by_name=True
+    )
 
     # Discord
     discord_token: str = Field(default="", description="Discord bot token")
@@ -101,6 +103,22 @@ class Settings(BaseSettings):
         description="Archive all conversation history on startup (useful for testing prompt changes)",
     )
 
+    # Admin — comma-separated list of Discord user IDs that are Grug super-admins.
+    grug_super_admin_ids_raw: str = Field(
+        default="",
+        alias="grug_super_admin_ids",
+        description="Discord user IDs with global admin access (comma-separated)",
+    )
+
+    @property
+    def grug_super_admin_ids(self) -> list[str]:
+        """Parse the comma-separated raw string into a list of user IDs."""
+        return [
+            uid.strip()
+            for uid in self.grug_super_admin_ids_raw.split(",")
+            if uid.strip()
+        ]
+
     # File storage — uploaded character sheets are persisted here.
     file_data_dir: str = Field(
         default="./file_data",
@@ -109,9 +127,6 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
-
-
-_settings: Settings | None = None
 
 
 @cache

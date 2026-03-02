@@ -1,6 +1,7 @@
 import BrightnessAutoOutlinedIcon from '@mui/icons-material/BrightnessAutoOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import SettingsIcon from '@mui/icons-material/Settings';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import {
   AppBar,
@@ -87,7 +88,7 @@ export default function NavBar() {
             fontWeight={400}
             sx={{ color: 'text.secondary', cursor: 'default', userSelect: 'none', lineHeight: 1 }}
           >
-            AI Agent Admin
+            Agent Dashboard
           </Typography>
 
           <Box sx={{ flexGrow: 1 }} />
@@ -98,6 +99,15 @@ export default function NavBar() {
               {THEME_ICON[preference]}
             </IconButton>
           </Tooltip>
+
+          {/* Admin gear — super-admins only */}
+          {user?.is_super_admin && (
+            <Tooltip title="Admin">
+              <IconButton onClick={() => navigate('/admin')} size="small" sx={{ color: 'text.secondary' }}>
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
 
           {/* User avatar menu */}
           {user && (
@@ -119,7 +129,7 @@ export default function NavBar() {
               >
                 <Box sx={{ px: 2, py: 1 }}>
                   <Typography variant="subtitle2" fontWeight={700}>{user.username}</Typography>
-                  <Typography variant="caption" color="text.secondary">#{user.discriminator}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{user.id}</Typography>
                 </Box>
                 <Divider />
                 <MenuItem onClick={handleLogout} sx={{ gap: 1, color: 'error.main', mt: 0.5 }}>

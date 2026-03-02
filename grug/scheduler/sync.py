@@ -59,6 +59,25 @@ async def run_sync(bot: "commands.Bot", *, sync_commands: bool = False) -> None:
     logger.info("Guild config sync: %d guild(s) verified.", guilds_seeded)
 
     # ------------------------------------------------------------------
+    # 1b. Ensure the grug-admin role exists in every guild
+    # ------------------------------------------------------------------
+    from grug.bot.cogs.admin import ensure_grug_admin_role
+
+    roles_synced = 0
+    for guild in bot.guilds:
+        try:
+            await ensure_grug_admin_role(guild)
+            roles_synced += 1
+        except Exception:
+            logger.exception(
+                "Failed to ensure grug-admin role for guild %d (%s)",
+                guild.id,
+                guild.name,
+            )
+
+    logger.info("grug-admin role sync: %d guild(s) processed.", roles_synced)
+
+    # ------------------------------------------------------------------
     # 2. Scheduled tasks — reconcile DB ↔ APScheduler
     # ------------------------------------------------------------------
     try:

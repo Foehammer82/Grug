@@ -30,6 +30,8 @@ class GuildConfig(Base):
     )
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Discord snowflake ID of the auto-created "grug-admin" role in this guild.
+    grug_admin_role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # Messages timestamped before this are excluded from Grug's context window.
     # None means no cutoff — load all available history.
     context_cutoff: Mapped[datetime | None] = mapped_column(
@@ -313,6 +315,32 @@ class ConversationMessage(Base):
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class GrugUser(Base):
+    """Global Grug user record — tracks per-user privileges like can_invite.
+
+    Super-admin status is derived from the GRUG_SUPER_ADMIN_IDS env var,
+    not stored in the database.
+    """
+
+    __tablename__ = "grug_users"
+
+    discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=False
+    )
+    # When True, this user can generate invite URLs to add Grug to servers.
+    can_invite: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 

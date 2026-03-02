@@ -10,6 +10,8 @@ class UserOut(BaseModel):
     username: str
     discriminator: str
     avatar: str | None = None
+    is_super_admin: bool = False
+    can_invite: bool = False
 
 
 class DefaultsOut(BaseModel):
@@ -20,6 +22,7 @@ class GuildOut(BaseModel):
     id: str
     name: str
     icon: str | None = None
+    is_admin: bool = False
 
 
 class GuildConfigOut(BaseModel):
@@ -275,3 +278,30 @@ class UserProfileOut(BaseModel):
 
 class UserDmConfigUpdate(BaseModel):
     dm_context_cutoff: datetime | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Admin schemas                                                                #
+# --------------------------------------------------------------------------- #
+
+
+class GrugUserOut(BaseModel):
+    discord_user_id: str
+    can_invite: bool
+    is_super_admin: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("discord_user_id")
+    def serialize_discord_user_id(self, v: int) -> str:
+        return str(v)
+
+
+class GrugUserUpdate(BaseModel):
+    can_invite: bool | None = None
+
+
+class InviteUrlOut(BaseModel):
+    url: str

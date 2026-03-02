@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db, get_or_404
+from api.deps import (
+    assert_guild_admin,
+    assert_guild_member,
+    get_current_user,
+    get_db,
+    get_or_404,
+)
 from api.schemas import (
     GlossaryTermCreate,
     GlossaryTermHistoryOut,
@@ -47,6 +53,7 @@ async def create_glossary_term(
 ) -> GlossaryTerm:
     """Create a human-authored glossary term."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     now = datetime.now(timezone.utc)
     term = GlossaryTerm(
         guild_id=guild_id,
@@ -76,6 +83,7 @@ async def update_glossary_term(
 ) -> GlossaryTerm:
     """Update a glossary term — saves a history snapshot and clears ai_generated."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     term = await get_or_404(
         db,
         GlossaryTerm,
@@ -116,6 +124,7 @@ async def delete_glossary_term(
 ) -> None:
     """Delete a glossary term."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     term = await get_or_404(
         db,
         GlossaryTerm,

@@ -5,6 +5,7 @@ export interface Guild {
   id: string;
   name: string;
   icon: string | null;
+  is_admin: boolean;
 }
 
 export function useGuilds() {

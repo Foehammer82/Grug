@@ -1,11 +1,25 @@
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Typography } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import grugNb from '../assets/grug_nb.png';
+import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuilds } from '../hooks/useGuilds';
 
 export default function DashboardPage() {
-  useAuth();
+  const { data: user } = useAuth();
   const { data: guilds, isLoading } = useGuilds();
+
+  const canInvite = user?.is_super_admin || user?.can_invite;
+
+  const { data: inviteData } = useQuery<{ url: string }>({
+    queryKey: ['invite-url'],
+    queryFn: async () => {
+      const res = await client.get<{ url: string }>('/api/invite-url');
+      return res.data;
+    },
+    enabled: !!canInvite,
+  });
 
   return (
     <Box
@@ -38,6 +52,20 @@ export default function DashboardPage() {
             Make sure Grug is in your server.
           </Typography>
         </>
+      )}
+
+      {canInvite && inviteData?.url && (
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<OpenInNewIcon />}
+          href={inviteData.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          sx={{ mt: 1 }}
+        >
+          Invite Grug to a Server
+        </Button>
       )}
     </Box>
   );

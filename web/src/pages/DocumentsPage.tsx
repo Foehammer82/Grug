@@ -22,6 +22,7 @@ import {
 } from '@mui/material';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { useGuildContext } from '../hooks/useGuildContext';
 
 interface Document {
   id: number;
@@ -45,6 +46,7 @@ export default function DocumentsPage() {
   useAuth();
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
+  const { isAdmin } = useGuildContext();
 
   // Upload dialog state
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -136,9 +138,11 @@ export default function DocumentsPage() {
           Text files indexed for Grug to search during conversation (RAG). When you ask Grug
           about rules, lore, or campaign notes, Grug looks here first.
         </Typography>
-        <Button variant="contained" size="small" onClick={() => setUploadOpen(true)}>
-          Upload Document
-        </Button>
+        {isAdmin && (
+          <Button variant="contained" size="small" onClick={() => setUploadOpen(true)}>
+            Upload Document
+          </Button>
+        )}
       </Stack>
 
       {isLoading ? (
@@ -152,7 +156,7 @@ export default function DocumentsPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {['Filename', 'Description', 'Chunks', 'Added', 'Actions'].map((h) => (
+                {['Filename', 'Description', 'Chunks', 'Added', ...(isAdmin ? ['Actions'] : [])].map((h) => (
                   <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -164,26 +168,28 @@ export default function DocumentsPage() {
                   <TableCell>{d.description ?? '—'}</TableCell>
                   <TableCell>{d.chunk_count}</TableCell>
                   <TableCell>{new Date(d.created_at).toLocaleDateString()}</TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={1}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => handleEditOpen(d)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        onClick={() => deleteMutation.mutate(d.id)}
-                        disabled={deleteMutation.isPending}
-                      >
-                        Delete
-                      </Button>
-                    </Stack>
-                  </TableCell>
+                  {isAdmin && (
+                    <TableCell>
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => handleEditOpen(d)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="outlined"
+                          onClick={() => deleteMutation.mutate(d.id)}
+                          disabled={deleteMutation.isPending}
+                        >
+                          Delete
+                        </Button>
+                      </Stack>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>

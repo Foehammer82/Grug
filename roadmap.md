@@ -24,6 +24,8 @@
 
 <!-- e.g. dice rolling, initiative tracker, encounter builder, NPC generator, loot tables -->
 
+- **Rules Lookup Tools — Pathfinder 2e & D&D 5e:** Give Grug agent tools to look up rules, spells, monsters, feats, etc. for Pathfinder 2e and D&D 5e on demand. Leverage open-source online resources (e.g. [Archives of Nethys / Pathfinder 2e API](https://github.com/foundryvtt/pf2e), [2e.aonprd.com](https://2e.aonprd.com), [5e SRD API](https://www.dnd5eapi.co/), [Open5e](https://open5e.com/)). Could be implemented as agent tools that query these APIs and return formatted results, and/or as a RAG ingest of SRD content for richer context.
+
 ### Discord Bot
 
 <!-- e.g. new cogs, slash command improvements, per-server config UX -->
@@ -46,6 +48,12 @@
 ### Integrations
 
 <!-- e.g. VTT integrations (Foundry, Roll20), external rule databases, character importers -->
+
+### Auth & Access Control
+
+<!-- e.g. non-Discord login, guest access, invite links -->
+
+- **Guest Invites — Non-Discord Users:** Server admins should be able to invite people who aren't on Discord to access certain parts of the web UI (at minimum, the events/calendar view). Needs a full auth design: options include magic-link email invites, a simple username+password guest account, or OAuth with a non-Discord provider. Would need a `guild_invites` or `guest_users` table to track who has been granted access and to what scope (e.g. read-only calendar, RSVP only). Scope/permissions per invite are important — not everyone needs access to everything.
 
 ### Misc / Wild Ideas
 

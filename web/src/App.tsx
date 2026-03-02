@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
 import GuildLayout from './components/GuildLayout';
+import AdminPage from './pages/AdminPage';
 import DashboardPage from './pages/DashboardPage';
 import DocumentsPage from './pages/DocumentsPage';
 import EventsPage from './pages/EventsPage';
@@ -19,6 +20,7 @@ function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<AppLayout />}>
         <Route path="/dashboard" element={<DashboardPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/personal" element={<PersonalLayout />}>
           <Route index element={<Navigate to="config" replace />} />
           <Route path="config" element={<PersonalConfigPage />} />

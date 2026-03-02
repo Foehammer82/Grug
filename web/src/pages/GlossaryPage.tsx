@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { useGuildContext } from '../hooks/useGuildContext';
 
 interface GlossaryTerm {
   id: number;
@@ -60,6 +61,7 @@ export default function GlossaryPage() {
   useAuth();
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
+  const { isAdmin } = useGuildContext();
 
   const [filterChannel, setFilterChannel] = useState<string>('');
   const [showForm, setShowForm] = useState(false);
@@ -172,9 +174,11 @@ export default function GlossaryPage() {
           </Select>
         </FormControl>
         <Box sx={{ flexGrow: 1 }} />
-        <Button variant="contained" size="small" onClick={() => setShowForm((v) => !v)}>
-          {showForm ? 'Cancel' : '+ Add Term'}
-        </Button>
+        {isAdmin && (
+          <Button variant="contained" size="small" onClick={() => setShowForm((v) => !v)}>
+            {showForm ? 'Cancel' : '+ Add Term'}
+          </Button>
+        )}
       </Box>
 
       {/* Add term form */}
@@ -286,17 +290,19 @@ export default function GlossaryPage() {
               </Box>
               <Typography variant="body2" sx={{ mb: 1.5 }}>{t.definition}</Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => {
-                    setEditId(t.id);
-                    setEditTerm(t.term);
-                    setEditDef(t.definition);
-                  }}
-                >
-                  Edit
-                </Button>
+                {isAdmin && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setEditId(t.id);
+                      setEditTerm(t.term);
+                      setEditDef(t.definition);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                )}
                 <Button
                   size="small"
                   variant="outlined"
@@ -304,16 +310,18 @@ export default function GlossaryPage() {
                 >
                   {historyTermId === t.id ? 'Hide History' : 'History'}
                 </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  color="error"
-                  onClick={() => {
-                    if (window.confirm(`Delete "${t.term}"?`)) deleteMutation.mutate(t.id);
-                  }}
-                >
-                  Delete
-                </Button>
+                {isAdmin && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    onClick={() => {
+                      if (window.confirm(`Delete "${t.term}"?`)) deleteMutation.mutate(t.id);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                )}
               </Box>
 
               {/* Inline history panel */}

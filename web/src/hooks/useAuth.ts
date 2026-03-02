@@ -8,6 +8,8 @@ export interface User {
   username: string;
   discriminator: string;
   avatar: string | null;
+  is_super_admin: boolean;
+  can_invite: boolean;
 }
 
 export function useAuth() {

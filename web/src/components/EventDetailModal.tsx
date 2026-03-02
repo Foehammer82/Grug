@@ -12,6 +12,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
+import { useGuildContext } from '../hooks/useGuildContext';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -52,6 +53,7 @@ interface Props {
 
 export default function EventDetailModal({ event, open, onClose }: Props) {
   const { guildId } = useParams<{ guildId: string }>();
+  const { isAdmin } = useGuildContext();
   const qc = useQueryClient();
 
   const { data: channels } = useQuery<DiscordChannel[]>({
@@ -95,43 +97,48 @@ export default function EventDetailModal({ event, open, onClose }: Props) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Event Details
-        <Button
-          size="small"
-          color="error"
-          variant="outlined"
-          onClick={() => deleteMutation.mutate()}
-          disabled={deleteMutation.isPending}
-        >
-          Delete
-        </Button>
+        {isAdmin && (
+          <Button
+            size="small"
+            color="error"
+            variant="outlined"
+            onClick={() => deleteMutation.mutate()}
+            disabled={deleteMutation.isPending}
+          >
+            Delete
+          </Button>
+        )}
       </DialogTitle>
 
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
         <TextField
           label="Title"
           defaultValue={event.title}
-          onBlur={(e) => handleBlur('title', e.target.value)}
+          onBlur={isAdmin ? (e) => handleBlur('title', e.target.value) : undefined}
           fullWidth
           size="small"
+          InputProps={{ readOnly: !isAdmin }}
         />
 
         <TextField
           label="Description"
           defaultValue={event.description ?? ''}
-          onBlur={(e) => handleBlur('description', e.target.value)}
+          onBlur={isAdmin ? (e) => handleBlur('description', e.target.value) : undefined}
           fullWidth
           multiline
           minRows={2}
           size="small"
+          InputProps={{ readOnly: !isAdmin }}
         />
 
         <TextField
           label="Location"
           defaultValue={event.location ?? ''}
-          onBlur={(e) => handleBlur('location', e.target.value)}
+          onBlur={isAdmin ? (e) => handleBlur('location', e.target.value) : undefined}
           fullWidth
           size="small"
           helperText="Where the session takes place — voice channel, address, etc."
+          InputProps={{ readOnly: !isAdmin }}
         />
 
         <Box sx={{ display: 'flex', gap: 2 }}>
@@ -139,34 +146,37 @@ export default function EventDetailModal({ event, open, onClose }: Props) {
             label="Start"
             type="datetime-local"
             defaultValue={toLocalInput(event.start_time)}
-            onBlur={(e) =>
+            onBlur={isAdmin ? (e) =>
               handleBlur('start_time', e.target.value ? new Date(e.target.value).toISOString() : null)
-            }
+            : undefined}
             size="small"
             fullWidth
             InputLabelProps={{ shrink: true }}
+            InputProps={{ readOnly: !isAdmin }}
           />
           <TextField
             label="End"
             type="datetime-local"
             defaultValue={event.end_time ? toLocalInput(event.end_time) : ''}
-            onBlur={(e) =>
+            onBlur={isAdmin ? (e) =>
               handleBlur('end_time', e.target.value ? new Date(e.target.value).toISOString() : null)
-            }
+            : undefined}
             size="small"
             fullWidth
             InputLabelProps={{ shrink: true }}
+            InputProps={{ readOnly: !isAdmin }}
           />
         </Box>
 
         <TextField
           label="Recurrence (RRULE)"
           defaultValue={event.rrule ?? ''}
-          onBlur={(e) => handleBlur('rrule', e.target.value)}
+          onBlur={isAdmin ? (e) => handleBlur('rrule', e.target.value) : undefined}
           fullWidth
           size="small"
           helperText='iCal RRULE — e.g. "FREQ=WEEKLY;BYDAY=TH" for every Thursday.'
           inputProps={{ style: { fontFamily: 'monospace' } }}
+          InputProps={{ readOnly: !isAdmin }}
         />
 
         <Autocomplete
@@ -174,9 +184,10 @@ export default function EventDetailModal({ event, open, onClose }: Props) {
           fullWidth
           options={channels ?? []}
           value={selectedChannel}
-          onChange={(_, ch) =>
+          onChange={isAdmin ? (_, ch) =>
             patchMutation.mutate({ channel_id: ch?.id ?? null })
-          }
+          : undefined}
+          disabled={!isAdmin}
           getOptionLabel={(ch) => `#${ch.name}`}
           isOptionEqualToValue={(opt, val) => opt.id === val.id}
           renderInput={(params) => (

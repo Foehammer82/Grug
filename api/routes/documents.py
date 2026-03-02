@@ -8,7 +8,13 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db, get_or_404
+from api.deps import (
+    assert_guild_admin,
+    assert_guild_member,
+    get_current_user,
+    get_db,
+    get_or_404,
+)
 from api.schemas import DocumentOut, DocumentUpdate
 from grug.db.models import Document
 from grug.rag.indexer import DocumentIndexer
@@ -48,6 +54,7 @@ async def upload_document(
 ) -> Document:
     """Upload and index a text document for RAG retrieval."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in _ALLOWED_EXTENSIONS:
@@ -105,6 +112,7 @@ async def update_document(
 ) -> Document:
     """Update a document's description."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     doc = await get_or_404(
         db,
         Document,
@@ -128,6 +136,7 @@ async def delete_document(
 ) -> None:
     """Delete an indexed document."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     doc = await get_or_404(
         db,
         Document,

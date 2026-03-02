@@ -12,6 +12,7 @@ import type { EventClickArg, DatesSetArg, EventInput } from '@fullcalendar/core'
 
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { useGuildContext } from '../hooks/useGuildContext';
 import EventCreateModal from '../components/EventCreateModal';
 import EventDetailModal, { type CalendarEvent } from '../components/EventDetailModal';
 import TaskDetailModal, { type ScheduledTask } from '../components/TaskDetailModal';
@@ -27,6 +28,7 @@ export default function EventsPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const theme = useTheme();
   const calRef = useRef<FullCalendar>(null);
+  const { isAdmin } = useGuildContext();
 
   /* ---- visible date range (controlled by FullCalendar) ---- */
   const [range, setRange] = useState<{ start: string; end: string } | null>(null);
@@ -117,13 +119,14 @@ export default function EventsPage() {
   }, []);
 
   const handleDateClick = useCallback((arg: DateClickArg) => {
+    if (!isAdmin) return;
     // Pre-fill the create modal with the clicked date
     const pad = (n: number) => String(n).padStart(2, '0');
     const d = arg.date;
     const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     setCreateDefault(local);
     setCreateOpen(true);
-  }, []);
+  }, [isAdmin]);
 
   /* ---- CSS custom properties for FullCalendar theme ---- */
   const cssVars: Record<string, string> = {
@@ -147,15 +150,17 @@ export default function EventsPage() {
           Session calendar — plan your games, track events, and see upcoming tasks.
           Click a date to create an event or click an item for details.
         </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<AddIcon />}
-          onClick={() => { setCreateDefault(''); setCreateOpen(true); }}
-          sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-        >
-          New Event
-        </Button>
+        {isAdmin && (
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => { setCreateDefault(''); setCreateOpen(true); }}
+            sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+          >
+            New Event
+          </Button>
+        )}
       </Box>
 
       {/* Calendar */}

@@ -20,16 +20,18 @@ interface ServerButtonProps {
   name: string;
   icon: string | null;
   active: boolean;
+  isAdmin: boolean;
 }
 
-function ServerButton({ guildId, name, icon, active }: ServerButtonProps) {
+function ServerButton({ guildId, name, icon, active, isAdmin }: ServerButtonProps) {
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
+  const defaultTab = isAdmin ? 'config' : 'events';
 
   return (
     <Tooltip title={name} placement="right" arrow>
       <Box
-        onClick={() => navigate(`/guilds/${guildId}/config`)}
+        onClick={() => navigate(`/guilds/${guildId}/${defaultTab}`)}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
@@ -177,6 +179,7 @@ export default function ServerSidebar() {
           name={g.name}
           icon={g.icon}
           active={g.id === activeGuildId}
+          isAdmin={g.is_admin}
         />
       ))}
     </Box>

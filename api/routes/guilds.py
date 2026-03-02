@@ -10,11 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (
+    assert_guild_admin,
     assert_guild_member,
     get_bot_token,
     get_current_user,
     get_db,
     get_or_404,
+    is_guild_admin,
 )
 from api.schemas import (
     ChannelConfigOut,
@@ -42,11 +44,15 @@ async def list_guilds(
     configs = result.scalars().all()
     bot_guild_ids = {c.guild_id for c in configs}
     shared = user_guild_ids & bot_guild_ids
-    return [
-        GuildOut(id=g["id"], name=g["name"], icon=g.get("icon"))
-        for g in user.get("guilds", [])
-        if int(g["id"]) in shared
-    ]
+
+    guilds: list[GuildOut] = []
+    for g in user.get("guilds", []):
+        if int(g["id"]) in shared:
+            admin = await is_guild_admin(g["id"], user)
+            guilds.append(
+                GuildOut(id=g["id"], name=g["name"], icon=g.get("icon"), is_admin=admin)
+            )
+    return guilds
 
 
 @router.get("/api/guilds/{guild_id}/config", response_model=GuildConfigOut)
@@ -105,6 +111,7 @@ async def update_guild_config(
 ) -> GuildConfig:
     """Update guild configuration fields."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     cfg = await get_or_404(
         db,
         GuildConfig,
@@ -189,6 +196,7 @@ async def update_channel_config(
 ) -> ChannelConfig:
     """Update per-channel config fields (always_respond, context_cutoff)."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     result = await db.execute(
         select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
     )

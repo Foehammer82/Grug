@@ -9,12 +9,66 @@ from discord.ext import commands
 from sqlalchemy import select
 
 from grug.config.settings import get_settings
-from grug.db.models import CalendarEvent, ScheduledTask
+from grug.db.models import CalendarEvent, GuildConfig, ScheduledTask
 from grug.db.session import get_session_factory
 from grug.scheduler.manager import get_scheduler, remove_job
 from grug.utils import ensure_guild
 
 logger = logging.getLogger(__name__)
+
+GRUG_ADMIN_ROLE_NAME = "grug-admin"
+
+
+async def ensure_grug_admin_role(guild: discord.Guild) -> None:
+    """Ensure a 'grug-admin' role exists in the guild and record its ID.
+
+    If the role already exists, reuse it.  If it doesn't, create it.
+    Either way, save the role ID to GuildConfig.grug_admin_role_id.
+    """
+    # Look for an existing role with the right name
+    existing_role = discord.utils.get(guild.roles, name=GRUG_ADMIN_ROLE_NAME)
+
+    if existing_role is None:
+        try:
+            existing_role = await guild.create_role(
+                name=GRUG_ADMIN_ROLE_NAME,
+                reason="Grug admin role — grants web UI admin access for this server.",
+            )
+            logger.info(
+                "Created '%s' role (%d) in guild %d (%s).",
+                GRUG_ADMIN_ROLE_NAME,
+                existing_role.id,
+                guild.id,
+                guild.name,
+            )
+        except discord.Forbidden:
+            logger.warning(
+                "Missing MANAGE_ROLES permission in guild %d (%s); "
+                "cannot create '%s' role.",
+                guild.id,
+                guild.name,
+                GRUG_ADMIN_ROLE_NAME,
+            )
+            return
+        except Exception:
+            logger.exception(
+                "Failed to create '%s' role in guild %d (%s).",
+                GRUG_ADMIN_ROLE_NAME,
+                guild.id,
+                guild.name,
+            )
+            return
+
+    # Persist the role ID to the database
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(GuildConfig).where(GuildConfig.guild_id == guild.id)
+        )
+        cfg = result.scalar_one_or_none()
+        if cfg is not None and cfg.grug_admin_role_id != existing_role.id:
+            cfg.grug_admin_role_id = existing_role.id
+            await session.commit()
 
 
 class AdminCog(commands.Cog, name="Admin"):
@@ -25,7 +79,7 @@ class AdminCog(commands.Cog, name="Admin"):
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
-        """Create a GuildConfig row when Grug joins a new server."""
+        """Create a GuildConfig row and grug-admin role when Grug joins a new server."""
         try:
             await ensure_guild(guild.id)
             logger.info(
@@ -33,6 +87,9 @@ class AdminCog(commands.Cog, name="Admin"):
             )
         except Exception:
             logger.exception("Failed to create guild config for guild %d", guild.id)
+
+        # Create the grug-admin role (non-fatal if it fails)
+        await ensure_grug_admin_role(guild)
 
     @app_commands.command(name="grug_status", description="Show Grug's current status.")
     async def status(self, interaction: discord.Interaction) -> None:

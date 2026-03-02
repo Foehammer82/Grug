@@ -12,7 +12,7 @@ from api.auth import (
     fetch_discord_guilds,
     fetch_discord_user,
 )
-from api.deps import get_current_user
+from api.deps import get_current_user, has_can_invite, is_super_admin
 from api.schemas import UserOut
 from grug.config.settings import get_settings
 
@@ -39,7 +39,13 @@ async def discord_callback(code: str, response: Response) -> RedirectResponse:
         "discriminator": user.get("discriminator", "0"),
         "avatar": user.get("avatar"),
         "guilds": [
-            {"id": g["id"], "name": g["name"], "icon": g.get("icon")} for g in guilds
+            {
+                "id": g["id"],
+                "name": g["name"],
+                "icon": g.get("icon"),
+                "permissions": g.get("permissions", "0"),
+            }
+            for g in guilds
         ],
     }
     jwt_token = create_jwt(payload)
@@ -64,6 +70,8 @@ async def get_me(user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
         username=user["username"],
         discriminator=user["discriminator"],
         avatar=user.get("avatar"),
+        is_super_admin=is_super_admin(user),
+        can_invite=await has_can_invite(user),
     )
 
 

@@ -21,6 +21,33 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+async def _resolve_active_character_id(ctx: RunContext[GrugDeps]) -> int | None:
+    """Return the active character ID for the current user.
+
+    Checks ``ctx.deps.active_character_id`` first, then falls back to the
+    user's ``UserProfile.active_character_id`` in the database.  Returns
+    ``None`` if no active character is set.
+    """
+    if ctx.deps.active_character_id is not None:
+        return ctx.deps.active_character_id
+
+    from grug.db.models import UserProfile
+    from grug.db.session import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        profile = (
+            await session.execute(
+                select(UserProfile).where(
+                    UserProfile.discord_user_id == ctx.deps.user_id
+                )
+            )
+        ).scalar_one_or_none()
+        if profile is None or profile.active_character_id is None:
+            return None
+        return profile.active_character_id
+
+
 def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
     """Register all character-sheet tools on *agent*."""
 
@@ -32,23 +59,12 @@ def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
         inventory, HP, or any other character-specific information.
         Returns an error string if no active character is set.
         """
-        from grug.db.models import Character, UserProfile
+        from grug.db.models import Character
         from grug.db.session import get_session_factory
 
-        char_id = ctx.deps.active_character_id
+        char_id = await _resolve_active_character_id(ctx)
         if char_id is None:
-            factory = get_session_factory()
-            async with factory() as session:
-                profile = (
-                    await session.execute(
-                        select(UserProfile).where(
-                            UserProfile.discord_user_id == ctx.deps.user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if profile is None or profile.active_character_id is None:
-                    return "No active character found. Ask the player to upload a sheet with /character upload."
-                char_id = profile.active_character_id
+            return "No active character found. Ask the player to upload a sheet with /character upload."
 
         factory = get_session_factory()
         async with factory() as session:
@@ -86,23 +102,12 @@ def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
             New value as a string. Numbers and JSON structures are coerced automatically.
         """
         from grug.character.indexer import CharacterIndexer
-        from grug.db.models import Character, UserProfile
+        from grug.db.models import Character
         from grug.db.session import get_session_factory
 
-        char_id = ctx.deps.active_character_id
+        char_id = await _resolve_active_character_id(ctx)
         if char_id is None:
-            factory = get_session_factory()
-            async with factory() as session:
-                profile = (
-                    await session.execute(
-                        select(UserProfile).where(
-                            UserProfile.discord_user_id == ctx.deps.user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if profile is None or profile.active_character_id is None:
-                    return "No active character to update."
-                char_id = profile.active_character_id
+            return "No active character to update."
 
         factory = get_session_factory()
         async with factory() as session:
@@ -151,24 +156,11 @@ def register_character_tools(agent: Agent[GrugDeps, str]) -> None:
         Use when asked about the character's specific abilities, spells,
         equipment, or traits. Searches the indexed sheet chunks semantically.
         """
-        from grug.db.models import UserProfile
-        from grug.db.session import get_session_factory
         from grug.rag.vector_store import get_vector_store
 
-        char_id = ctx.deps.active_character_id
+        char_id = await _resolve_active_character_id(ctx)
         if char_id is None:
-            factory = get_session_factory()
-            async with factory() as session:
-                profile = (
-                    await session.execute(
-                        select(UserProfile).where(
-                            UserProfile.discord_user_id == ctx.deps.user_id
-                        )
-                    )
-                ).scalar_one_or_none()
-                if profile is None or profile.active_character_id is None:
-                    return "No active character to search."
-                char_id = profile.active_character_id
+            return "No active character to search."
 
         store = get_vector_store()
         chunks = await store.character_query(char_id, query, n_results=k)

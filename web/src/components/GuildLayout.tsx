@@ -1,14 +1,15 @@
 import { Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { useState } from 'react';
-import { Outlet, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Outlet, useNavigate, useParams } from 'react-router-dom';
 import { useGuilds } from '../hooks/useGuilds';
 
+/** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
 const TABS = [
-  { label: 'Config',     path: 'config' },
-  { label: 'Events',     path: 'events' },
-  { label: 'Tasks',      path: 'tasks' },
-  { label: 'Documents',  path: 'documents' },
-  { label: 'Glossary',   path: 'glossary' },
+  { label: 'Config',     path: 'config',    adminOnly: true },
+  { label: 'Events',     path: 'events',    adminOnly: false },
+  { label: 'Tasks',      path: 'tasks',     adminOnly: true },
+  { label: 'Documents',  path: 'documents', adminOnly: false },
+  { label: 'Glossary',   path: 'glossary',  adminOnly: false },
 ];
 
 export default function GuildLayout() {
@@ -18,6 +19,10 @@ export default function GuildLayout() {
   const [copied, setCopied] = useState(false);
 
   const guild = guilds?.find((g) => g.id === guildId);
+  const isAdmin = guild?.is_admin ?? false;
+
+  // Filter tabs based on admin status
+  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
 
   function handleCopyId() {
     if (!guildId) return;
@@ -29,10 +34,16 @@ export default function GuildLayout() {
 
   // Determine active tab from the current URL segment
   const lastSegment = location.pathname.split('/').pop() ?? '';
-  const activeTab = TABS.findIndex((t) => t.path === lastSegment);
+  const activeTab = visibleTabs.findIndex((t) => t.path === lastSegment);
+
+  // If non-admin lands on an admin-only page, redirect to events
+  const isAdminOnlyPage = TABS.find((t) => t.path === lastSegment)?.adminOnly;
+  if (!isAdmin && isAdminOnlyPage) {
+    return <Navigate to={`/guilds/${guildId}/events`} replace />;
+  }
 
   function handleTabChange(_: React.SyntheticEvent, idx: number) {
-    navigate(`/guilds/${guildId}/${TABS[idx].path}`);
+    navigate(`/guilds/${guildId}/${visibleTabs[idx].path}`);
   }
 
   return (
@@ -78,7 +89,7 @@ export default function GuildLayout() {
             },
           }}
         >
-          {TABS.map((t) => (
+          {visibleTabs.map((t) => (
             <Tab key={t.path} label={t.label} disableRipple disableFocusRipple />
           ))}
         </Tabs>
@@ -86,7 +97,7 @@ export default function GuildLayout() {
 
       {/* Page content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 4 }}>
-        <Outlet />
+        <Outlet context={{ isAdmin }} />
       </Box>
     </Box>
   );

@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db, get_or_404
+from api.deps import (
+    assert_guild_admin,
+    assert_guild_member,
+    get_current_user,
+    get_db,
+    get_or_404,
+)
 from api.schemas import (
     CalendarEventCreate,
     CalendarEventOut,
@@ -100,6 +106,7 @@ async def create_event(
 ) -> CalendarEvent:
     """Create a new calendar event."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     user_id = int(user["id"])
     await ensure_guild(guild_id)
 
@@ -134,6 +141,7 @@ async def update_event(
     """Update a calendar event.  Uses ``model_fields_set`` so explicit
     ``null`` clears the field."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     event = await get_or_404(
         db,
         CalendarEvent,
@@ -162,6 +170,7 @@ async def delete_event(
 ) -> None:
     """Delete a calendar event."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     event = await get_or_404(
         db,
         CalendarEvent,
@@ -221,6 +230,7 @@ async def create_guild_task(
 ) -> ScheduledTask:
     """Create a new scheduled task for a guild via the web UI."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     user_id = int(user["id"])
     await ensure_guild(guild_id)
 
@@ -266,6 +276,7 @@ async def toggle_task(
 ) -> ScheduledTask:
     """Enable or disable a scheduled task."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     task = await get_or_404(
         db,
         ScheduledTask,
@@ -288,6 +299,7 @@ async def delete_task(
 ) -> None:
     """Delete a scheduled task."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     task = await get_or_404(
         db,
         ScheduledTask,
