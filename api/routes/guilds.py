@@ -169,7 +169,10 @@ async def get_channel_config(
     """Return the per-channel config, creating a default row if none exists."""
     assert_guild_member(guild_id, user)
     result = await db.execute(
-        select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
+        select(ChannelConfig).where(
+            ChannelConfig.channel_id == channel_id,
+            ChannelConfig.guild_id == guild_id,
+        )
     )
     cfg = result.scalar_one_or_none()
     if cfg is None:
@@ -198,7 +201,10 @@ async def update_channel_config(
     assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
-        select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
+        select(ChannelConfig).where(
+            ChannelConfig.channel_id == channel_id,
+            ChannelConfig.guild_id == guild_id,
+        )
     )
     cfg = result.scalar_one_or_none()
     if cfg is None:
