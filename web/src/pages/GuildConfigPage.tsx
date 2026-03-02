@@ -17,8 +17,8 @@ import { isoToLocalInput, localInputToIso } from '../types';
 import type { DiscordChannel, GuildConfig } from '../types';
 
 interface ChannelConfig {
-  channel_id: number;
-  guild_id: number;
+  channel_id: string;
+  guild_id: string;
   always_respond: boolean;
   context_cutoff: string | null; // ISO 8601 UTC datetime string
   updated_at: string;
