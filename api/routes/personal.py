@@ -4,6 +4,8 @@ DM-originated data is stored with guild_id = 0.  These endpoints expose that
 data without a guild membership check (the user just needs to be authenticated).
 """
 
+import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends
@@ -22,6 +24,8 @@ from api.schemas import (
 )
 from grug.db.models import ScheduledTask, UserProfile
 from grug.utils import ensure_guild
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/personal", tags=["personal"])
 
@@ -89,6 +93,38 @@ async def create_personal_task(
     db.add(task)
     await db.commit()
     await db.refresh(task)
+
+    # Register with the local scheduler immediately so the task fires on time
+    # without waiting for the bot's periodic sync (which runs every 30 minutes).
+    if task.enabled:
+        from grug.scheduler.manager import add_cron_job, add_date_job
+        from grug.scheduler.tasks import execute_scheduled_task
+
+        job_id = f"task_{task.id}"
+        now = datetime.now(timezone.utc)
+        try:
+            if task.type == "once" and task.fire_at is not None and task.fire_at > now:
+                add_date_job(
+                    execute_scheduled_task,
+                    run_date=task.fire_at,
+                    job_id=job_id,
+                    args=[task.id],
+                )
+            elif task.type == "recurring" and task.cron_expression:
+                add_cron_job(
+                    execute_scheduled_task,
+                    cron_expression=task.cron_expression,
+                    job_id=job_id,
+                    args=[task.id],
+                )
+        except Exception:
+            # Log but don't fail the request — the bot's periodic sync will
+            # pick up the task on its next pass.
+            logger.exception(
+                "Failed to register personal task %d with scheduler immediately",
+                task.id,
+            )
+
     return task
 
 
@@ -105,6 +141,7 @@ async def toggle_personal_task(
         ScheduledTask,
         ScheduledTask.id == task_id,
         ScheduledTask.guild_id == _DM_GUILD_ID,
+        ScheduledTask.user_id == int(user["id"]),
         detail="Task not found",
     )
     task.enabled = body.enabled
@@ -125,6 +162,7 @@ async def delete_personal_task(
         ScheduledTask,
         ScheduledTask.id == task_id,
         ScheduledTask.guild_id == _DM_GUILD_ID,
+        ScheduledTask.user_id == int(user["id"]),
         detail="Task not found",
     )
     await db.delete(task)

@@ -5,6 +5,9 @@ models, and database sessions all live in the ``grug`` package — the API
 layer is a thin HTTP skin on top.
 """
 
+from contextlib import asynccontextmanager
+from typing import AsyncGenerator
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -24,7 +27,20 @@ from grug.config.settings import get_settings
 
 settings = get_settings()
 
-app = FastAPI(title="Grug API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Start the in-process scheduler for personal (DM) task execution."""
+    from grug.scheduler.manager import start_scheduler, stop_scheduler
+
+    start_scheduler()
+    try:
+        yield
+    finally:
+        stop_scheduler()
+
+
+app = FastAPI(title="Grug API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

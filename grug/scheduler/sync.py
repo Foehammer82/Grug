@@ -85,7 +85,12 @@ async def run_sync(bot: "commands.Bot", *, sync_commands: bool = False) -> None:
         now = datetime.now(timezone.utc)
         async with factory() as session:
             result = await session.execute(
-                select(ScheduledTask).where(ScheduledTask.enabled.is_(True))
+                select(ScheduledTask).where(
+                    ScheduledTask.enabled.is_(True),
+                    # Personal DM tasks (guild_id=0) are registered immediately
+                    # by the API process; skip them here to avoid double execution.
+                    ScheduledTask.guild_id != 0,
+                )
             )
             db_tasks = result.scalars().all()
 
