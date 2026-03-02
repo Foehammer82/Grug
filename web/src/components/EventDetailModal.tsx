@@ -67,7 +67,7 @@ export default function EventDetailModal({ event, open, onClose }: Props) {
     },
   });
 
-  const selectedChannel = channels?.find((c) => c.id === String(event.channel_id)) ?? null;
+  const selectedChannel = channels?.find((c) => c.id === event.channel_id) ?? null;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>

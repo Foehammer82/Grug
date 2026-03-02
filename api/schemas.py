@@ -33,6 +33,10 @@ class GuildConfigOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("guild_id")
+    def serialize_guild_id(self, v: int) -> str:
+        return str(v)
+
     @field_serializer("announce_channel_id")
     def serialize_announce_channel_id(self, v: int | None) -> str | None:
         """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
@@ -54,6 +58,10 @@ class ChannelConfigOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("channel_id", "guild_id")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
 
 
 class ChannelConfigUpdate(BaseModel):
@@ -81,6 +89,14 @@ class CalendarEventOut(BaseModel):
     occurrence_end: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
 
 
 class CalendarEventCreate(BaseModel):
@@ -120,6 +136,14 @@ class ScheduledTaskOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "channel_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("user_id")
+    def serialize_user_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
 
     @computed_field
     @property
@@ -208,6 +232,14 @@ class GlossaryTermOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
 
 class GlossaryTermCreate(BaseModel):
     term: str
@@ -231,6 +263,10 @@ class GlossaryTermHistoryOut(BaseModel):
     changed_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "changed_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
 
 
 class DiscordChannelOut(BaseModel):
