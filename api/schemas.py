@@ -289,6 +289,9 @@ class GrugUserOut(BaseModel):
     discord_user_id: str
     can_invite: bool
     is_super_admin: bool = False
+    is_env_super_admin: bool = (
+        False  # True when elevated via GRUG_SUPER_ADMIN_IDS env var
+    )
     created_at: datetime
     updated_at: datetime
 
@@ -301,6 +304,26 @@ class GrugUserOut(BaseModel):
 
 class GrugUserUpdate(BaseModel):
     can_invite: bool | None = None
+    is_super_admin: bool | None = None
+
+
+class DiscordUserOut(BaseModel):
+    """Resolved Discord user profile from the bot API."""
+
+    discord_user_id: str
+    username: str
+    display_name: str
+    avatar_url: str | None = None
+    profile_url: str
+
+
+class DiscordMemberOut(BaseModel):
+    """A Discord guild member returned by the member-search endpoint."""
+
+    discord_user_id: str
+    username: str
+    display_name: str
+    avatar_url: str | None = None
 
 
 class InviteUrlOut(BaseModel):

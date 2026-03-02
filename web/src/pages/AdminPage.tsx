@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  Autocomplete,
+  Avatar,
   Box,
   Button,
   Chip,
@@ -10,6 +12,8 @@ import {
   DialogContent,
   DialogTitle,
   IconButton,
+  Link,
+  Skeleton,
   Stack,
   Switch,
   Table,
@@ -23,6 +27,7 @@ import {
   Typography,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import LockIcon from '@mui/icons-material/Lock';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -35,7 +40,83 @@ interface GrugUser {
   discord_user_id: string;
   can_invite: boolean;
   is_super_admin: boolean;
+  is_env_super_admin: boolean;
   created_at: string;
+}
+
+interface DiscordUser {
+  discord_user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  profile_url: string;
+}
+
+interface DiscordMember {
+  discord_user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+/* ------------------------------------------------------------------ */
+/* Discord user cell — resolves ID to avatar + name + profile link     */
+/* ------------------------------------------------------------------ */
+
+function DiscordUserCell({ id }: { id: string }) {
+  const { data, isLoading, isError } = useQuery<DiscordUser>({
+    queryKey: ['discord-user', id],
+    queryFn: async () => {
+      const res = await client.get<DiscordUser>(`/api/discord/users/${id}`);
+      return res.data;
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return (
+      <Stack direction="row" alignItems="center" spacing={1}>
+        <Skeleton variant="circular" width={28} height={28} />
+        <Box>
+          <Skeleton width={90} height={14} />
+          <Skeleton width={130} height={12} sx={{ mt: 0.3 }} />
+        </Box>
+      </Stack>
+    );
+  }
+
+  if (isError || !data) {
+    return <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{id}</Typography>;
+  }
+
+  return (
+    <Stack direction="row" alignItems="center" spacing={1}>
+      <Avatar
+        src={data.avatar_url ?? undefined}
+        alt={data.username}
+        sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
+      >
+        {data.username[0].toUpperCase()}
+      </Avatar>
+      <Box>
+        <Link
+          href={data.profile_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          variant="body2"
+          underline="hover"
+          color="text.primary"
+          fontWeight={500}
+        >
+          {data.display_name}
+        </Link>
+        <Typography variant="caption" color="text.secondary" display="block">
+          @{data.username} · {id}
+        </Typography>
+      </Box>
+    </Stack>
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +140,24 @@ export default function AdminPage() {
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
   const [newUserId, setNewUserId] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedMember, setSelectedMember] = useState<DiscordMember | null>(null);
+
+  /* ---- Debounce search input 400 ms ---- */
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput), 400);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  /* ---- Reset dialog state on close ---- */
+  const handleClose = () => {
+    setAddOpen(false);
+    setNewUserId('');
+    setSearchInput('');
+    setDebouncedSearch('');
+    setSelectedMember(null);
+  };
 
   /* ---- Data ---- */
   const { data: users, isLoading } = useQuery<GrugUser[]>({
@@ -70,10 +169,32 @@ export default function AdminPage() {
     enabled: !!me?.is_super_admin,
   });
 
+  /* ---- Member search ---- */
+  const { data: searchResults, isFetching: searchFetching } = useQuery<DiscordMember[]>({
+    queryKey: ['member-search', debouncedSearch],
+    queryFn: async () => {
+      if (!debouncedSearch.trim()) return [];
+      const res = await client.get<DiscordMember[]>('/api/admin/users/search', {
+        params: { q: debouncedSearch.trim() },
+      });
+      return res.data;
+    },
+    enabled: !!me?.is_super_admin && debouncedSearch.trim().length > 0,
+    staleTime: 30_000,
+  });
+
   /* ---- Toggle can_invite ---- */
   const toggleMutation = useMutation({
     mutationFn: async ({ id, canInvite }: { id: string; canInvite: boolean }) => {
       await client.patch(`/api/admin/users/${id}`, { can_invite: canInvite });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
+  });
+
+  /* ---- Toggle is_super_admin ---- */
+  const toggleSuperAdminMutation = useMutation({
+    mutationFn: async ({ id, isSuperAdmin }: { id: string; isSuperAdmin: boolean }) => {
+      await client.patch(`/api/admin/users/${id}`, { is_super_admin: isSuperAdmin });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-users'] }),
   });
@@ -89,12 +210,12 @@ export default function AdminPage() {
   /* ---- Add user (upsert via PATCH) ---- */
   const addMutation = useMutation({
     mutationFn: async () => {
-      await client.patch(`/api/admin/users/${newUserId.trim()}`, { can_invite: true });
+      const id = (selectedMember?.discord_user_id ?? newUserId).trim();
+      await client.patch(`/api/admin/users/${id}`, { can_invite: true });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] });
-      setNewUserId('');
-      setAddOpen(false);
+      handleClose();
     },
   });
 
@@ -131,8 +252,8 @@ export default function AdminPage() {
       </Stack>
 
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Manage which Discord users can invite Grug to new servers. Super-admins are configured via
-        the <code>GRUG_SUPER_ADMIN_IDS</code> environment variable.
+        Manage Discord users and their privileges. Super-admin can be granted here (DB) or set via
+        the <code>GRUG_SUPER_ADMIN_IDS</code> environment variable (env-locked).
       </Typography>
 
       {!users || users.length === 0 ? (
@@ -142,7 +263,7 @@ export default function AdminPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {['Discord User ID', 'Status', 'Can Invite', 'Added', ''].map((h) => (
+                {['User', 'Super Admin', 'Can Invite', 'Added', ''].map((h) => (
                   <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -150,12 +271,29 @@ export default function AdminPage() {
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.discord_user_id} hover>
-                  <TableCell sx={{ fontFamily: 'monospace' }}>{u.discord_user_id}</TableCell>
+                  <TableCell sx={{ minWidth: 220 }}>
+                    <DiscordUserCell id={u.discord_user_id} />
+                  </TableCell>
                   <TableCell>
-                    {u.is_super_admin ? (
-                      <Chip label="Super-Admin" color="warning" size="small" />
+                    {u.is_env_super_admin ? (
+                      <Tooltip title="Set via GRUG_SUPER_ADMIN_IDS env var — cannot be changed here">
+                        <Stack direction="row" alignItems="center" spacing={0.5}>
+                          <Switch size="small" checked disabled />
+                          <LockIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                        </Stack>
+                      </Tooltip>
                     ) : (
-                      <Chip label="User" size="small" variant="outlined" />
+                      <Switch
+                        size="small"
+                        checked={u.is_super_admin}
+                        onChange={(_, checked) =>
+                          toggleSuperAdminMutation.mutate({ id: u.discord_user_id, isSuperAdmin: checked })
+                        }
+                        disabled={toggleSuperAdminMutation.isPending}
+                      />
+                    )}
+                    {u.is_env_super_admin && (
+                      <Chip label="Env" color="warning" size="small" sx={{ ml: 0.5, height: 16, fontSize: '0.65rem' }} />
                     )}
                   </TableCell>
                   <TableCell>
@@ -170,7 +308,7 @@ export default function AdminPage() {
                   </TableCell>
                   <TableCell>{new Date(u.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    {!u.is_super_admin && (
+                    {!u.is_env_super_admin && (
                       <Tooltip title="Remove user">
                         <IconButton
                           size="small"
@@ -191,18 +329,100 @@ export default function AdminPage() {
       )}
 
       {/* ── Add User dialog ── */}
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog open={addOpen} onClose={handleClose} maxWidth="xs" fullWidth>
         <DialogTitle>Add User</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
+          <Autocomplete<DiscordMember, false, false, true>
+            freeSolo
             fullWidth
-            label="Discord User ID"
-            placeholder="e.g. 123456789012345678"
-            value={newUserId}
-            onChange={(e) => setNewUserId(e.target.value)}
+            options={searchResults ?? []}
+            loading={searchFetching}
+            inputValue={searchInput}
+            value={selectedMember}
+            onInputChange={(_, value, reason) => {
+              setSearchInput(value);
+              if (reason === 'input') {
+                // Typed freely — clear selection and treat as manual ID
+                setSelectedMember(null);
+                setNewUserId(value);
+              }
+            }}
+            onChange={(_, value) => {
+              if (value && typeof value === 'object') {
+                setSelectedMember(value);
+                setNewUserId(value.discord_user_id);
+                setSearchInput(`${value.display_name} (${value.username})`);
+              } else if (typeof value === 'string') {
+                setSelectedMember(null);
+                setNewUserId(value);
+              } else {
+                setSelectedMember(null);
+                setNewUserId('');
+              }
+            }}
+            getOptionLabel={(opt) =>
+              typeof opt === 'string' ? opt : `${opt.display_name} (${opt.username})`
+            }
+            isOptionEqualToValue={(a, b) =>
+              typeof a !== 'string' && typeof b !== 'string'
+                ? a.discord_user_id === b.discord_user_id
+                : false
+            }
+            filterOptions={(opts) => opts}
+            renderOption={(props, opt) => (
+              typeof opt === 'string' ? (
+                <Box component="li" {...props} key={opt}>{opt}</Box>
+              ) : (
+                <Box component="li" {...props} key={opt.discord_user_id}
+                  sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}
+                >
+                  <Avatar
+                    src={opt.avatar_url ?? undefined}
+                    alt={opt.username}
+                    sx={{ width: 28, height: 28, fontSize: '0.75rem' }}
+                  >
+                    {opt.username[0].toUpperCase()}
+                  </Avatar>
+                  <Box>
+                    <Typography variant="body2">{opt.display_name}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      @{opt.username} · {opt.discord_user_id}
+                    </Typography>
+                  </Box>
+                </Box>
+              )
+            )}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                autoFocus
+                label="Search by name or paste User ID"
+                placeholder="e.g. Gandalf or 123456789012345678"
+                sx={{ mt: 1 }}
+                helperText={
+                  selectedMember
+                    ? `ID: ${selectedMember.discord_user_id} — will be granted can-invite`
+                    : 'Search for a member across joined servers, or paste a Discord snowflake ID directly.'
+                }
+                slotProps={{
+                  input: {
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {searchFetching ? <CircularProgress size={16} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  },
+                }}
+              />
+            )}
             sx={{ mt: 1 }}
-            helperText="The user's Discord snowflake ID. They will be granted the can-invite permission."
+            noOptionsText={
+              debouncedSearch.trim().length > 0
+                ? 'No members found — you can still paste a snowflake ID directly'
+                : 'Start typing to search'
+            }
           />
           {addMutation.isError && (
             <Typography color="error" variant="body2" sx={{ mt: 1 }}>
@@ -211,7 +431,7 @@ export default function AdminPage() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button onClick={handleClose}>Cancel</Button>
           <Button
             variant="contained"
             onClick={() => addMutation.mutate()}

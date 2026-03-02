@@ -7,7 +7,7 @@ applyTo: "web/src/**"
 ## Tech Stack
 
 - **React 18 + TypeScript + Vite** — dev server runs in Docker with HMR via volume mount
-- **MUI v5** — full component library; GitHub Dark/Light themes defined in `web/src/theme.ts`
+- **MUI v7** — full component library; GitHub Dark/Light themes defined in `web/src/theme.ts`
 - **React Query (@tanstack/react-query)** — all API data fetching
 - **React Router v6** — nested routes
 

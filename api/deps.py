@@ -99,14 +99,31 @@ def get_bot_token() -> str:
 
 
 def is_super_admin(user: dict[str, Any]) -> bool:
-    """Check if the user is a Grug super-admin (defined by env var)."""
+    """Check if the user is a Grug super-admin via environment variable."""
     settings = get_settings()
     return str(user.get("sub", user.get("id", ""))) in settings.grug_super_admin_ids
 
 
-def assert_super_admin(user: dict[str, Any]) -> None:
-    """Raise 403 if the user is not a Grug super-admin."""
-    if not is_super_admin(user):
+async def is_super_admin_full(user: dict[str, Any]) -> bool:
+    """Check if the user is a super-admin by env var OR the DB ``is_super_admin`` flag."""
+    if is_super_admin(user):
+        return True
+    from grug.db.models import GrugUser
+
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(GrugUser).where(
+                GrugUser.discord_user_id == int(user.get("sub", user.get("id", 0)))
+            )
+        )
+        grug_user = result.scalar_one_or_none()
+        return bool(grug_user and grug_user.is_super_admin)
+
+
+async def assert_super_admin(user: dict[str, Any]) -> None:
+    """Raise 403 if the user is not a super-admin (env var OR DB flag)."""
+    if not await is_super_admin_full(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Super-admin access required",
@@ -115,7 +132,7 @@ def assert_super_admin(user: dict[str, Any]) -> None:
 
 async def has_can_invite(user: dict[str, Any]) -> bool:
     """Check if the user has the can_invite privilege."""
-    if is_super_admin(user):
+    if await is_super_admin_full(user):
         return True
     from grug.db.models import GrugUser
 
@@ -216,11 +233,11 @@ async def is_guild_admin(guild_id: int | str, user: dict[str, Any]) -> bool:
     """Check if the user has admin access to a guild.
 
     Admin access is granted if any of the following are true:
-    1. The user is a Grug super-admin.
+    1. The user is a Grug super-admin (env var or DB flag).
     2. The JWT shows Discord ADMINISTRATOR permission for this guild.
     3. The user has the ``grug-admin`` role in the Discord guild.
     """
-    if is_super_admin(user):
+    if await is_super_admin_full(user):
         return True
     if _has_guild_admin_permission(guild_id, user):
         return True

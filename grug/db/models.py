@@ -321,8 +321,8 @@ class ConversationMessage(Base):
 class GrugUser(Base):
     """Global Grug user record — tracks per-user privileges like can_invite.
 
-    Super-admin status is derived from the GRUG_SUPER_ADMIN_IDS env var,
-    not stored in the database.
+    Super-admin status can be set via the GRUG_SUPER_ADMIN_IDS env var OR
+    by setting ``is_super_admin=True`` in this table.
     """
 
     __tablename__ = "grug_users"
@@ -332,6 +332,10 @@ class GrugUser(Base):
     )
     # When True, this user can generate invite URLs to add Grug to servers.
     can_invite: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Grants full super-admin access (same as being listed in GRUG_SUPER_ADMIN_IDS).
+    is_super_admin: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(

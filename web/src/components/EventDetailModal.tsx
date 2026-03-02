@@ -13,33 +13,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useGuildContext } from '../hooks/useGuildContext';
+import type { CalendarEvent, DiscordChannel } from '../types';
 
-/* ------------------------------------------------------------------ */
-/* Types                                                               */
-/* ------------------------------------------------------------------ */
-
-export interface CalendarEvent {
-  id: number;
-  guild_id: number;
-  title: string;
-  description: string | null;
-  start_time: string;
-  end_time: string | null;
-  rrule: string | null;
-  location: string | null;
-  channel_id: number | null;
-  created_by: number;
-  created_at: string;
-  updated_at: string | null;
-  occurrence_start: string | null;
-  occurrence_end: string | null;
-}
-
-interface DiscordChannel {
-  id: string;
-  name: string;
-  type: number;
-}
+export type { CalendarEvent } from '../types';
 
 interface Props {
   event: CalendarEvent;

@@ -13,27 +13,9 @@ import {
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
+import type { ScheduledTask } from '../types';
 
-/* ------------------------------------------------------------------ */
-/* Types                                                               */
-/* ------------------------------------------------------------------ */
-
-export interface ScheduledTask {
-  id: number;
-  guild_id: number;
-  channel_id: number;
-  type: 'once' | 'recurring';
-  name: string | null;
-  prompt: string;
-  fire_at: string | null;
-  cron_expression: string | null;
-  user_id: number | null;
-  enabled: boolean;
-  last_run: string | null;
-  next_run: string | null;
-  created_by: number;
-  created_at: string;
-}
+export type { ScheduledTask } from '../types';
 
 interface Props {
   task: ScheduledTask;

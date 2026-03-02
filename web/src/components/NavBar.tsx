@@ -1,12 +1,14 @@
 import BrightnessAutoOutlinedIcon from '@mui/icons-material/BrightnessAutoOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import {
   AppBar,
   Avatar,
   Box,
+  Button,
   Divider,
   IconButton,
   ListItemIcon,
@@ -16,6 +18,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import grugNb from '../assets/grug_nb.png';
@@ -41,6 +44,17 @@ export default function NavBar() {
   const { data: user } = useAuth();
   const navigate = useNavigate();
   const { preference, setPreference } = useThemePreference();
+
+  const canInvite = user?.is_super_admin || user?.can_invite;
+
+  const { data: inviteData } = useQuery<{ url: string }>({
+    queryKey: ['invite-url'],
+    queryFn: async () => {
+      const res = await client.get<{ url: string }>('/api/invite-url');
+      return res.data;
+    },
+    enabled: !!canInvite,
+  });
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
 
@@ -92,6 +106,23 @@ export default function NavBar() {
           </Typography>
 
           <Box sx={{ flexGrow: 1 }} />
+
+          {/* Invite Grug to a server */}
+          {canInvite && inviteData?.url && (
+            <Tooltip title="Add Grug to another Discord server">
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<OpenInNewIcon />}
+                href={inviteData.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+              >
+                Invite Grug
+              </Button>
+            </Tooltip>
+          )}
 
           {/* Theme toggle */}
           <Tooltip title={THEME_LABEL[preference]}>

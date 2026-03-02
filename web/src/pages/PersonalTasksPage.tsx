@@ -28,30 +28,10 @@ import { useState } from 'react';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import PollingIndicator from '../components/PollingIndicator';
-
-interface ScheduledTask {
-  id: number;
-  channel_id: number;
-  type: 'once' | 'recurring';
-  name: string | null;
-  prompt: string;
-  fire_at: string | null;
-  cron_expression: string | null;
-  enabled: boolean;
-  last_run: string | null;
-  next_run: string | null;
-  created_at: string;
-}
+import { TABLE_HEADER_SX } from '../types';
+import type { ScheduledTask } from '../types';
 
 
-
-const HEADER_SX = {
-  fontWeight: 600,
-  textTransform: 'uppercase' as const,
-  fontSize: '0.75rem',
-  letterSpacing: '0.05em',
-  color: 'text.secondary',
-};
 
 const EMPTY_FORM = {
   type: 'once' as 'once' | 'recurring',
@@ -162,7 +142,7 @@ export default function PersonalTasksPage() {
             <TableHead>
               <TableRow>
                 {['Type', 'Name / Prompt', 'Schedule', 'Enabled', 'Status', 'Next Run', 'Actions'].map((h) => (
-                  <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
+                  <TableCell key={h} sx={TABLE_HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>

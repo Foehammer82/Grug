@@ -30,40 +30,8 @@ import { useState } from 'react';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import PollingIndicator from '../components/PollingIndicator';
-
-interface ScheduledTask {
-  id: number;
-  guild_id: number;
-  channel_id: number;
-  type: 'once' | 'recurring';
-  name: string | null;
-  prompt: string;
-  fire_at: string | null;
-  cron_expression: string | null;
-  source: string;
-  enabled: boolean;
-  last_run: string | null;
-  next_run: string | null;
-  created_at: string;
-}
-
-interface DiscordChannel {
-  id: string;
-  name: string;
-  type: number;
-}
-
-interface GuildConfig {
-  announce_channel_id: string | null;
-}
-
-const HEADER_SX = {
-  fontWeight: 600,
-  textTransform: 'uppercase' as const,
-  fontSize: '0.75rem',
-  letterSpacing: '0.05em',
-  color: 'text.secondary',
-};
+import { TABLE_HEADER_SX } from '../types';
+import type { DiscordChannel, GuildConfig, ScheduledTask } from '../types';
 
 const EMPTY_FORM = {
   type: 'once' as 'once' | 'recurring',
@@ -206,7 +174,7 @@ export default function TasksPage() {
             <TableHead>
               <TableRow>
                 {['Type', 'Name / Prompt', 'Channel', 'Schedule', 'Enabled', 'Status', 'Next Run', 'Actions'].map((h) => (
-                  <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
+                  <TableCell key={h} sx={TABLE_HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>

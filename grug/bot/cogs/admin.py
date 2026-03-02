@@ -8,6 +8,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
+from grug.bot.cogs.base import GrugCogBase
 from grug.config.settings import get_settings
 from grug.db.models import CalendarEvent, GuildConfig, ScheduledTask
 from grug.db.session import get_session_factory
@@ -71,7 +72,7 @@ async def ensure_grug_admin_role(guild: discord.Guild) -> None:
             await session.commit()
 
 
-class AdminCog(commands.Cog, name="Admin"):
+class AdminCog(GrugCogBase, name="Admin"):
     """Administrative commands for configuring Grug."""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -226,17 +227,6 @@ class AdminCog(commands.Cog, name="Admin"):
                 val += f"\n{ev.description}"
             embed.add_field(name=ev.title, value=val, inline=False)
         await interaction.response.send_message(embed=embed)
-
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ) -> None:
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(
-                "You need the **Manage Server** permission to use that command.",
-                ephemeral=True,
-            )
-        else:
-            raise error
 
 
 async def setup(bot: commands.Bot) -> None:

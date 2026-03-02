@@ -20,6 +20,7 @@ import {
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
+import type { DiscordChannel } from '../types';
 
 interface GlossaryTerm {
   id: number;
@@ -43,12 +44,6 @@ interface HistoryEntry {
   old_ai_generated: boolean;
   changed_by: number;
   changed_at: string;
-}
-
-interface DiscordChannel {
-  id: string;
-  name: string;
-  type: number;
 }
 
 function SourceChip({ term }: { term: GlossaryTerm }) {
@@ -114,7 +109,7 @@ export default function GlossaryPage() {
       await client.post(`/api/guilds/${guildId}/glossary`, {
         term: newTerm,
         definition: newDef,
-        channel_id: newChannel ? parseInt(newChannel) : null,
+        channel_id: newChannel || null,
       });
     },
     onSuccess: () => {

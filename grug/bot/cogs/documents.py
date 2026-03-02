@@ -9,6 +9,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
+from grug.bot.cogs.base import GrugCogBase
 from grug.db.models import Document
 from grug.db.session import get_session_factory
 from grug.rag.indexer import DocumentIndexer
@@ -20,7 +21,7 @@ MAX_FILE_SIZE_MB = 10
 ALLOWED_EXTENSIONS = {".txt", ".md", ".rst", ".pdf"}
 
 
-class DocumentsCog(commands.Cog, name="Documents"):
+class DocumentsCog(GrugCogBase, name="Documents"):
     """Manage documents for RAG retrieval."""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -177,17 +178,6 @@ class DocumentsCog(commands.Cog, name="Documents"):
         await interaction.response.send_message(
             f"🗑️ Removed **{filename}** from Grug's memory."
         )
-
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ) -> None:
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(
-                "You need the **Manage Server** permission to use that command.",
-                ephemeral=True,
-            )
-        else:
-            raise error
 
 
 async def setup(bot: commands.Bot) -> None:

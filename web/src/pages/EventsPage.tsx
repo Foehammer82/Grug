@@ -14,8 +14,9 @@ import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import EventCreateModal from '../components/EventCreateModal';
-import EventDetailModal, { type CalendarEvent } from '../components/EventDetailModal';
-import TaskDetailModal, { type ScheduledTask } from '../components/TaskDetailModal';
+import type { CalendarEvent, ScheduledTask } from '../types';
+import EventDetailModal from '../components/EventDetailModal';
+import TaskDetailModal from '../components/TaskDetailModal';
 
 import '../styles/fullcalendar-overrides.css';
 

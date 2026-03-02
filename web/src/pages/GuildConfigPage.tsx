@@ -13,14 +13,8 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
-
-interface GuildConfig {
-  guild_id: number;
-  timezone: string;
-  // Returned as a string to preserve Discord snowflake precision (> MAX_SAFE_INTEGER)
-  announce_channel_id: string | null;
-  context_cutoff: string | null; // ISO 8601 UTC datetime string
-}
+import { isoToLocalInput, localInputToIso } from '../types';
+import type { DiscordChannel, GuildConfig } from '../types';
 
 interface ChannelConfig {
   channel_id: number;
@@ -30,30 +24,8 @@ interface ChannelConfig {
   updated_at: string;
 }
 
-/** Convert ISO UTC datetime string to datetime-local input value (e.g. "2026-03-01T20:00"). */
-function isoToLocalInput(iso: string | null): string {
-  if (!iso) return '';
-  try {
-    return new Date(iso).toISOString().slice(0, 16);
-  } catch {
-    return '';
-  }
-}
-
-/** Convert datetime-local input value (UTC assumed) to ISO string, or null if empty. */
-function localInputToIso(value: string): string | null {
-  if (!value) return null;
-  return new Date(value + ':00.000Z').toISOString();
-}
-
 interface Defaults {
   default_timezone: string;
-}
-
-interface DiscordChannel {
-  id: string;
-  name: string;
-  type: number;
 }
 
 // Full IANA timezone list from the browser's built-in Intl API

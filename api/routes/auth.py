@@ -12,7 +12,7 @@ from api.auth import (
     fetch_discord_guilds,
     fetch_discord_user,
 )
-from api.deps import get_current_user, has_can_invite, is_super_admin
+from api.deps import get_current_user, has_can_invite, is_super_admin_full
 from api.schemas import UserOut
 from grug.config.settings import get_settings
 
@@ -70,7 +70,7 @@ async def get_me(user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
         username=user["username"],
         discriminator=user["discriminator"],
         avatar=user.get("avatar"),
-        is_super_admin=is_super_admin(user),
+        is_super_admin=await is_super_admin_full(user),
         can_invite=await has_can_invite(user),
     )
 

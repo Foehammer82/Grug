@@ -9,6 +9,7 @@ from discord.ext import commands
 from sqlalchemy import select
 
 from grug.agent.core import GrugAgent
+from grug.bot.cogs.base import GrugCogBase
 from grug.utils import get_campaign_id_for_channel
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 _DM_GUILD_ID = 0
 
 
-class AIChatCog(commands.Cog, name="AI Chat"):
+class AIChatCog(GrugCogBase, name="AI Chat"):
     """Handles AI-powered conversations with Grug."""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -220,16 +221,6 @@ class AIChatCog(commands.Cog, name="AI Chat"):
         await interaction.response.send_message(
             "Grug forget everything said here. Fresh start! 🧹"
         )
-
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ) -> None:
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(
-                "You don't have permission to use that command.", ephemeral=True
-            )
-        else:
-            raise error
 
 
 def _split_message(text: str, limit: int = 2000) -> list[str]:

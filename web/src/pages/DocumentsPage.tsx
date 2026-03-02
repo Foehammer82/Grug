@@ -23,22 +23,8 @@ import {
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
-
-interface Document {
-  id: number;
-  filename: string;
-  description: string | null;
-  chunk_count: number;
-  created_at: string;
-}
-
-const HEADER_SX = {
-  fontWeight: 600,
-  textTransform: 'uppercase' as const,
-  fontSize: '0.75rem',
-  letterSpacing: '0.05em',
-  color: 'text.secondary',
-};
+import { TABLE_HEADER_SX } from '../types';
+import type { Document } from '../types';
 
 const ALLOWED_EXT = ['.txt', '.md', '.rst', '.pdf'];
 
@@ -157,7 +143,7 @@ export default function DocumentsPage() {
             <TableHead>
               <TableRow>
                 {['Filename', 'Description', 'Chunks', 'Added', ...(isAdmin ? ['Actions'] : [])].map((h) => (
-                  <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
+                  <TableCell key={h} sx={TABLE_HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>

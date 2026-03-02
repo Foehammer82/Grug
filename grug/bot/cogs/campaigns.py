@@ -7,6 +7,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
+from grug.bot.cogs.base import GrugCogBase
 from grug.db.models import Campaign
 from grug.db.session import get_session_factory
 from grug.utils import GAME_SYSTEM_LABELS
@@ -14,7 +15,7 @@ from grug.utils import GAME_SYSTEM_LABELS
 logger = logging.getLogger(__name__)
 
 
-class CampaignsCog(commands.Cog, name="Campaigns"):
+class CampaignsCog(GrugCogBase, name="Campaigns"):
     """Manage campaign-to-channel associations."""
 
     def __init__(self, bot: commands.Bot) -> None:
@@ -171,17 +172,6 @@ class CampaignsCog(commands.Cog, name="Campaigns"):
                 value += "\n*(inactive)*"
             embed.add_field(name=c.name, value=value, inline=False)
         await interaction.response.send_message(embed=embed)
-
-    async def cog_app_command_error(
-        self, interaction: discord.Interaction, error: app_commands.AppCommandError
-    ) -> None:
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message(
-                "You need the **Manage Server** permission to use that command.",
-                ephemeral=True,
-            )
-        else:
-            raise error
 
 
 async def _get_campaign_for_channel(channel_id: int) -> Campaign | None:

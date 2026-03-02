@@ -12,7 +12,6 @@ from sqlalchemy import select
 
 from grug.db.models import GlossaryTerm, GlossaryTermHistory
 from grug.db.session import get_session_factory
-from grug.config.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -118,16 +117,9 @@ class GlossaryCog(commands.Cog, name="Glossary"):
                 )
                 return
 
-            from grug.db.models import GuildConfig
+            from grug.utils import ensure_guild
 
-            cfg_result = await session.execute(
-                select(GuildConfig).where(GuildConfig.guild_id == guild_id)
-            )
-            if cfg_result.scalar_one_or_none() is None:
-                _settings = get_settings()
-                session.add(
-                    GuildConfig(guild_id=guild_id, timezone=_settings.default_timezone)
-                )
+            await ensure_guild(guild_id)
 
             entry = GlossaryTerm(
                 guild_id=guild_id,

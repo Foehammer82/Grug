@@ -1,6 +1,6 @@
 import { Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { useState } from 'react';
-import { Navigate, Outlet, useNavigate, useParams } from 'react-router-dom';
+import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useGuilds } from '../hooks/useGuilds';
 
 /** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
@@ -17,6 +17,7 @@ export default function GuildLayout() {
   const navigate = useNavigate();
   const { data: guilds } = useGuilds();
   const [copied, setCopied] = useState(false);
+  const location = useLocation();
 
   const guild = guilds?.find((g) => g.id === guildId);
   const isAdmin = guild?.is_admin ?? false;

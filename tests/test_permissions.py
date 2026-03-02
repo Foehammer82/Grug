@@ -60,25 +60,34 @@ class TestSuperAdmin:
 
         assert is_super_admin(_user("111")) is False
 
-    def test_assert_raises_403_for_non_super_admin(self, monkeypatch):
+    async def test_assert_raises_403_for_non_super_admin(
+        self, monkeypatch, mock_db_session
+    ):
         monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "111")
         import grug.config.settings as s
 
         s.get_settings.cache_clear()
         from api.deps import assert_super_admin
 
-        with pytest.raises(HTTPException) as exc_info:
-            assert_super_admin(_user("999"))
+        mock_factory, mock_session = mock_db_session
+        # User "999" not in DB either
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=mock_result)
+        with patch("api.deps.get_session_factory", return_value=mock_factory):
+            with pytest.raises(HTTPException) as exc_info:
+                await assert_super_admin(_user("999"))
         assert exc_info.value.status_code == 403
 
-    def test_assert_passes_for_super_admin(self, monkeypatch):
+    async def test_assert_passes_for_super_admin(self, monkeypatch):
         monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "42")
         import grug.config.settings as s
 
         s.get_settings.cache_clear()
         from api.deps import assert_super_admin
 
-        assert_super_admin(_user("42"))  # should not raise
+        # User "42" is in the env var — fast path, no DB check needed
+        await assert_super_admin(_user("42"))  # should not raise
 
 
 # ---------------------------------------------------------------------------

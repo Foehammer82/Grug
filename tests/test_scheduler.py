@@ -25,7 +25,7 @@ def test_add_cron_job_invalid_expression():
     async def dummy():
         pass
 
-    with pytest.raises(ValueError, match="5-field"):
+    with pytest.raises(ValueError, match="expected 5"):
         add_cron_job(dummy, "* * *", "bad_job")
 
 
