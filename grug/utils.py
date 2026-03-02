@@ -4,12 +4,20 @@ Centralises small helpers that were previously duplicated in multiple modules
 (agent tools, cogs, indexers). Import from here instead of redefining locally.
 """
 
+from __future__ import annotations
+
 import re
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from grug.config.settings import get_settings
 from grug.db.models import Campaign, GuildConfig
 from grug.db.session import get_session_factory
+
+if TYPE_CHECKING:
+    from grug.db.models import CalendarEvent
 
 # ---------------------------------------------------------------------------
 # Game system labels — canonical mapping of system tags to display names.
@@ -40,7 +48,10 @@ async def ensure_guild(guild_id: int) -> None:
             select(GuildConfig).where(GuildConfig.guild_id == guild_id)
         )
         if result.scalar_one_or_none() is None:
-            session.add(GuildConfig(guild_id=guild_id))
+            settings = get_settings()
+            session.add(
+                GuildConfig(guild_id=guild_id, timezone=settings.default_timezone)
+            )
             await session.commit()
 
 
@@ -92,3 +103,99 @@ def chunk_text(
             break
         start += chunk_size - overlap
     return chunks
+
+
+# ---------------------------------------------------------------------------
+# RRULE expansion for calendar events
+# ---------------------------------------------------------------------------
+
+
+def expand_event_occurrences(
+    event: CalendarEvent,
+    range_start: datetime,
+    range_end: datetime,
+    *,
+    max_occurrences: int = 200,
+) -> list[dict]:
+    """Expand a recurring ``CalendarEvent`` into concrete occurrences.
+
+    For non-recurring events (``event.rrule is None``) the function returns a
+    single-item list if the event falls within *range_start* … *range_end*,
+    or an empty list otherwise.
+
+    For recurring events the iCal RRULE string is parsed via
+    ``dateutil.rrule`` and occurrences within the requested range are
+    materialised.
+
+    Each returned dict contains all event fields plus ``occurrence_start``
+    and ``occurrence_end`` representing that specific instance.
+
+    Parameters
+    ----------
+    event:
+        The ORM ``CalendarEvent`` instance (must be loaded / attached).
+    range_start, range_end:
+        The window to enumerate occurrences within (inclusive of start).
+    max_occurrences:
+        Safety cap to prevent unbounded expansion.
+    """
+    duration = (
+        (event.end_time - event.start_time) if event.end_time else timedelta(hours=1)
+    )
+
+    base = {
+        "id": event.id,
+        "guild_id": event.guild_id,
+        "title": event.title,
+        "description": event.description,
+        "start_time": event.start_time,
+        "end_time": event.end_time,
+        "rrule": event.rrule,
+        "location": event.location,
+        "channel_id": event.channel_id,
+        "created_by": event.created_by,
+        "created_at": event.created_at,
+        "updated_at": event.updated_at,
+    }
+
+    if not event.rrule:
+        # Non-recurring: include if it overlaps the range at all.
+        occ_end = event.start_time + duration
+        if event.start_time <= range_end and occ_end >= range_start:
+            return [
+                {
+                    **base,
+                    "occurrence_start": event.start_time,
+                    "occurrence_end": occ_end,
+                }
+            ]
+        return []
+
+    # Recurring — parse the RRULE anchored at `event.start_time`.
+    from dateutil.rrule import rrulestr  # type: ignore[import-untyped]
+
+    rule = rrulestr(
+        f"DTSTART:{event.start_time.strftime('%Y%m%dT%H%M%SZ')}\nRRULE:{event.rrule}",
+        ignoretz=False,
+    )
+
+    occurrences: list[dict] = []
+    for dt in rule:
+        # dateutil may return naive datetimes — ensure UTC.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        if dt > range_end:
+            break
+        occ_end = dt + duration
+        if occ_end >= range_start:
+            occurrences.append(
+                {
+                    **base,
+                    "occurrence_start": dt,
+                    "occurrence_end": occ_end,
+                }
+            )
+        if len(occurrences) >= max_occurrences:
+            break
+
+    return occurrences

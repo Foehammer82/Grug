@@ -5,8 +5,6 @@ import logging
 import discord
 from discord.ext import commands
 
-from grug.config.settings import get_settings
-
 logger = logging.getLogger(__name__)
 
 _bot: commands.Bot | None = None
@@ -14,15 +12,14 @@ _bot: commands.Bot | None = None
 
 def create_bot() -> commands.Bot:
     """Create and configure the Discord bot instance."""
-    settings = get_settings()
     intents = discord.Intents.default()
     intents.message_content = True
     intents.members = True
 
     bot = commands.Bot(
-        command_prefix=settings.discord_prefix,
+        command_prefix="!",  # Unused — all commands are slash commands.
         intents=intents,
-        help_command=commands.DefaultHelpCommand(),
+        help_command=None,  # All commands are slash commands; no prefix help needed.
         description="Grug — your friendly TTRPG AI companion!",
     )
     return bot

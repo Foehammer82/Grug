@@ -62,17 +62,7 @@ def add_cron_job(
     kwargs: dict | None = None,
 ) -> str:
     """Schedule a recurring job using a cron expression (5-field)."""
-    parts = cron_expression.strip().split()
-    if len(parts) != 5:
-        raise ValueError(f"Expected 5-field cron expression, got: {cron_expression!r}")
-    minute, hour, day, month, day_of_week = parts
-    trigger = CronTrigger(
-        minute=minute,
-        hour=hour,
-        day=day,
-        month=month,
-        day_of_week=day_of_week,
-    )
+    trigger = CronTrigger.from_crontab(cron_expression)
     scheduler = get_scheduler()
     job = scheduler.add_job(
         func,

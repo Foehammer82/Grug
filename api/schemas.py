@@ -1,8 +1,8 @@
 """Pydantic response schemas for the API."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field, field_serializer
 
 
 class UserOut(BaseModel):
@@ -10,26 +10,63 @@ class UserOut(BaseModel):
     username: str
     discriminator: str
     avatar: str | None = None
+    is_super_admin: bool = False
+    can_invite: bool = False
+
+
+class DefaultsOut(BaseModel):
+    default_timezone: str
 
 
 class GuildOut(BaseModel):
     id: str
     name: str
     icon: str | None = None
+    is_admin: bool = False
 
 
 class GuildConfigOut(BaseModel):
     guild_id: int
-    prefix: str
     timezone: str
     announce_channel_id: int | None
+    context_cutoff: datetime | None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id")
+    def serialize_guild_id(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("announce_channel_id")
+    def serialize_announce_channel_id(self, v: int | None) -> str | None:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v) if v is not None else None
 
 
 class GuildConfigUpdate(BaseModel):
     timezone: str | None = None
-    announce_channel_id: int | None = None
+    # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
+    announce_channel_id: str | int | None = None
+    context_cutoff: datetime | None = None
+
+
+class ChannelConfigOut(BaseModel):
+    channel_id: int
+    guild_id: int
+    always_respond: bool
+    context_cutoff: datetime | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("channel_id", "guild_id")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+
+class ChannelConfigUpdate(BaseModel):
+    always_respond: bool | None = None
+    context_cutoff: datetime | None = None
 
 
 class CalendarEventOut(BaseModel):
@@ -39,30 +76,128 @@ class CalendarEventOut(BaseModel):
     description: str | None
     start_time: datetime
     end_time: datetime | None
+    rrule: str | None = None
+    location: str | None = None
     channel_id: int | None
     created_by: int
     created_at: datetime
+    updated_at: datetime | None = None
+    # When serving expanded occurrences the API sets these to the concrete
+    # start/end for that occurrence, leaving the original start_time/end_time
+    # as the series anchor.
+    occurrence_start: datetime | None = None
+    occurrence_end: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
+
+class CalendarEventCreate(BaseModel):
+    title: str
+    description: str | None = None
+    start_time: datetime
+    end_time: datetime | None = None
+    rrule: str | None = None
+    location: str | None = None
+    channel_id: str | int | None = None
+
+
+class CalendarEventUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    rrule: str | None = None
+    location: str | None = None
+    channel_id: str | int | None = None
 
 
 class ScheduledTaskOut(BaseModel):
     id: int
     guild_id: int
     channel_id: int
-    name: str
+    type: str
+    name: str | None
     prompt: str
-    cron_expression: str
+    fire_at: datetime | None
+    cron_expression: str | None
+    user_id: int | None
     enabled: bool
     last_run: datetime | None
+    source: str
     created_by: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("guild_id", "channel_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("user_id")
+    def serialize_user_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
+    @computed_field
+    @property
+    def next_run(self) -> datetime | None:
+        """Compute the next scheduled trigger time for this task.
+
+        For ``once`` tasks returns ``fire_at`` if the task hasn't fired yet.
+        For ``recurring`` tasks uses APScheduler's ``CronTrigger`` to compute
+        the next fire time from the stored cron expression.
+        """
+        now = datetime.now(timezone.utc)
+        if self.type == "once":
+            if self.fire_at and not self.last_run and self.fire_at > now:
+                return self.fire_at
+        elif self.type == "recurring" and self.cron_expression and self.enabled:
+            try:
+                from apscheduler.triggers.cron import CronTrigger
+
+                parts = self.cron_expression.strip().split()
+                if len(parts) == 5:
+                    minute, hour, day, month, day_of_week = parts
+                    trigger = CronTrigger(
+                        minute=minute,
+                        hour=hour,
+                        day=day,
+                        month=month,
+                        day_of_week=day_of_week,
+                    )
+                    return trigger.get_next_fire_time(None, now)
+            except Exception:
+                pass
+        return None
+
 
 class TaskToggle(BaseModel):
     enabled: bool
+
+
+class ScheduledTaskCreate(BaseModel):
+    type: str  # 'once' | 'recurring'
+    name: str | None = None
+    prompt: str
+    fire_at: datetime | None = None
+    cron_expression: str | None = None
+    enabled: bool = True
+    channel_id: str | None = None  # optional: used for guild tasks
+
+
+class CronFromTextRequest(BaseModel):
+    text: str
+
+
+class CronFromTextOut(BaseModel):
+    cron_expression: str
 
 
 class DocumentOut(BaseModel):
@@ -79,17 +214,8 @@ class DocumentOut(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class ReminderOut(BaseModel):
-    id: int
-    guild_id: int
-    user_id: int
-    channel_id: int
-    message: str
-    remind_at: datetime
-    sent: bool
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
+class DocumentUpdate(BaseModel):
+    description: str | None = None
 
 
 class GlossaryTermOut(BaseModel):
@@ -105,6 +231,14 @@ class GlossaryTermOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
 
 
 class GlossaryTermCreate(BaseModel):
@@ -130,6 +264,10 @@ class GlossaryTermHistoryOut(BaseModel):
 
     model_config = {"from_attributes": True}
 
+    @field_serializer("guild_id", "changed_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
 
 class DiscordChannelOut(BaseModel):
     id: str
@@ -148,6 +286,25 @@ class CampaignOut(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "channel_id", "created_by")
+    def serialize_snowflakes(self, v: int) -> str:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v)
+
+
+class CampaignCreate(BaseModel):
+    name: str
+    system: str = "unknown"
+    # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
+    channel_id: str | int
+
+
+class CampaignUpdate(BaseModel):
+    name: str | None = None
+    system: str | None = None
+    is_active: bool | None = None
+    channel_id: str | int | None = None
 
 
 class CharacterOut(BaseModel):
@@ -168,6 +325,61 @@ class UserProfileOut(BaseModel):
     id: int
     discord_user_id: int
     active_character_id: int | None
+    dm_context_cutoff: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UserDmConfigUpdate(BaseModel):
+    dm_context_cutoff: datetime | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Admin schemas                                                                #
+# --------------------------------------------------------------------------- #
+
+
+class GrugUserOut(BaseModel):
+    discord_user_id: str
+    can_invite: bool
+    is_super_admin: bool = False
+    is_env_super_admin: bool = (
+        False  # True when elevated via GRUG_SUPER_ADMIN_IDS env var
+    )
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("discord_user_id")
+    def serialize_discord_user_id(self, v: int) -> str:
+        return str(v)
+
+
+class GrugUserUpdate(BaseModel):
+    can_invite: bool | None = None
+    is_super_admin: bool | None = None
+
+
+class DiscordUserOut(BaseModel):
+    """Resolved Discord user profile from the bot API."""
+
+    discord_user_id: str
+    username: str
+    display_name: str
+    avatar_url: str | None = None
+    profile_url: str
+
+
+class DiscordMemberOut(BaseModel):
+    """A Discord guild member returned by the member-search endpoint."""
+
+    discord_user_id: str
+    username: str
+    display_name: str
+    avatar_url: str | None = None
+
+
+class InviteUrlOut(BaseModel):
+    url: str

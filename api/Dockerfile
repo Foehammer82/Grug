@@ -2,6 +2,12 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Install system dependencies (tesseract + poppler for OCR on uploaded PDFs)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    poppler-utils \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install uv for dependency management.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
@@ -23,6 +29,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Copy the full source tree — the API imports from the grug package.
 COPY grug/ grug/
 COPY api/ api/
+COPY roadmap.md roadmap.md
 # Root pyproject.toml and uv.lock are not copied into this image but uv still
 # needs them to resolve the project root; use bind mounts so they're visible
 # at sync time without adding them to the image layer.

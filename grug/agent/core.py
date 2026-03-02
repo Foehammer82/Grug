@@ -69,9 +69,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
         toolsets=toolsets,
     )
 
-    @agent.system_prompt
+    @agent.system_prompt(dynamic=True)
     def _system_prompt(_ctx: RunContext[GrugDeps]) -> str:  # noqa: ARG001
-        """Evaluate the system prompt fresh on every run so `now` stays current."""
+        """Re-evaluate on every run (dynamic=True) so `now` is always current."""
         return SYSTEM_PROMPT.format(now=datetime.now(timezone.utc).isoformat())
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
@@ -84,6 +84,51 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_scheduling_tools(agent)
     register_glossary_tools(agent)
     register_character_tools(agent)
+
+    @agent.tool
+    async def get_current_time(ctx: RunContext[GrugDeps]) -> str:
+        """Return the current time as a timezone-aware ISO-8601 string.
+
+        The time is in the guild's configured local timezone (e.g. US/Eastern),
+        falling back to the server default timezone.  Use this whenever you need
+        to compute a future datetime from a relative expression like "in 5 minutes"
+        or "in two hours", and when telling the user what time something will happen.
+        The returned value includes the UTC offset so it is safe to pass directly
+        to scheduling tools.
+        """
+        import zoneinfo
+
+        from grug.config.settings import get_settings
+        from grug.db.models import GuildConfig
+        from grug.db.session import get_session_factory
+        from sqlalchemy import select
+
+        tz_name: str = get_settings().default_timezone
+        try:
+            factory = get_session_factory()
+            async with factory() as session:
+                result = await session.execute(
+                    select(GuildConfig.timezone).where(
+                        GuildConfig.guild_id == ctx.deps.guild_id
+                    )
+                )
+                row = result.scalar_one_or_none()
+                if row:
+                    tz_name = row
+        except Exception:
+            logger.exception(
+                "get_current_time: failed to load guild timezone, using default"
+            )
+
+        try:
+            tz = zoneinfo.ZoneInfo(tz_name)
+        except Exception:
+            logger.warning(
+                "get_current_time: unknown timezone %r, falling back to UTC", tz_name
+            )
+            tz = zoneinfo.ZoneInfo("UTC")
+
+        return datetime.now(tz).isoformat()
 
     # Conversation history search (standalone — too small to extract).
     @agent.tool
@@ -134,19 +179,32 @@ class GrugAgent:
         self._context_window: int = settings.agent_context_window
 
     async def _load_history(
-        self, guild_id: int, channel_id: int
+        self,
+        guild_id: int,
+        channel_id: int,
+        context_cutoff: datetime | None = None,
     ) -> list[ModelRequest | ModelResponse]:
-        """Load recent messages, archiving overflow to RAG when the window fills."""
+        """Load recent messages, archiving overflow to RAG when the window fills.
+
+        If *context_cutoff* is set, messages older than that timestamp are
+        excluded from the context window entirely (they still exist in the DB
+        but Grug won't see them).
+        """
         settings = get_settings()
         factory = get_session_factory()
 
+        # Base filter shared by all queries in this method.
+        base_filters = [
+            ConversationMessage.guild_id == guild_id,
+            ConversationMessage.channel_id == channel_id,
+            ConversationMessage.archived.is_(False),
+        ]
+        if context_cutoff is not None:
+            base_filters.append(ConversationMessage.created_at >= context_cutoff)
+
         async with factory() as session:
             count_result = await session.execute(
-                select(func.count(ConversationMessage.id)).where(
-                    ConversationMessage.guild_id == guild_id,
-                    ConversationMessage.channel_id == channel_id,
-                    ConversationMessage.archived.is_(False),
-                )
+                select(func.count(ConversationMessage.id)).where(*base_filters)
             )
             total = count_result.scalar() or 0
 
@@ -154,11 +212,7 @@ class GrugAgent:
             if overflow >= settings.agent_history_archive_batch:
                 overflow_result = await session.execute(
                     select(ConversationMessage)
-                    .where(
-                        ConversationMessage.guild_id == guild_id,
-                        ConversationMessage.channel_id == channel_id,
-                        ConversationMessage.archived.is_(False),
-                    )
+                    .where(*base_filters)
                     .order_by(ConversationMessage.created_at.asc())
                     .limit(overflow)
                 )
@@ -189,11 +243,7 @@ class GrugAgent:
 
             recent_result = await session.execute(
                 select(ConversationMessage)
-                .where(
-                    ConversationMessage.guild_id == guild_id,
-                    ConversationMessage.channel_id == channel_id,
-                    ConversationMessage.archived.is_(False),
-                )
+                .where(*base_filters)
                 .order_by(ConversationMessage.created_at.desc())
                 .limit(self._context_window)
             )
@@ -210,7 +260,9 @@ class GrugAgent:
                         content=(
                             "[SYSTEM REMINDER] You are Grug. Speak like an orc. "
                             "No emoji. No markdown. No contractions. No 'I' or 'me'. "
-                            "Say 'Grug' instead. Keep it short and punchy."
+                            "Say 'Grug' instead. Keep it short and punchy. "
+                            "Never use a person name, display name, or username. "
+                            "Always say 'you' or 'friend' instead. No exceptions."
                         )
                     )
                 ]
@@ -228,12 +280,9 @@ class GrugAgent:
 
         for row in rows:
             if row.role == "user":
-                content = (
-                    f"{row.author_name}: {row.content}"
-                    if row.author_name
-                    else row.content
+                messages.append(
+                    ModelRequest(parts=[UserPromptPart(content=row.content)])
                 )
-                messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
         return messages
@@ -246,6 +295,7 @@ class GrugAgent:
         content: str,
         author_id: int | None = None,
         author_name: str | None = None,
+        is_passive: bool = False,
     ) -> None:
         """Persist a single conversation message."""
         factory = get_session_factory()
@@ -258,9 +308,40 @@ class GrugAgent:
                     content=content,
                     author_id=author_id,
                     author_name=author_name,
+                    is_passive=is_passive,
                 )
             )
             await session.commit()
+
+    async def save_passive_message(
+        self,
+        guild_id: int,
+        channel_id: int,
+        content: str,
+        author_id: int | None = None,
+        author_name: str | None = None,
+    ) -> None:
+        """Persist a message that Grug observed but did not respond to.
+
+        These passive messages are included in the context window so Grug
+        remains aware of the conversation even when not directly addressed.
+        """
+        try:
+            await self._save_message(
+                guild_id,
+                channel_id,
+                "user",
+                content,
+                author_id,
+                author_name,
+                is_passive=True,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to save passive message guild=%s channel=%s",
+                guild_id,
+                channel_id,
+            )
 
     async def respond(
         self,
@@ -272,12 +353,13 @@ class GrugAgent:
         campaign_id: int | None = None,
         active_character_id: int | None = None,
         is_dm_session: bool = False,
+        context_cutoff: datetime | None = None,
     ) -> str:
         """Process a user message and return Grug's response."""
         try:
             # Load history BEFORE saving the current message so the incoming
             # message isn't included in message_history AND the run() call.
-            history = await self._load_history(guild_id, channel_id)
+            history = await self._load_history(guild_id, channel_id, context_cutoff)
             await self._save_message(
                 guild_id, channel_id, "user", message, user_id, username
             )

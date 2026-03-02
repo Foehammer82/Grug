@@ -9,6 +9,7 @@ from pathlib import Path
 
 import aiofiles
 import discord
+from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
@@ -44,119 +45,110 @@ class CharactersCog(commands.Cog, name="Characters"):
         settings = get_settings()
         self._parser = CharacterSheetParser(
             anthropic_api_key=settings.anthropic_api_key,
-            anthropic_model=settings.anthropic_model,
+            anthropic_model=settings.anthropic_big_brain_model,
         )
         self._indexer = CharacterIndexer()
         self._file_data_dir = Path(settings.file_data_dir)
 
     # ------------------------------------------------------------------
-    # Commands
+    # Slash command group
     # ------------------------------------------------------------------
 
-    @commands.group(name="character", aliases=["char"], invoke_without_command=True)
-    async def character_group(self, ctx: commands.Context) -> None:
-        """Character sheet commands. Use !character <subcommand>."""
-        await ctx.send_help(ctx.command)
+    character = app_commands.Group(
+        name="character",
+        description="Manage your player character sheets.",
+    )
 
-    @character_group.command(name="upload")
-    async def upload_character(self, ctx: commands.Context) -> None:
-        """Upload a character sheet file.
-
-        Attach your sheet to this command. Supported: PDF, DOCX, PNG, JPG, WEBP, TXT, MD.
-
-        Grug will read the sheet, detect the game system, and store it so you can
-        ask questions about it in DMs or during sessions.
-
-        Usage: !character upload
-        """
-        if not ctx.message.attachments:
-            await ctx.send(
-                "Grug need file! Attach your character sheet to the command. 📄"
-            )
-            return
-
-        attachment = ctx.message.attachments[0]
-        ext = Path(attachment.filename).suffix.lower()
+    @character.command(
+        name="upload",
+        description="Upload a character sheet file for Grug to read and index.",
+    )
+    @app_commands.describe(
+        file="Your character sheet (PDF, DOCX, PNG, JPG, WEBP, TXT, or MD)."
+    )
+    async def upload_character(
+        self, interaction: discord.Interaction, file: discord.Attachment
+    ) -> None:
+        ext = Path(file.filename).suffix.lower()
         if ext not in ALLOWED_EXTENSIONS:
-            await ctx.send(
+            await interaction.response.send_message(
                 f"Grug no understand {ext} files. "
-                f"Try: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+                f"Try: {', '.join(sorted(ALLOWED_EXTENSIONS))}",
+                ephemeral=True,
             )
             return
 
-        size_mb = attachment.size / (1024 * 1024)
+        size_mb = file.size / (1024 * 1024)
         if size_mb > MAX_FILE_SIZE_MB:
-            await ctx.send(
-                f"File too big! Max {MAX_FILE_SIZE_MB} MB. Grug brain small. 🧠"
+            await interaction.response.send_message(
+                f"File too big! Max {MAX_FILE_SIZE_MB} MB. Grug brain small. 🧠",
+                ephemeral=True,
             )
             return
 
-        async with ctx.typing():
-            file_bytes = await attachment.read()
-            thinking_msg = await ctx.send(
-                "Grug reading scroll... 📜 (this take a moment)"
+        await interaction.response.defer()
+
+        file_bytes = await file.read()
+        thinking_msg = await interaction.followup.send(
+            "Grug reading scroll... 📜 (this take a moment)"
+        )
+
+        try:
+            raw_text, structured_data, detected_system = await self._parser.parse(
+                file_bytes, file.filename
             )
-
-            try:
-                raw_text, structured_data, detected_system = await self._parser.parse(
-                    file_bytes, attachment.filename
-                )
-            except Exception as exc:
-                logger.exception("Character sheet parsing failed: %s", exc)
-                await thinking_msg.edit(
-                    content="Grug brain hurt — parsing failed. Try again?"
-                )
-                return
-
-            char_name = (structured_data.get("name") or "").strip() or Path(
-                attachment.filename
-            ).stem
-            user_id = ctx.author.id
-
-            factory = get_session_factory()
-            async with factory() as session:
-                existing = await session.execute(
-                    select(Character).where(
-                        Character.owner_discord_user_id == user_id,
-                        Character.name == char_name,
-                    )
-                )
-                character = existing.scalar_one_or_none()
-                if character is None:
-                    character = Character(
-                        owner_discord_user_id=user_id,
-                        name=char_name,
-                        system=detected_system,
-                        raw_sheet_text=raw_text,
-                        structured_data=structured_data,
-                    )
-                    session.add(character)
-                else:
-                    character.system = detected_system
-                    character.raw_sheet_text = raw_text
-                    character.structured_data = structured_data
-                await session.commit()
-                await session.refresh(character)
-                character_id = character.id
-
-            # Save raw file to the persistent volume.
-            file_path = await self._save_file(
-                file_bytes, user_id, character_id, attachment.filename
+        except Exception as exc:
+            logger.exception("Character sheet parsing failed: %s", exc)
+            await thinking_msg.edit(
+                content="Grug brain hurt — parsing failed. Try again?"
             )
-            async with factory() as session:
-                row = (
-                    await session.execute(
-                        select(Character).where(Character.id == character_id)
-                    )
-                ).scalar_one()
-                row.file_path = file_path
-                await session.commit()
+            return
 
-            # Index the sheet for semantic search.
-            await self._indexer.index_character(character_id, raw_text)
+        char_name = (structured_data.get("name") or "").strip() or Path(
+            file.filename
+        ).stem
+        user_id = interaction.user.id
 
-            # Ensure profile exists; make this the active character if none is set.
-            await _ensure_user_profile(user_id, default_character_id=character_id)
+        factory = get_session_factory()
+        async with factory() as session:
+            existing = await session.execute(
+                select(Character).where(
+                    Character.owner_discord_user_id == user_id,
+                    Character.name == char_name,
+                )
+            )
+            character = existing.scalar_one_or_none()
+            if character is None:
+                character = Character(
+                    owner_discord_user_id=user_id,
+                    name=char_name,
+                    system=detected_system,
+                    raw_sheet_text=raw_text,
+                    structured_data=structured_data,
+                )
+                session.add(character)
+            else:
+                character.system = detected_system
+                character.raw_sheet_text = raw_text
+                character.structured_data = structured_data
+            await session.commit()
+            await session.refresh(character)
+            character_id = character.id
+
+        file_path = await self._save_file(
+            file_bytes, user_id, character_id, file.filename
+        )
+        async with factory() as session:
+            row = (
+                await session.execute(
+                    select(Character).where(Character.id == character_id)
+                )
+            ).scalar_one()
+            row.file_path = file_path
+            await session.commit()
+
+        await self._indexer.index_character(character_id, raw_text)
+        await _ensure_user_profile(user_id, default_character_id=character_id)
 
         system_label = GAME_SYSTEM_LABELS.get(detected_system, detected_system)
         char_level = structured_data.get("level")
@@ -171,20 +163,22 @@ class CharactersCog(commands.Cog, name="Characters"):
         if char_level:
             embed.add_field(name="Level", value=str(char_level), inline=True)
         embed.set_footer(
-            text="Use !character show to view your sheet, or DM Grug to chat about it!"
+            text="Use /character show to view your sheet, or DM Grug to chat about it!"
         )
         await thinking_msg.edit(content=None, embed=embed)
 
-    @character_group.command(name="show")
-    async def show_character(self, ctx: commands.Context, *, name: str = "") -> None:
-        """Show a character sheet.
-
-        Usage: !character show [name]
-        """
-        character = await _resolve_character(ctx.author.id, name or None)
+    @character.command(name="show", description="Show one of your character sheets.")
+    @app_commands.describe(
+        name="Character name (leave blank for your active character)."
+    )
+    async def show_character(
+        self, interaction: discord.Interaction, name: str | None = None
+    ) -> None:
+        character = await _resolve_character(interaction.user.id, name)
         if character is None:
-            await ctx.send(
-                "No character found. Upload one with `!character upload` or specify a name."
+            await interaction.response.send_message(
+                "No character found. Upload one with `/character upload` or specify a name.",
+                ephemeral=True,
             )
             return
         embed, md_text = _build_character_embed_and_md(character)
@@ -192,18 +186,17 @@ class CharactersCog(commands.Cog, name="Characters"):
             fp=io.BytesIO(md_text.encode()),
             filename=f"{character.name.replace(' ', '_')}.md",
         )
-        await ctx.send(embed=embed, file=file)
+        await interaction.response.send_message(embed=embed, file=file)
 
-    @character_group.command(name="list")
-    async def list_characters(self, ctx: commands.Context) -> None:
-        """List all your characters."""
+    @character.command(name="list", description="List all your characters.")
+    async def list_characters(self, interaction: discord.Interaction) -> None:
         factory = get_session_factory()
         async with factory() as session:
             characters = (
                 (
                     await session.execute(
                         select(Character).where(
-                            Character.owner_discord_user_id == ctx.author.id
+                            Character.owner_discord_user_id == interaction.user.id
                         )
                     )
                 )
@@ -211,11 +204,12 @@ class CharactersCog(commands.Cog, name="Characters"):
                 .all()
             )
         if not characters:
-            await ctx.send(
-                "You have no characters. Upload one with `!character upload`!"
+            await interaction.response.send_message(
+                "You have no characters. Upload one with `/character upload`!",
+                ephemeral=True,
             )
             return
-        profile = await _get_user_profile(ctx.author.id)
+        profile = await _get_user_profile(interaction.user.id)
         active_id = profile.active_character_id if profile else None
         embed = discord.Embed(title="📜 Your Characters", color=discord.Color.blue())
         for c in characters:
@@ -232,60 +226,69 @@ class CharactersCog(commands.Cog, name="Characters"):
             if c.campaign_id:
                 value += f" | Campaign ID: {c.campaign_id}"
             embed.add_field(name=f"{c.name}{active_tag}", value=value, inline=False)
-        await ctx.send(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @character_group.command(name="setactive")
-    async def set_active(self, ctx: commands.Context, *, name: str) -> None:
-        """Set your active character (used in DM sessions).
-
-        Usage: !character setactive <name>
-        """
-        character = await _resolve_character(ctx.author.id, name)
+    @character.command(
+        name="setactive", description="Set your active character (used in DM sessions)."
+    )
+    @app_commands.describe(name="The name of the character to set as active.")
+    async def set_active(self, interaction: discord.Interaction, name: str) -> None:
+        character = await _resolve_character(interaction.user.id, name)
         if character is None:
-            await ctx.send(f"Grug no find character named **{name}**. Check spelling?")
+            await interaction.response.send_message(
+                f"Grug no find character named **{name}**. Check spelling?",
+                ephemeral=True,
+            )
             return
-        await _ensure_user_profile(ctx.author.id, default_character_id=character.id)
+        await _ensure_user_profile(
+            interaction.user.id, default_character_id=character.id
+        )
         factory = get_session_factory()
         async with factory() as session:
             profile = (
                 await session.execute(
                     select(UserProfile).where(
-                        UserProfile.discord_user_id == ctx.author.id
+                        UserProfile.discord_user_id == interaction.user.id
                     )
                 )
             ).scalar_one()
             profile.active_character_id = character.id
             await session.commit()
-        await ctx.send(
+        await interaction.response.send_message(
             f"⚔️ **{character.name}** is now your active character. Grug remember!"
         )
 
-    @character_group.command(name="link")
-    async def link_campaign(self, ctx: commands.Context) -> None:
-        """Link your active character to this channel's campaign.
-
-        Usage: !character link
-        """
-        if ctx.guild is None:
-            await ctx.send("This command only works in a server channel, not DMs.")
+    @character.command(
+        name="link",
+        description="Link your active character to this channel's campaign.",
+    )
+    async def link_campaign(self, interaction: discord.Interaction) -> None:
+        if interaction.guild is None:
+            await interaction.response.send_message(
+                "This command only works in a server channel, not DMs.", ephemeral=True
+            )
             return
-        character = await _resolve_character(ctx.author.id, None)
+        character = await _resolve_character(interaction.user.id, None)
         if character is None:
-            await ctx.send(
-                "No active character. Upload one with `!character upload` first."
+            await interaction.response.send_message(
+                "No active character. Upload one with `/character upload` first.",
+                ephemeral=True,
             )
             return
         factory = get_session_factory()
         async with factory() as session:
             campaign = (
                 await session.execute(
-                    select(Campaign).where(Campaign.channel_id == ctx.channel.id)
+                    select(Campaign).where(
+                        Campaign.channel_id == interaction.channel_id
+                    )
                 )
             ).scalar_one_or_none()
         if campaign is None:
-            await ctx.send(
+            await interaction.response.send_message(
                 "No campaign is linked to this channel. "
-                "An admin can create one with `!campaign create <name>`."
+                "An admin can create one with `/campaign create`.",
+                ephemeral=True,
             )
             return
         async with factory() as session:
@@ -296,27 +299,33 @@ class CharactersCog(commands.Cog, name="Characters"):
             ).scalar_one()
             row.campaign_id = campaign.id
             await session.commit()
-        await ctx.send(
+        await interaction.response.send_message(
             f"⚔️ **{character.name}** linked to campaign **{campaign.name}**! "
             "Grug know where your adventures happen now."
         )
 
-    @character_group.command(name="export")
-    async def export_character(self, ctx: commands.Context, *, name: str = "") -> None:
-        """Export your character sheet as a Markdown file.
-
-        Usage: !character export [name]
-        """
-        character = await _resolve_character(ctx.author.id, name or None)
+    @character.command(
+        name="export", description="Export your character sheet as a Markdown file."
+    )
+    @app_commands.describe(
+        name="Character name (leave blank for your active character)."
+    )
+    async def export_character(
+        self, interaction: discord.Interaction, name: str | None = None
+    ) -> None:
+        character = await _resolve_character(interaction.user.id, name)
         if character is None:
-            await ctx.send("No character found. Upload one with `!character upload`.")
+            await interaction.response.send_message(
+                "No character found. Upload one with `/character upload`.",
+                ephemeral=True,
+            )
             return
         _, md_text = _build_character_embed_and_md(character)
         file = discord.File(
             fp=io.BytesIO(md_text.encode()),
             filename=f"{character.name.replace(' ', '_')}.md",
         )
-        await ctx.send(
+        await interaction.response.send_message(
             f"📎 Here is **{character.name}**'s sheet, adventurer!", file=file
         )
 

@@ -3,11 +3,17 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import assert_guild_member, get_current_user, get_db
+from api.deps import (
+    assert_guild_admin,
+    assert_guild_member,
+    get_current_user,
+    get_db,
+    get_or_404,
+)
 from api.schemas import (
     GlossaryTermCreate,
     GlossaryTermHistoryOut,
@@ -47,6 +53,7 @@ async def create_glossary_term(
 ) -> GlossaryTerm:
     """Create a human-authored glossary term."""
     assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
     now = datetime.now(timezone.utc)
     term = GlossaryTerm(
         guild_id=guild_id,
@@ -55,7 +62,7 @@ async def create_glossary_term(
         definition=body.definition,
         ai_generated=False,
         originally_ai_generated=False,
-        created_by=int(user["sub"]),
+        created_by=int(user["id"]),
         updated_at=now,
     )
     db.add(term)
@@ -76,14 +83,14 @@ async def update_glossary_term(
 ) -> GlossaryTerm:
     """Update a glossary term — saves a history snapshot and clears ai_generated."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(GlossaryTerm).where(
-            GlossaryTerm.id == term_id, GlossaryTerm.guild_id == guild_id
-        )
+    await assert_guild_admin(guild_id, user)
+    term = await get_or_404(
+        db,
+        GlossaryTerm,
+        GlossaryTerm.id == term_id,
+        GlossaryTerm.guild_id == guild_id,
+        detail="Glossary term not found",
     )
-    term = result.scalar_one_or_none()
-    if term is None:
-        raise HTTPException(status_code=404, detail="Glossary term not found")
 
     # Snapshot before changing.
     history = GlossaryTermHistory(
@@ -92,7 +99,7 @@ async def update_glossary_term(
         old_term=term.term,
         old_definition=term.definition,
         old_ai_generated=term.ai_generated,
-        changed_by=int(user["sub"]),
+        changed_by=int(user["id"]),
     )
     db.add(history)
 
@@ -117,14 +124,14 @@ async def delete_glossary_term(
 ) -> None:
     """Delete a glossary term."""
     assert_guild_member(guild_id, user)
-    result = await db.execute(
-        select(GlossaryTerm).where(
-            GlossaryTerm.id == term_id, GlossaryTerm.guild_id == guild_id
-        )
+    await assert_guild_admin(guild_id, user)
+    term = await get_or_404(
+        db,
+        GlossaryTerm,
+        GlossaryTerm.id == term_id,
+        GlossaryTerm.guild_id == guild_id,
+        detail="Glossary term not found",
     )
-    term = result.scalar_one_or_none()
-    if term is None:
-        raise HTTPException(status_code=404, detail="Glossary term not found")
     await db.delete(term)
     await db.commit()
 
@@ -141,13 +148,14 @@ async def get_glossary_term_history(
 ) -> list[GlossaryTermHistory]:
     """Retrieve the full change history for a glossary term."""
     assert_guild_member(guild_id, user)
-    term_result = await db.execute(
-        select(GlossaryTerm).where(
-            GlossaryTerm.id == term_id, GlossaryTerm.guild_id == guild_id
-        )
+    # Verify the term exists
+    await get_or_404(
+        db,
+        GlossaryTerm,
+        GlossaryTerm.id == term_id,
+        GlossaryTerm.guild_id == guild_id,
+        detail="Glossary term not found",
     )
-    if term_result.scalar_one_or_none() is None:
-        raise HTTPException(status_code=404, detail="Glossary term not found")
 
     history_result = await db.execute(
         select(GlossaryTermHistory)

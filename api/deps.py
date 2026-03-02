@@ -1,30 +1,55 @@
 """FastAPI dependencies shared across route modules."""
 
+import logging
+import time
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, TypeVar
 
+import httpx
 from fastapi import Cookie, HTTPException, status
 from jose import JWTError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import decode_jwt
+from grug.config.settings import get_settings
 from grug.db.session import get_session_factory
+
+T = TypeVar("T")
+logger = logging.getLogger(__name__)
+
+# Discord permission bits
+_ADMINISTRATOR_BIT = 0x8
+
+# Simple in-memory cache for guild member role lookups.
+# Key: (guild_id, user_id) -> (roles_list, timestamp)
+_ROLE_CACHE: dict[tuple[str, str], tuple[list[str], float]] = {}
+_ROLE_CACHE_TTL = 300  # 5 minutes
 
 
 async def get_current_user(
     session: str | None = Cookie(default=None),
 ) -> dict[str, Any]:
-    """Extract and verify the current user from the session cookie."""
+    """Extract and verify the current user from the session cookie.
+
+    Normalises the decoded JWT so that ``user["id"]`` always equals
+    ``user["sub"]`` (the Discord user ID).  This avoids inconsistencies
+    across route handlers.
+    """
     if not session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
         )
     try:
-        return decode_jwt(session)
+        payload = decode_jwt(session)
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid session"
         )
+    # Ensure "id" is always present as an alias of "sub".
+    if "id" not in payload:
+        payload["id"] = payload["sub"]
+    return payload
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -40,4 +65,190 @@ def assert_guild_member(guild_id: int | str, user: dict[str, Any]) -> None:
     if str(guild_id) not in guild_ids:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this guild"
+        )
+
+
+async def get_or_404(
+    db: AsyncSession,
+    model: type[T],
+    *filters,
+    detail: str = "Not found",
+) -> T:
+    """Fetch a single row or raise 404."""
+    result = await db.execute(select(model).where(*filters))
+    entity = result.scalar_one_or_none()
+    if entity is None:
+        raise HTTPException(status_code=404, detail=detail)
+    return entity
+
+
+def get_bot_token() -> str:
+    """Return the Discord bot token, preferring the API-specific setting."""
+    from grug.config.settings import get_settings
+
+    settings = get_settings()
+    token = settings.discord_bot_token or settings.discord_token
+    if not token:
+        raise HTTPException(status_code=503, detail="Bot token not configured")
+    return token
+
+
+# --------------------------------------------------------------------------- #
+# Permission helpers                                                           #
+# --------------------------------------------------------------------------- #
+
+
+def is_super_admin(user: dict[str, Any]) -> bool:
+    """Check if the user is a Grug super-admin via environment variable."""
+    settings = get_settings()
+    return str(user.get("sub", user.get("id", ""))) in settings.grug_super_admin_ids
+
+
+async def is_super_admin_full(user: dict[str, Any]) -> bool:
+    """Check if the user is a super-admin by env var OR the DB ``is_super_admin`` flag."""
+    if is_super_admin(user):
+        return True
+    from grug.db.models import GrugUser
+
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(GrugUser).where(
+                GrugUser.discord_user_id == int(user.get("sub", user.get("id", 0)))
+            )
+        )
+        grug_user = result.scalar_one_or_none()
+        return bool(grug_user and grug_user.is_super_admin)
+
+
+async def assert_super_admin(user: dict[str, Any]) -> None:
+    """Raise 403 if the user is not a super-admin (env var OR DB flag)."""
+    if not await is_super_admin_full(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super-admin access required",
+        )
+
+
+async def has_can_invite(user: dict[str, Any]) -> bool:
+    """Check if the user has the can_invite privilege."""
+    if await is_super_admin_full(user):
+        return True
+    from grug.db.models import GrugUser
+
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(GrugUser).where(
+                GrugUser.discord_user_id == int(user.get("sub", user.get("id", 0)))
+            )
+        )
+        grug_user = result.scalar_one_or_none()
+        return grug_user.can_invite if grug_user else False
+
+
+async def assert_can_invite(user: dict[str, Any]) -> None:
+    """Raise 403 if the user cannot invite Grug to servers."""
+    if not await has_can_invite(user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invite privilege required",
+        )
+
+
+def _has_guild_admin_permission(guild_id: int | str, user: dict[str, Any]) -> bool:
+    """Check if the user has Discord ADMINISTRATOR permission for a guild.
+
+    This is inferred from the ``permissions`` string stored in the JWT
+    for each guild.
+    """
+    guild_id_str = str(guild_id)
+    for g in user.get("guilds", []):
+        if g["id"] == guild_id_str:
+            perms = int(g.get("permissions", "0"))
+            return bool(perms & _ADMINISTRATOR_BIT)
+    return False
+
+
+async def _has_grug_admin_role(guild_id: int | str, user_id: str) -> bool:
+    """Check if a Discord user has the grug-admin role in a guild.
+
+    Uses the bot token to query the Discord API for the member's roles,
+    then cross-references with the stored grug_admin_role_id.  Results
+    are cached for 5 minutes to avoid rate-limiting.
+    """
+    guild_id_str = str(guild_id)
+    cache_key = (guild_id_str, user_id)
+    now = time.time()
+
+    # Check cache first
+    if cache_key in _ROLE_CACHE:
+        cached_roles, cached_at = _ROLE_CACHE[cache_key]
+        if now - cached_at < _ROLE_CACHE_TTL:
+            return await _check_role_match(guild_id_str, cached_roles)
+
+    # Fetch from Discord
+    try:
+        bot_token = get_bot_token()
+        async with httpx.AsyncClient() as http:
+            resp = await http.get(
+                f"https://discord.com/api/v10/guilds/{guild_id_str}/members/{user_id}",
+                headers={"Authorization": f"Bot {bot_token}"},
+            )
+        if resp.status_code == 200:
+            member_roles = resp.json().get("roles", [])
+            _ROLE_CACHE[cache_key] = (member_roles, now)
+            return await _check_role_match(guild_id_str, member_roles)
+    except HTTPException:
+        pass  # Bot token not configured
+    except Exception:
+        logger.warning(
+            "Failed to check grug-admin role for user %s in guild %s",
+            user_id,
+            guild_id_str,
+            exc_info=True,
+        )
+
+    return False
+
+
+async def _check_role_match(guild_id_str: str, member_roles: list[str]) -> bool:
+    """Check if any of the member's roles matches the grug_admin_role_id."""
+    from grug.db.models import GuildConfig
+
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(GuildConfig.grug_admin_role_id).where(
+                GuildConfig.guild_id == int(guild_id_str)
+            )
+        )
+        role_id = result.scalar_one_or_none()
+        if role_id is None:
+            return False
+        return str(role_id) in member_roles
+
+
+async def is_guild_admin(guild_id: int | str, user: dict[str, Any]) -> bool:
+    """Check if the user has admin access to a guild.
+
+    Admin access is granted if any of the following are true:
+    1. The user is a Grug super-admin (env var or DB flag).
+    2. The JWT shows Discord ADMINISTRATOR permission for this guild.
+    3. The user has the ``grug-admin`` role in the Discord guild.
+    """
+    if await is_super_admin_full(user):
+        return True
+    if _has_guild_admin_permission(guild_id, user):
+        return True
+    user_id = str(user.get("sub", user.get("id", "")))
+    return await _has_grug_admin_role(guild_id, user_id)
+
+
+async def assert_guild_admin(guild_id: int | str, user: dict[str, Any]) -> None:
+    """Raise 403 if the user does not have admin access to this guild."""
+    if not await is_guild_admin(guild_id, user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guild admin access required",
         )

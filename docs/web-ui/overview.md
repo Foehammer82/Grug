@@ -42,7 +42,7 @@ Once you've selected a server, the sidebar (or top nav on smaller screens) provi
 
 | Page | What you can do |
 |---|---|
-| [Guild Config](guild-config.md) | Update timezone and announce channel |
+| [Guild Config](guild-config.md) | Update server timezone and bot channel |
 | [Events](events.md) | View upcoming calendar events |
 | [Scheduled Tasks](tasks.md) | View, enable/disable, or delete tasks |
 | [Documents](documents.md) | View and delete indexed documents |

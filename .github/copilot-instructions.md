@@ -74,6 +74,72 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not commit secrets, API keys, or credentials to the repository.
 - Do not break backward compatibility without a clear migration path and documentation.
 
+## Domain Concepts — Context Awareness
+
+Grug passively logs **every** non-bot guild message to `conversation_messages` with `is_passive=True` so he stays context-aware in channels even when not @mentioned. When he actually responds, the message is saved with `is_passive=False` (the default).
+
+### Context Cutoff — Precedence
+
+Three levels of context cutoff control how far back Grug reads history:
+
+| Level | Model field | Scope |
+|---|---|---|
+| Per-channel | `ChannelConfig.context_cutoff` | Highest priority; overrides guild |
+| Per-guild | `GuildConfig.context_cutoff` | Server-wide default |
+| Per-user (DMs) | `UserProfile.dm_context_cutoff` | DM sessions only |
+
+`None` at any level means "no cutoff — load all available history."  The effective cutoff is resolved in `_get_effective_context_cutoff()` in `grug/bot/cogs/ai_chat.py` and passed to `GrugAgent.respond()` → `_load_history()`.
+
+### ChannelConfig model
+
+`ChannelConfig` (table `channel_configs`) stores per-channel settings:
+- `always_respond: bool` — replaces the old in-memory `_ALWAYS_RESPOND_CHANNELS` set; persists across restarts
+- `context_cutoff: datetime | None` — per-channel cutoff override
+- `guild_id` FK → `guild_configs.guild_id`
+- `channel_id` unique index
+
+The `/chat_here` slash command now reads/writes this table instead of an in-memory set.
+
+## Domain Concepts — Scheduled Tasks
+
+**Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:
+
+| `type` | Trigger | Post-fire behaviour |
+|---|---|---|
+| `'once'` | Fires once at `fire_at` (datetime) | `enabled` set to `False`, `last_run` updated |
+| `'recurring'` | Fires on `cron_expression` (5-field UTC cron) | `last_run` updated; keeps running |
+
+Key points:
+- The agent creates both types via a **single tool**: `create_scheduled_task` (in `grug/agent/tools/scheduling_tools.py`). Pass `fire_at` for one-shot, `cron_expression` for recurring.
+- Execution is handled by a **single callback**: `execute_scheduled_task(task_id)` (in `grug/scheduler/tasks.py`). Never add a second callback function for task execution.
+- The scheduler sync (`grug/scheduler/sync.py`) re-registers **both** types on startup so neither type is lost on restart.
+- **Never** add a separate `Reminder` model, `send_reminder` function, or `create_reminder` agent tool. Always extend `ScheduledTask`.
+- `name` and `cron_expression` are nullable columns; `name` auto-defaults to first 80 chars of `prompt` for one-shot tasks.
+
+## API Patterns (FastAPI)
+
+### PATCH endpoints — nullable field clearing
+**Never** gate an optional field update with `if body.field is not None`. This silently swallows intentional null-clears. Use `model_fields_set` instead:
+
+```python
+# WRONG — cannot clear a field to null
+if body.announce_channel_id is not None:
+    cfg.announce_channel_id = body.announce_channel_id
+
+# CORRECT — handles explicit null
+if "announce_channel_id" in body.model_fields_set:
+    cfg.announce_channel_id = body.announce_channel_id
+```
+
+### Discord bot token
+The settings object has two token fields: `discord_token` (used by the bot) and `discord_bot_token` (used by the API for Discord proxy calls). In practice they are the same credential. API routes that call the Discord REST API must fall back to `discord_token` when `discord_bot_token` is empty:
+```python
+bot_token = settings.discord_bot_token or settings.discord_token
+```
+
+### Discord system channel
+`GET /guilds/{id}` from the Discord API returns `system_channel_id` — the channel the server admin designated for system messages (joins, boosts, etc). Use this as the default `announce_channel_id` when none is configured.
+
 ## Capturing Pitched Ideas
 
 There are two roadmap documents with distinct purposes:
@@ -92,7 +158,7 @@ When the user corrects a response, points out a mistake, or shares an important 
 - If the correction defines a **reusable capability with scripts or multi-step logic** (e.g. "here is our full deploy workflow"), consider creating or updating an agent skill under `.github/skills/`.
 - After applying the update, briefly confirm what was changed so the user knows the knowledge has been captured.
 
-The goal is for this file and its companion artifacts to remain a living, accurate record of how Grug is built — so future Copilot sessions start from the right context without re-explaining the same things.
+**Self-reminder:** At the natural end of any substantial working session — or when the user explicitly asks — proactively review what was built, fixed, or learned and update these instructions and/or path-scoped instruction files (`.github/instructions/*.instructions.md`) without waiting to be asked. The goal is for this file and its companion artifacts to remain a living, accurate record of how Grug is built — so future Copilot sessions start from the right context without re-explaining the same things.
 
 ## Instructions vs. Prompt Files vs. Agent Skills
 

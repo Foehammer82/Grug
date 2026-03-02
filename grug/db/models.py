@@ -28,9 +28,15 @@ class GuildConfig(Base):
     guild_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
     )
-    prefix: Mapped[str] = mapped_column(String(10), default="!")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")
     announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Discord snowflake ID of the auto-created "grug-admin" role in this guild.
+    grug_admin_role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Messages timestamped before this are excluded from Grug's context window.
+    # None means no cutoff — load all available history.
+    context_cutoff: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -41,10 +47,54 @@ class GuildConfig(Base):
     )
 
     events: Mapped[list["CalendarEvent"]] = relationship(back_populates="guild")
-    reminders: Mapped[list["Reminder"]] = relationship(back_populates="guild")
     scheduled_tasks: Mapped[list["ScheduledTask"]] = relationship(
         back_populates="guild"
     )
+    channel_configs: Mapped[list["ChannelConfig"]] = relationship(
+        back_populates="guild"
+    )
+
+
+class ChannelConfig(Base):
+    """Per-channel configuration — overrides guild-level defaults where set.
+
+    ``always_respond`` replaces the old in-memory ``_ALWAYS_RESPOND_CHANNELS``
+    set so the setting survives bot restarts.
+
+    ``context_cutoff`` overrides the guild-level cutoff for this specific
+    channel.  ``None`` means "fall back to the guild setting".
+    """
+
+    __tablename__ = "channel_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("guild_configs.guild_id"),
+        nullable=False,
+        index=True,
+    )
+    channel_id: Mapped[int] = mapped_column(
+        BigInteger, unique=True, nullable=False, index=True
+    )
+    # When True, Grug responds to every message here (not just @mentions).
+    always_respond: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Channel-level override for the context cutoff.  None = use guild default.
+    context_cutoff: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    guild: Mapped["GuildConfig"] = relationship(back_populates="channel_configs")
 
 
 class Campaign(Base):
@@ -128,6 +178,12 @@ class UserProfile(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+    # Messages timestamped before this are excluded from Grug's DM context window.
+    # None means no cutoff — load all available DM history.
+    dm_context_cutoff: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     active_character: Mapped["Character | None"] = relationship(
         "Character", foreign_keys=[active_character_id]
     )
@@ -153,7 +209,12 @@ class Document(Base):
 
 
 class CalendarEvent(Base):
-    """A calendar event for a guild."""
+    """A calendar event for a guild.
+
+    Supports one-off and recurring events.  Recurrence is stored as an
+    iCal RRULE string (e.g. ``FREQ=WEEKLY;INTERVAL=2;BYDAY=TH``) and
+    expanded server-side into concrete occurrences when queried.
+    """
 
     __tablename__ = "calendar_events"
 
@@ -169,38 +230,31 @@ class CalendarEvent(Base):
     end_time: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # iCal RRULE string for recurring events, e.g. "FREQ=WEEKLY;BYDAY=TH"
+    rrule: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Human-readable location (voice channel name, address, etc.)
+    location: Mapped[str | None] = mapped_column(String(256), nullable=True)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
 
 
-class Reminder(Base):
-    """A reminder for a user."""
-
-    __tablename__ = "reminders"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    guild_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
-    )
-    user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
-    channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    remind_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    guild: Mapped["GuildConfig"] = relationship(back_populates="reminders")
-
-
 class ScheduledTask(Base):
-    """A recurring agent task (e.g. 'tell a joke every Friday at 9am')."""
+    """A scheduled agent task — either a one-shot reminder (type='once') or a
+    recurring automated prompt (type='recurring').
+
+    * ``type='once'``:      fires once at ``fire_at``; set ``enabled=False`` after firing.
+    * ``type='recurring'``: fires on ``cron_expression``; updates ``last_run`` each time.
+    """
 
     __tablename__ = "scheduled_tasks"
 
@@ -209,9 +263,22 @@ class ScheduledTask(Base):
         BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
     )
     channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
-    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # 'once' | 'recurring'
+    type: Mapped[str] = mapped_column(String(16), nullable=False, default="recurring")
+    name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     prompt: Mapped[str] = mapped_column(Text, nullable=False)
-    cron_expression: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Populated for type='once'
+    fire_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Populated for type='recurring'
+    cron_expression: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Where this task was created from: 'discord' (agent tool) or 'web' (UI).
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="discord", server_default="discord"
+    )
+    # Discord user who requested the task (primarily used for type='once')
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     last_run: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
@@ -241,8 +308,43 @@ class ConversationMessage(Base):
     archived: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
     )
+    # True = message was logged for context awareness but Grug was not @mentioned
+    # and did not respond to it in this exchange.
+    is_passive: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class GrugUser(Base):
+    """Global Grug user record — tracks per-user privileges like can_invite.
+
+    Super-admin status can be set via the GRUG_SUPER_ADMIN_IDS env var OR
+    by setting ``is_super_admin=True`` in this table.
+    """
+
+    __tablename__ = "grug_users"
+
+    discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=False
+    )
+    # When True, this user can generate invite URLs to add Grug to servers.
+    can_invite: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Grants full super-admin access (same as being listed in GRUG_SUPER_ADMIN_IDS).
+    is_super_admin: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 

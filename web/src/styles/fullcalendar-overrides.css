@@ -1,0 +1,128 @@
+/*
+ * FullCalendar theme overrides — adapts to Grug's GitHub-inspired dark/light
+ * MUI themes via CSS custom properties set by the CalendarThemeProvider wrapper.
+ *
+ * Colour tokens are injected as inline CSS vars on the calendar container by
+ * EventsPage so they stay in sync with MUI's palette.
+ */
+
+/* ---- Global ---- */
+.fc {
+  --fc-border-color: var(--grug-divider);
+  --fc-page-bg-color: var(--grug-bg);
+  --fc-neutral-bg-color: var(--grug-paper);
+  --fc-list-event-hover-bg-color: var(--grug-hover);
+  --fc-today-bg-color: var(--grug-today-bg);
+  --fc-event-bg-color: var(--grug-primary);
+  --fc-event-border-color: var(--grug-primary);
+  --fc-event-text-color: #fff;
+
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 0.875rem;
+}
+
+/* ---- Toolbar ---- */
+.fc .fc-toolbar-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--grug-text-primary);
+}
+
+.fc .fc-button {
+  background: var(--grug-paper);
+  border: 1px solid var(--grug-divider);
+  color: var(--grug-text-primary);
+  font-weight: 500;
+  text-transform: none;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 0.8125rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.fc .fc-button:hover {
+  background: var(--grug-hover);
+  border-color: var(--grug-primary);
+}
+
+.fc .fc-button-active,
+.fc .fc-button:active {
+  background: var(--grug-primary) !important;
+  color: #fff !important;
+  border-color: var(--grug-primary) !important;
+}
+
+.fc .fc-button:focus {
+  box-shadow: 0 0 0 2px var(--grug-primary-alpha);
+}
+
+/* ---- Day headers ---- */
+.fc .fc-col-header-cell {
+  background: var(--grug-paper);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--grug-text-secondary);
+  padding: 8px 0;
+}
+
+.fc .fc-col-header-cell-cushion {
+  color: var(--grug-text-secondary);
+  text-decoration: none;
+}
+
+/* ---- Day cells ---- */
+.fc .fc-daygrid-day-number {
+  color: var(--grug-text-primary);
+  text-decoration: none;
+  font-size: 0.8125rem;
+  padding: 4px 8px;
+}
+
+.fc .fc-day-other .fc-daygrid-day-number {
+  color: var(--grug-text-secondary);
+  opacity: 0.5;
+}
+
+/* ---- Events ---- */
+.fc .fc-daygrid-event {
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.fc .fc-timegrid-event {
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.fc-event.fc-event-task {
+  --fc-event-bg-color: var(--grug-success);
+  --fc-event-border-color: var(--grug-success);
+  opacity: 0.85;
+}
+
+/* ---- Scrollbar (for time-grid views) ---- */
+.fc .fc-scroller::-webkit-scrollbar {
+  width: 6px;
+}
+
+.fc .fc-scroller::-webkit-scrollbar-thumb {
+  background: var(--grug-divider);
+  border-radius: 3px;
+}
+
+/* ---- Time-grid slot labels ---- */
+.fc .fc-timegrid-slot-label-cushion {
+  color: var(--grug-text-secondary);
+  font-size: 0.75rem;
+}
+
+/* ---- "more" link ---- */
+.fc .fc-more-link {
+  color: var(--grug-primary);
+  font-weight: 600;
+  font-size: 0.75rem;
+}

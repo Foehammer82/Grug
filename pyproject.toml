@@ -9,10 +9,12 @@ description = "Discord bot launcher for Grug"
 requires-python = ">=3.12"
 dependencies = [
     "grug",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [tool.uv.sources]
 grug = { workspace = true }
+grug-api = { workspace = true }
 
 [tool.uv.workspace]
 members = ["grug", "api"]
@@ -23,6 +25,7 @@ dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "aiosqlite>=0.19.0",
+    "grug-api",
 ]
 
 [project.scripts]
