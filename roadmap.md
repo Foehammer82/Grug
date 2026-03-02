@@ -32,6 +32,13 @@
 
 <!-- e.g. dashboard improvements, character sheet viewer, campaign manager -->
 
+- **Events — RSVP & Attendance Tracking:** Add an RSVP model (`event_id`, `user_id`, `status: attending|maybe|declined`, `note`) so group members can confirm attendance for each event/occurrence. Show RSVP status in the EventDetailModal.
+- **Events — Per-Occurrence Overrides:** Allow rescheduling or cancelling individual occurrences of a recurring event without touching the series. Requires an `event_exceptions` table (keyed on `event_id` + `original_start`) storing overrides like a different time, a cancellation flag, or a note.
+- **Events — Item/Planning Notes:** Let users attach notes or items to an event (e.g. "Blake is bringing snacks", "need to prep encounter maps"). Could be a simple `event_notes` table or a JSON column.
+- **Events — Scheduling / Availability Polling Engine:** Rallly-style scheduling polls — propose multiple date/time options for a session, let members vote on availability, auto-pick the best slot. Similar to [Rallly](https://github.com/lukevella/rallly). Needs a `scheduling_poll` model with `poll_options` and `poll_votes` tables. Surface in the web UI and optionally via Discord slash commands.
+- **Events — iCal Export/Import:** Export guild events as an `.ics` feed (subscribe from Google Calendar / Outlook). RRULE storage already uses iCal standard, so export is straightforward.
+- **Events — Drag & Drop Rescheduling:** Wire FullCalendar's `eventDrop` and `eventResize` callbacks to PATCH the event's start/end times inline.
+
 ### Infrastructure & DevOps
 
 <!-- e.g. easier self-hosting, one-click deploy, better Docker ergonomics -->

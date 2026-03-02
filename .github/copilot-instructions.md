@@ -74,6 +74,32 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not commit secrets, API keys, or credentials to the repository.
 - Do not break backward compatibility without a clear migration path and documentation.
 
+## Domain Concepts — Context Awareness
+
+Grug passively logs **every** non-bot guild message to `conversation_messages` with `is_passive=True` so he stays context-aware in channels even when not @mentioned. When he actually responds, the message is saved with `is_passive=False` (the default).
+
+### Context Cutoff — Precedence
+
+Three levels of context cutoff control how far back Grug reads history:
+
+| Level | Model field | Scope |
+|---|---|---|
+| Per-channel | `ChannelConfig.context_cutoff` | Highest priority; overrides guild |
+| Per-guild | `GuildConfig.context_cutoff` | Server-wide default |
+| Per-user (DMs) | `UserProfile.dm_context_cutoff` | DM sessions only |
+
+`None` at any level means "no cutoff — load all available history."  The effective cutoff is resolved in `_get_effective_context_cutoff()` in `grug/bot/cogs/ai_chat.py` and passed to `GrugAgent.respond()` → `_load_history()`.
+
+### ChannelConfig model
+
+`ChannelConfig` (table `channel_configs`) stores per-channel settings:
+- `always_respond: bool` — replaces the old in-memory `_ALWAYS_RESPOND_CHANNELS` set; persists across restarts
+- `context_cutoff: datetime | None` — per-channel cutoff override
+- `guild_id` FK → `guild_configs.guild_id`
+- `channel_id` unique index
+
+The `/chat_here` slash command now reads/writes this table instead of an in-memory set.
+
 ## Domain Concepts — Scheduled Tasks
 
 **Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:

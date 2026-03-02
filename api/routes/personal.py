@@ -17,8 +17,10 @@ from api.schemas import (
     ScheduledTaskCreate,
     ScheduledTaskOut,
     TaskToggle,
+    UserDmConfigUpdate,
+    UserProfileOut,
 )
-from grug.db.models import ScheduledTask
+from grug.db.models import ScheduledTask, UserProfile
 from grug.utils import ensure_guild
 
 router = APIRouter(prefix="/api/personal", tags=["personal"])
@@ -101,6 +103,7 @@ async def create_personal_task(
         fire_at=body.fire_at,
         cron_expression=body.cron_expression,
         enabled=body.enabled,
+        source="web",
         created_by=user_id,
         user_id=user_id,
     )
@@ -149,3 +152,50 @@ async def delete_personal_task(
         raise HTTPException(status_code=404, detail="Task not found")
     await db.delete(task)
     await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# DM context configuration                                                     #
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/dm-config", response_model=UserProfileOut)
+async def get_dm_config(
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserProfile:
+    """Return the current user's DM configuration (includes context cutoff)."""
+    user_id = int(user["id"])
+    result = await db.execute(
+        select(UserProfile).where(UserProfile.discord_user_id == user_id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        profile = UserProfile(discord_user_id=user_id)
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+    return profile
+
+
+@router.patch("/dm-config", response_model=UserProfileOut)
+async def update_dm_config(
+    body: UserDmConfigUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserProfile:
+    """Update the current user's DM context cutoff."""
+
+    user_id = int(user["id"])
+    result = await db.execute(
+        select(UserProfile).where(UserProfile.discord_user_id == user_id)
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        profile = UserProfile(discord_user_id=user_id)
+        db.add(profile)
+    if "dm_context_cutoff" in body.model_fields_set:
+        profile.dm_context_cutoff = body.dm_context_cutoff
+    await db.commit()
+    await db.refresh(profile)
+    return profile

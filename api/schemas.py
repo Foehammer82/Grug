@@ -26,6 +26,7 @@ class GuildConfigOut(BaseModel):
     guild_id: int
     timezone: str
     announce_channel_id: int | None
+    context_cutoff: datetime | None
 
     model_config = {"from_attributes": True}
 
@@ -39,6 +40,22 @@ class GuildConfigUpdate(BaseModel):
     timezone: str | None = None
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     announce_channel_id: str | int | None = None
+    context_cutoff: datetime | None = None
+
+
+class ChannelConfigOut(BaseModel):
+    channel_id: int
+    guild_id: int
+    always_respond: bool
+    context_cutoff: datetime | None
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ChannelConfigUpdate(BaseModel):
+    always_respond: bool | None = None
+    context_cutoff: datetime | None = None
 
 
 class CalendarEventOut(BaseModel):
@@ -48,11 +65,39 @@ class CalendarEventOut(BaseModel):
     description: str | None
     start_time: datetime
     end_time: datetime | None
+    rrule: str | None = None
+    location: str | None = None
     channel_id: int | None
     created_by: int
     created_at: datetime
+    updated_at: datetime | None = None
+    # When serving expanded occurrences the API sets these to the concrete
+    # start/end for that occurrence, leaving the original start_time/end_time
+    # as the series anchor.
+    occurrence_start: datetime | None = None
+    occurrence_end: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class CalendarEventCreate(BaseModel):
+    title: str
+    description: str | None = None
+    start_time: datetime
+    end_time: datetime | None = None
+    rrule: str | None = None
+    location: str | None = None
+    channel_id: str | int | None = None
+
+
+class CalendarEventUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+    rrule: str | None = None
+    location: str | None = None
+    channel_id: str | int | None = None
 
 
 class ScheduledTaskOut(BaseModel):
@@ -67,6 +112,7 @@ class ScheduledTaskOut(BaseModel):
     user_id: int | None
     enabled: bool
     last_run: datetime | None
+    source: str
     created_by: int
     created_at: datetime
 
@@ -221,6 +267,11 @@ class UserProfileOut(BaseModel):
     id: int
     discord_user_id: int
     active_character_id: int | None
+    dm_context_cutoff: datetime | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class UserDmConfigUpdate(BaseModel):
+    dm_context_cutoff: datetime | None = None

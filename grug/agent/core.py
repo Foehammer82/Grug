@@ -179,19 +179,32 @@ class GrugAgent:
         self._context_window: int = settings.agent_context_window
 
     async def _load_history(
-        self, guild_id: int, channel_id: int
+        self,
+        guild_id: int,
+        channel_id: int,
+        context_cutoff: datetime | None = None,
     ) -> list[ModelRequest | ModelResponse]:
-        """Load recent messages, archiving overflow to RAG when the window fills."""
+        """Load recent messages, archiving overflow to RAG when the window fills.
+
+        If *context_cutoff* is set, messages older than that timestamp are
+        excluded from the context window entirely (they still exist in the DB
+        but Grug won't see them).
+        """
         settings = get_settings()
         factory = get_session_factory()
 
+        # Base filter shared by all queries in this method.
+        base_filters = [
+            ConversationMessage.guild_id == guild_id,
+            ConversationMessage.channel_id == channel_id,
+            ConversationMessage.archived.is_(False),
+        ]
+        if context_cutoff is not None:
+            base_filters.append(ConversationMessage.created_at >= context_cutoff)
+
         async with factory() as session:
             count_result = await session.execute(
-                select(func.count(ConversationMessage.id)).where(
-                    ConversationMessage.guild_id == guild_id,
-                    ConversationMessage.channel_id == channel_id,
-                    ConversationMessage.archived.is_(False),
-                )
+                select(func.count(ConversationMessage.id)).where(*base_filters)
             )
             total = count_result.scalar() or 0
 
@@ -199,11 +212,7 @@ class GrugAgent:
             if overflow >= settings.agent_history_archive_batch:
                 overflow_result = await session.execute(
                     select(ConversationMessage)
-                    .where(
-                        ConversationMessage.guild_id == guild_id,
-                        ConversationMessage.channel_id == channel_id,
-                        ConversationMessage.archived.is_(False),
-                    )
+                    .where(*base_filters)
                     .order_by(ConversationMessage.created_at.asc())
                     .limit(overflow)
                 )
@@ -234,11 +243,7 @@ class GrugAgent:
 
             recent_result = await session.execute(
                 select(ConversationMessage)
-                .where(
-                    ConversationMessage.guild_id == guild_id,
-                    ConversationMessage.channel_id == channel_id,
-                    ConversationMessage.archived.is_(False),
-                )
+                .where(*base_filters)
                 .order_by(ConversationMessage.created_at.desc())
                 .limit(self._context_window)
             )
@@ -290,6 +295,7 @@ class GrugAgent:
         content: str,
         author_id: int | None = None,
         author_name: str | None = None,
+        is_passive: bool = False,
     ) -> None:
         """Persist a single conversation message."""
         factory = get_session_factory()
@@ -302,9 +308,40 @@ class GrugAgent:
                     content=content,
                     author_id=author_id,
                     author_name=author_name,
+                    is_passive=is_passive,
                 )
             )
             await session.commit()
+
+    async def save_passive_message(
+        self,
+        guild_id: int,
+        channel_id: int,
+        content: str,
+        author_id: int | None = None,
+        author_name: str | None = None,
+    ) -> None:
+        """Persist a message that Grug observed but did not respond to.
+
+        These passive messages are included in the context window so Grug
+        remains aware of the conversation even when not directly addressed.
+        """
+        try:
+            await self._save_message(
+                guild_id,
+                channel_id,
+                "user",
+                content,
+                author_id,
+                author_name,
+                is_passive=True,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to save passive message guild=%s channel=%s",
+                guild_id,
+                channel_id,
+            )
 
     async def respond(
         self,
@@ -316,12 +353,13 @@ class GrugAgent:
         campaign_id: int | None = None,
         active_character_id: int | None = None,
         is_dm_session: bool = False,
+        context_cutoff: datetime | None = None,
     ) -> str:
         """Process a user message and return Grug's response."""
         try:
             # Load history BEFORE saving the current message so the incoming
             # message isn't included in message_history AND the run() call.
-            history = await self._load_history(guild_id, channel_id)
+            history = await self._load_history(guild_id, channel_id, context_cutoff)
             await self._save_message(
                 guild_id, channel_id, "user", message, user_id, username
             )

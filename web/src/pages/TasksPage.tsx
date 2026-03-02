@@ -40,6 +40,7 @@ interface ScheduledTask {
   prompt: string;
   fire_at: string | null;
   cron_expression: string | null;
+  source: string;
   enabled: boolean;
   last_run: string | null;
   next_run: string | null;
@@ -100,7 +101,7 @@ export default function TasksPage() {
       const res = await client.get<DiscordChannel[]>(`/api/guilds/${guildId}/channels`);
       return res.data;
     },
-    enabled: !!guildId && dialogOpen,
+    enabled: !!guildId,
   });
 
   const { data: guildConfig } = useQuery<GuildConfig>({
@@ -204,7 +205,7 @@ export default function TasksPage() {
           <Table size="small">
             <TableHead>
               <TableRow>
-                {['Type', 'Name / Prompt', 'Schedule', 'Enabled', 'Status', 'Next Run', 'Actions'].map((h) => (
+                {['Type', 'Name / Prompt', 'Channel', 'Schedule', 'Enabled', 'Status', 'Next Run', 'Actions'].map((h) => (
                   <TableCell key={h} sx={HEADER_SX}>{h}</TableCell>
                 ))}
               </TableRow>
@@ -222,6 +223,17 @@ export default function TasksPage() {
                   </TableCell>
                   <TableCell sx={{ maxWidth: 260, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {t.name ?? t.prompt.slice(0, 60)}
+                  </TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    {t.source === 'web' ? (
+                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        Web UI
+                      </Typography>
+                    ) : (
+                      <Typography variant="body2">
+                        #{channels?.find((c) => c.id === String(t.channel_id))?.name ?? String(t.channel_id)}
+                      </Typography>
+                    )}
                   </TableCell>
                   <TableCell>
                     {t.type === 'once' ? (

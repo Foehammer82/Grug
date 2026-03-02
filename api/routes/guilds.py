@@ -10,13 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import assert_guild_member, get_current_user, get_db
 from api.schemas import (
+    ChannelConfigOut,
+    ChannelConfigUpdate,
     DiscordChannelOut,
     GuildConfigOut,
     GuildConfigUpdate,
     GuildOut,
 )
 from grug.config.settings import get_settings
-from grug.db.models import GuildConfig
+from grug.db.models import ChannelConfig, GuildConfig
 
 router = APIRouter(tags=["guilds"])
 
@@ -103,6 +105,8 @@ async def update_guild_config(
         # Convert to int here — Python handles large snowflake IDs without precision loss
         val = body.announce_channel_id
         cfg.announce_channel_id = int(val) if val is not None else None
+    if "context_cutoff" in body.model_fields_set:
+        cfg.context_cutoff = body.context_cutoff
     cfg.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(cfg)
@@ -135,3 +139,64 @@ async def list_guild_channels(
         for c in channels
         if c.get("type") in (0, 5)
     ]
+
+
+@router.get(
+    "/api/guilds/{guild_id}/channels/{channel_id}/config",
+    response_model=ChannelConfigOut,
+)
+async def get_channel_config(
+    guild_id: int,
+    channel_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelConfig:
+    """Return the per-channel config, creating a default row if none exists."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        # Lazily create a default row.
+        from grug.utils import ensure_guild
+
+        await ensure_guild(guild_id)
+        cfg = ChannelConfig(guild_id=guild_id, channel_id=channel_id)
+        db.add(cfg)
+        await db.commit()
+        await db.refresh(cfg)
+    return cfg
+
+
+@router.patch(
+    "/api/guilds/{guild_id}/channels/{channel_id}/config",
+    response_model=ChannelConfigOut,
+)
+async def update_channel_config(
+    guild_id: int,
+    channel_id: int,
+    body: ChannelConfigUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ChannelConfig:
+    """Update per-channel config fields (always_respond, context_cutoff)."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        from grug.utils import ensure_guild
+
+        await ensure_guild(guild_id)
+        cfg = ChannelConfig(guild_id=guild_id, channel_id=channel_id)
+        db.add(cfg)
+    if "always_respond" in body.model_fields_set and body.always_respond is not None:
+        cfg.always_respond = body.always_respond
+    if "context_cutoff" in body.model_fields_set:
+        cfg.context_cutoff = body.context_cutoff
+    cfg.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(cfg)
+    return cfg

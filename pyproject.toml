@@ -9,6 +9,7 @@ description = "Discord bot launcher for Grug"
 requires-python = ">=3.12"
 dependencies = [
     "grug",
+    "python-dateutil>=2.9.0.post0",
 ]
 
 [tool.uv.sources]
