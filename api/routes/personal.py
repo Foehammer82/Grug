@@ -43,9 +43,11 @@ async def list_personal_tasks(
     db: AsyncSession = Depends(get_db),
 ) -> list[ScheduledTask]:
     """List scheduled tasks created via DMs with Grug."""
+    user_id = int(user["id"])
     result = await db.execute(
         select(ScheduledTask)
         .where(ScheduledTask.guild_id == _DM_GUILD_ID)
+        .where(ScheduledTask.user_id == user_id)
         .order_by(ScheduledTask.created_at)
     )
     return list(result.scalars().all())
@@ -139,6 +141,7 @@ async def toggle_personal_task(
         ScheduledTask,
         ScheduledTask.id == task_id,
         ScheduledTask.guild_id == _DM_GUILD_ID,
+        ScheduledTask.user_id == int(user["id"]),
         detail="Task not found",
     )
     task.enabled = body.enabled
@@ -159,6 +162,7 @@ async def delete_personal_task(
         ScheduledTask,
         ScheduledTask.id == task_id,
         ScheduledTask.guild_id == _DM_GUILD_ID,
+        ScheduledTask.user_id == int(user["id"]),
         detail="Task not found",
     )
     await db.delete(task)

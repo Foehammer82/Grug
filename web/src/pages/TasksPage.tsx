@@ -199,7 +199,7 @@ export default function TasksPage() {
                       </Typography>
                     ) : (
                       <Typography variant="body2">
-                        #{channels?.find((c) => c.id === String(t.channel_id))?.name ?? String(t.channel_id)}
+                        #{channels?.find((c) => c.id === t.channel_id)?.name ?? t.channel_id}
                       </Typography>
                     )}
                   </TableCell>

@@ -16,9 +16,9 @@ export interface DiscordChannel {
 
 export interface ScheduledTask {
   id: number;
-  guild_id: number;
-  channel_id: number;
-  user_id: number | null;
+  guild_id: string;
+  channel_id: string;
+  user_id: string | null;
   type: 'once' | 'recurring';
   name: string | null;
   prompt: string;
@@ -28,7 +28,7 @@ export interface ScheduledTask {
   enabled: boolean;
   last_run: string | null;
   next_run: string | null;
-  created_by: number;
+  created_by: string;
   created_at: string;
 }
 
@@ -36,7 +36,7 @@ export interface ScheduledTask {
 
 export interface CalendarEvent {
   id: number;
-  guild_id: number;
+  guild_id: string;
   title: string;
   description: string | null;
   location: string | null;
@@ -44,10 +44,10 @@ export interface CalendarEvent {
   end_time: string | null;
   all_day: boolean;
   rrule: string | null;
-  channel_id: number | null;
+  channel_id: string | null;
   occurrence_start?: string;
   occurrence_end?: string;
-  created_by: number;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -55,7 +55,7 @@ export interface CalendarEvent {
 /* ── Guild config ─────────────────────────────────────────────────── */
 
 export interface GuildConfig {
-  guild_id: number;
+  guild_id: string;
   timezone: string;
   /** Returned as a string to preserve Discord snowflake precision (> MAX_SAFE_INTEGER). */
   announce_channel_id: string | null;
@@ -66,13 +66,13 @@ export interface GuildConfig {
 
 export interface GlossaryTerm {
   id: number;
-  guild_id: number;
-  channel_id: number | null;
+  guild_id: string;
+  channel_id: string | null;
   term: string;
   definition: string;
   ai_generated: boolean;
   originally_ai_generated: boolean;
-  created_by: number;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }

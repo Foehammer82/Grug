@@ -24,13 +24,13 @@ import type { DiscordChannel } from '../types';
 
 interface GlossaryTerm {
   id: number;
-  guild_id: number;
-  channel_id: number | null;
+  guild_id: string;
+  channel_id: string | null;
   term: string;
   definition: string;
   ai_generated: boolean;
   originally_ai_generated: boolean;
-  created_by: number;
+  created_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -38,11 +38,11 @@ interface GlossaryTerm {
 interface HistoryEntry {
   id: number;
   term_id: number;
-  guild_id: number;
+  guild_id: string;
   old_term: string;
   old_definition: string;
   old_ai_generated: boolean;
-  changed_by: number;
+  changed_by: string;
   changed_at: string;
 }
 
@@ -77,9 +77,9 @@ export default function GlossaryPage() {
     enabled: !!guildId,
   });
 
-  const channelName = (id: number | null): string => {
+  const channelName = (id: string | null): string => {
     if (!id) return 'Server-wide';
-    const ch = channels.find((c) => c.id === String(id));
+    const ch = channels.find((c) => c.id === id);
     return ch ? `#${ch.name}` : `#${id}`;
   };
 
@@ -336,7 +336,7 @@ export default function GlossaryPage() {
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
                         {new Date(h.changed_at).toLocaleString()} · changed by{' '}
-                        {h.changed_by === 0 ? '🤖 AI' : `user ${h.changed_by}`}
+                        {h.changed_by === '0' ? '🤖 AI' : `user ${h.changed_by}`}
                         {h.old_ai_generated && ' · was AI-generated'}
                       </Typography>
                     </Box>
