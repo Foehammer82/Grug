@@ -116,6 +116,7 @@ class ScheduledTaskCreate(BaseModel):
     fire_at: datetime | None = None
     cron_expression: str | None = None
     enabled: bool = True
+    channel_id: str | None = None  # optional: used for guild tasks
 
 
 class CronFromTextRequest(BaseModel):
