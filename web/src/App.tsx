@@ -13,6 +13,7 @@ import PersonalLayout from './components/PersonalLayout';
 import NotFoundPage from './pages/NotFoundPage';
 import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
+import CampaignsPage from './pages/CampaignsPage';
 import RoadmapPage from './pages/RoadmapPage';
 import TasksPage from './pages/TasksPage';
 
@@ -37,6 +38,7 @@ function App() {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="glossary" element={<GlossaryPage />} />
+          <Route path="campaigns" element={<CampaignsPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
