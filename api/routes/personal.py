@@ -105,6 +105,7 @@ async def toggle_personal_task(
         ScheduledTask,
         ScheduledTask.id == task_id,
         ScheduledTask.guild_id == _DM_GUILD_ID,
+        ScheduledTask.user_id == int(user["id"]),
         detail="Task not found",
     )
     task.enabled = body.enabled
@@ -125,6 +126,7 @@ async def delete_personal_task(
         ScheduledTask,
         ScheduledTask.id == task_id,
         ScheduledTask.guild_id == _DM_GUILD_ID,
+        ScheduledTask.user_id == int(user["id"]),
         detail="Task not found",
     )
     await db.delete(task)
