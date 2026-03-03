@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import type { ScheduledTask } from '../types';
+import { cronToHuman } from '../utils';
 
 export type { ScheduledTask } from '../types';
 
@@ -123,6 +124,7 @@ export default function TaskDetailModal({ task, open, onClose }: Props) {
             fullWidth
             size="small"
             inputProps={{ style: { fontFamily: 'monospace' } }}
+            helperText={cronToHuman(task.cron_expression) ?? undefined}
           />
         )}
 

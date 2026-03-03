@@ -22,6 +22,7 @@
     "@mui/material": "^7.3.8",
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.6",
+    "cronstrue": "^3.13.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^10.1.0",

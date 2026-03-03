@@ -31,6 +31,7 @@ import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import PollingIndicator from '../components/PollingIndicator';
 import { TABLE_HEADER_SX } from '../types';
+import { cronToHuman } from '../utils';
 import type { DiscordChannel, GuildConfig, ScheduledTask } from '../types';
 
 const EMPTY_FORM = {
@@ -208,11 +209,19 @@ export default function TasksPage() {
                       <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
                         {t.fire_at ? new Date(t.fire_at).toLocaleString() : '—'}
                       </Typography>
-                    ) : (
-                      <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                        {t.cron_expression ?? '—'}
-                      </Typography>
-                    )}
+                    ) : (() => {
+                      const human = cronToHuman(t.cron_expression);
+                      return (
+                        <Box>
+                          {human ? (
+                            <Typography variant="body2">{human}</Typography>
+                          ) : null}
+                          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+                            {t.cron_expression ?? '—'}
+                          </Typography>
+                        </Box>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     <Switch
@@ -357,7 +366,10 @@ export default function TasksPage() {
                 required
                 value={form.cron_expression}
                 onChange={(e) => setForm((f) => ({ ...f, cron_expression: e.target.value }))}
-                helperText='5-field UTC cron — e.g. "0 9 * * 1" = every Monday at 09:00 UTC.'
+                helperText={
+                  cronToHuman(form.cron_expression)
+                  ?? '5-field UTC cron — e.g. "0 9 * * 1" = every Monday at 09:00 UTC.'
+                }
                 inputProps={{ style: { fontFamily: 'monospace' } }}
               />
             </Box>
