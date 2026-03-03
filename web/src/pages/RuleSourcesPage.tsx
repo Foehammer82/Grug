@@ -23,17 +23,11 @@ import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import type { BuiltinRuleSource } from '../types';
 
-// TTRPG system name → display label
+// Known TTRPG system display labels. Falls back to the raw tag string for any
+// unrecognised system a user has entered as free-form text.
 const SYSTEM_LABELS: Record<string, string> = {
   dnd5e: 'D&D 5e',
   pf2e: 'Pathfinder 2e',
-  coc7: 'Call of Cthulhu 7e',
-  mothership: 'Mothership',
-  'blades-in-the-dark': 'Blades in the Dark',
-  shadowdark: 'Shadowdark',
-  shadowrun: 'Shadowrun',
-  'warhammer-fantasy': 'Warhammer Fantasy',
-  unknown: 'Unknown',
 };
 
 function systemLabel(sys: string | null): string {

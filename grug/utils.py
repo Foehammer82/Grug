@@ -24,10 +24,11 @@ if TYPE_CHECKING:
 # Used by the campaigns and characters cogs.
 # ---------------------------------------------------------------------------
 
+# Supported system tags → display names. Falls back to the raw tag for any
+# free-form system value a user has set outside of these.
 GAME_SYSTEM_LABELS: dict[str, str] = {
     "dnd5e": "D&D 5e",
     "pf2e": "Pathfinder 2e",
-    "unknown": "Unknown / Homebrew",
 }
 
 

@@ -32,8 +32,8 @@ jobs:
 
           echo "Base version from pyproject.toml: ${BASE_VERSION}"
 
-          # Find the highest build number already published for this base version.
-          # Tags look like 0.1.0.0, 0.1.0.1, …
+          # Find the highest patch number already published for this base version.
+          # Tags look like 0.2.0, 0.2.1, …
           HIGHEST=$(git tag -l "${BASE_VERSION}.*" \
             | sed "s/${BASE_VERSION}\.//" \
             | grep -E '^[0-9]+$' \

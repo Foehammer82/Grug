@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grug-api"
-version = "0.1.0"
+version = "0.1"
 description = "FastAPI web companion for Grug"
 requires-python = ">=3.12"
 dependencies = [

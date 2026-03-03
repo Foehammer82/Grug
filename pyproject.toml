@@ -1,6 +1,6 @@
 [project]
 name = "grug-bot"
-version = "0.2.0"
+version = "0.2"
 description = "Discord bot launcher for Grug"
 requires-python = ">=3.12"
 dependencies = [

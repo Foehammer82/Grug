@@ -36,17 +36,9 @@ import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import type { Campaign, Character, CharacterSheet, DiscordChannel, GuildMember } from '../types';
 
-const SYSTEM_OPTIONS = [
-  'dnd5e',
-  'pf2e',
-  'coc7',
-  'mothership',
-  'blades-in-the-dark',
-  'shadowdark',
-  'shadowrun',
-  'warhammer-fantasy',
-  'unknown',
-];
+// Suggested systems shown in the autocomplete dropdown — users may still type
+// any free-form value for unsupported systems.
+const SYSTEM_OPTIONS = ['dnd5e', 'pf2e'];
 
 const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as const;
 

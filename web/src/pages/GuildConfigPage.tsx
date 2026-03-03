@@ -41,17 +41,11 @@ interface Defaults {
 
 const TIMEZONES: string[] = Intl.supportedValuesOf('timeZone');
 
-// TTRPG system name → display label
+// Supported TTRPG systems shown as autocomplete suggestions.
+// Users may still type any free-form value — these are just quick-picks.
 const SYSTEM_LABELS: Record<string, string> = {
   dnd5e: 'D&D 5e',
   pf2e: 'Pathfinder 2e',
-  coc7: 'Call of Cthulhu 7e',
-  mothership: 'Mothership',
-  'blades-in-the-dark': 'Blades in the Dark',
-  shadowdark: 'Shadowdark',
-  shadowrun: 'Shadowrun',
-  'warhammer-fantasy': 'Warhammer Fantasy',
-  unknown: 'Unknown',
 };
 const SYSTEMS = Object.keys(SYSTEM_LABELS);
 
@@ -172,12 +166,15 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
       <Autocomplete
         size="small"
         fullWidth
-        options={[null, ...SYSTEMS]}
-        value={config.default_ttrpg_system ?? null}
-        onChange={(_, v) => mutation.mutate({ default_ttrpg_system: v })}
+        freeSolo
+        options={SYSTEMS}
+        value={config.default_ttrpg_system ?? ''}
+        onChange={(_, v) => mutation.mutate({ default_ttrpg_system: (v as string) || null })}
+        onInputChange={(_, _v, reason) => {
+          if (reason === 'clear') mutation.mutate({ default_ttrpg_system: null });
+        }}
         disabled={mutation.isPending}
         getOptionLabel={(v) => systemLabel(v)}
-        isOptionEqualToValue={(a, b) => a === b}
         renderInput={(params) => (
           <TextField
             {...params}

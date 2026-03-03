@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "grug"
-version = "0.1.0"
+version = "0.1"
 description = "Self-hosted AI agent for TTRPG Discord communities — core library"
 requires-python = ">=3.12"
 dependencies = [
