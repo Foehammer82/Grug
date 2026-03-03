@@ -222,7 +222,7 @@ async def list_channel_configs(
     result = await db.execute(
         select(ChannelConfig).where(ChannelConfig.guild_id == guild_id)
     )
-    return list(result.scalars().all())
+    return result.scalars().all()
 
 
 @router.get(
