@@ -74,7 +74,10 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
         # -------------------------------------------------------- Guild messages
         mentioned = self.bot.user in message.mentions if self.bot.user else False
         channel_cfg = await _get_channel_config(message.channel.id)
-        always_on = channel_cfg.always_respond if channel_cfg else False
+        auto_respond = channel_cfg.auto_respond if channel_cfg else False
+        auto_respond_threshold = (
+            channel_cfg.auto_respond_threshold if channel_cfg else 0.0
+        )
 
         # Always log the message so Grug stays context-aware in the channel.
         await self._agent.save_passive_message(
@@ -85,7 +88,28 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
             author_name=message.author.display_name,
         )
 
-        if not (mentioned or always_on):
+        should_respond = mentioned
+        if not should_respond and auto_respond:
+            if auto_respond_threshold == 0.0:
+                # Fast path: threshold 0.0 means always respond — skip LLM scoring.
+                should_respond = True
+            else:
+                from grug.bot.auto_respond import score_auto_respond
+
+                score = await score_auto_respond(
+                    message_content=message.clean_content,
+                    guild_id=message.guild.id,
+                )
+                should_respond = score >= auto_respond_threshold
+                logger.debug(
+                    "Auto-respond score %.2f vs threshold %.2f in channel %s → %s",
+                    score,
+                    auto_respond_threshold,
+                    message.channel.id,
+                    "respond" if should_respond else "skip",
+                )
+
+        if not should_respond:
             return
 
         content = message.clean_content
@@ -177,7 +201,8 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                 cfg = ChannelConfig(
                     guild_id=gid,
                     channel_id=cid,
-                    always_respond=True,
+                    auto_respond=True,
+                    auto_respond_threshold=0.5,
                 )
                 session.add(cfg)
                 await session.commit()
@@ -185,10 +210,10 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                     "Grug listen to everything in this channel now! 👂"
                 )
             else:
-                cfg.always_respond = not cfg.always_respond
+                cfg.auto_respond = not cfg.auto_respond
                 cfg.updated_at = datetime.now(timezone.utc)
                 await session.commit()
-                if cfg.always_respond:
+                if cfg.auto_respond:
                     await interaction.response.send_message(
                         "Grug listen to everything in this channel now! 👂"
                     )

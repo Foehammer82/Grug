@@ -4,7 +4,6 @@ import {
   Box,
   Chip,
   CircularProgress,
-  Divider,
   Paper,
   Stack,
   Table,
@@ -14,10 +13,14 @@ import {
   TableHead,
   TableRow,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
 import client from '../api/client';
+
+type Preset = '1d' | '7d' | '1m' | '1y' | 'custom';
 
 /* ------------------------------------------------------------------ */
 /* Types (mirror api/routes/usage.py response shapes)                 */
@@ -44,12 +47,39 @@ interface UsageSummaryOut {
   by_call_type: UsageRowOut[];
 }
 
-interface DailyUsagePointOut {
-  date: string;
+interface ChartPointOut {
+  label: string;
   request_count: number;
   input_tokens: number;
   output_tokens: number;
   estimated_cost_usd: number | null;
+}
+
+const PRESET_LABELS: Record<Preset, string> = {
+  '1d': 'Last 24h',
+  '7d': 'Last 7 days',
+  '1m': 'Last 30 days',
+  '1y': 'Last year',
+  custom: 'Custom',
+};
+
+const CHART_TITLE: Record<Preset, string> = {
+  '1d': 'Hourly Token Usage (Last 24 Hours)',
+  '7d': 'Daily Token Usage (Last 7 Days)',
+  '1m': 'Daily Token Usage (Last 30 Days)',
+  '1y': 'Weekly Token Usage (Last Year)',
+  custom: 'Token Usage (Custom Range)',
+};
+
+function summaryDates(preset: Preset, customStart: string, customEnd: string) {
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const daysAgo = (n: number) => { const d = new Date(today); d.setDate(d.getDate() - n); return fmt(d); };
+  if (preset === '1d') return { start: daysAgo(1), end: fmt(today) };
+  if (preset === '7d') return { start: daysAgo(6), end: fmt(today) };
+  if (preset === '1m') return { start: daysAgo(29), end: fmt(today) };
+  if (preset === '1y') return { start: daysAgo(364), end: fmt(today) };
+  return { start: customStart, end: customEnd };
 }
 
 /* ------------------------------------------------------------------ */
@@ -77,10 +107,21 @@ function monthStartStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 }
 
-function thirtyDaysAgoStr(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 29);
-  return d.toISOString().slice(0, 10);
+function fmtAxisLabel(label: string, preset: Preset): string {
+  if (preset === '1d') return label;
+  const [, mm, dd] = label.split('-');
+  if (preset === '1y') {
+    const m = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    return `${m[Number(mm) - 1]} ${Number(dd)}`;
+  }
+  return `${Number(mm)}/${Number(dd)}`;
+}
+
+function fmtTooltipTitle(label: string, preset: Preset): string {
+  if (preset === '1d') return `${label} UTC`;
+  if (preset === '1y') return `Week of ${label}`;
+  const d = new Date(label + 'T12:00:00Z');
+  return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const CALL_TYPE_LABELS: Record<string, string> = {
@@ -89,6 +130,7 @@ const CALL_TYPE_LABELS: Record<string, string> = {
   history_archive: 'History Archive',
   character_parse: 'Character Parse',
   cron_parse: 'Cron Parse',
+  auto_respond_score: 'Auto-Respond Score',
 };
 
 const HEADER_SX = { fontWeight: 700, color: 'text.secondary', fontSize: '0.72rem', textTransform: 'uppercase' } as const;
@@ -117,13 +159,13 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 /* Mini bar chart — pure CSS bars, no extra dependency                 */
 /* ------------------------------------------------------------------ */
 
-function DailyBarChart({ points }: { points: DailyUsagePointOut[] }) {
+function UsageBarChart({ points, preset }: { points: ChartPointOut[]; preset: Preset }) {
   const maxTokens = Math.max(...points.map((p) => p.input_tokens + p.output_tokens), 1);
 
   return (
     <Box>
       <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block', fontWeight: 600, textTransform: 'uppercase' }}>
-        Daily Token Usage (last 30 days)
+        {CHART_TITLE[preset]}
       </Typography>
       <Box
         sx={{
@@ -136,15 +178,15 @@ function DailyBarChart({ points }: { points: DailyUsagePointOut[] }) {
           pb: '2px',
         }}
       >
-        {points.map((p) => {
+        {points.map((p, i) => {
           const total = p.input_tokens + p.output_tokens;
           const heightPct = total === 0 ? 2 : Math.max(4, (total / maxTokens) * 100);
           return (
             <Tooltip
-              key={p.date}
+              key={i}
               title={
                 <Box sx={{ fontSize: '0.75rem' }}>
-                  <Typography variant="caption" display="block" fontWeight={700}>{p.date}</Typography>
+                  <Typography variant="caption" display="block" fontWeight={700}>{fmtTooltipTitle(p.label, preset)}</Typography>
                   <Typography variant="caption" display="block">{p.request_count} req · {fmtTokens(total)} tok</Typography>
                   {p.estimated_cost_usd != null && (
                     <Typography variant="caption" display="block">≈{fmtCost(p.estimated_cost_usd)}</Typography>
@@ -169,10 +211,12 @@ function DailyBarChart({ points }: { points: DailyUsagePointOut[] }) {
           );
         })}
       </Box>
-      <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
-        <Typography variant="caption" color="text.disabled">{points[0]?.date}</Typography>
-        <Typography variant="caption" color="text.disabled">{points[points.length - 1]?.date}</Typography>
-      </Stack>
+      {points.length > 0 && (
+        <Stack direction="row" justifyContent="space-between" sx={{ mt: 0.5 }}>
+          <Typography variant="caption" color="text.disabled">{fmtAxisLabel(points[0].label, preset)}</Typography>
+          <Typography variant="caption" color="text.disabled">{fmtAxisLabel(points[points.length - 1].label, preset)}</Typography>
+        </Stack>
+      )}
     </Box>
   );
 }
@@ -182,27 +226,28 @@ function DailyBarChart({ points }: { points: DailyUsagePointOut[] }) {
 /* ------------------------------------------------------------------ */
 
 export default function LLMUsageSection() {
-  const [startDate, setStartDate] = useState(monthStartStr());
-  const [endDate, setEndDate] = useState(todayStr());
-  const [dailyStart] = useState(thirtyDaysAgoStr());
+  const [preset, setPreset] = useState<Preset>('1m');
+  const [customStart, setCustomStart] = useState(monthStartStr());
+  const [customEnd, setCustomEnd] = useState(todayStr());
+  const { start, end } = summaryDates(preset, customStart, customEnd);
 
   const summaryQuery = useQuery<UsageSummaryOut>({
-    queryKey: ['admin-usage-summary', startDate, endDate],
+    queryKey: ['admin-usage-summary', start, end],
     queryFn: async () => {
       const res = await client.get<UsageSummaryOut>('/api/admin/usage/summary', {
-        params: { start_date: startDate, end_date: endDate },
+        params: { start_date: start, end_date: end },
       });
       return res.data;
     },
     staleTime: 60_000,
   });
 
-  const dailyQuery = useQuery<DailyUsagePointOut[]>({
-    queryKey: ['admin-usage-daily', dailyStart, todayStr()],
+  const pointsQuery = useQuery<ChartPointOut[]>({
+    queryKey: ['admin-usage-points', preset, preset === 'custom' ? start : null, preset === 'custom' ? end : null],
     queryFn: async () => {
-      const res = await client.get<DailyUsagePointOut[]>('/api/admin/usage/daily', {
-        params: { start_date: dailyStart, end_date: todayStr() },
-      });
+      const params: Record<string, string> = { preset };
+      if (preset === 'custom') { params.start_date = start; params.end_date = end; }
+      const res = await client.get<ChartPointOut[]>('/api/admin/usage/points', { params });
       return res.data;
     },
     staleTime: 60_000,
@@ -212,7 +257,6 @@ export default function LLMUsageSection() {
 
   return (
     <Box>
-      <Divider sx={{ my: 4 }} />
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
         <Typography variant="h6" fontWeight={700}>
           LLM Usage &amp; Costs
@@ -220,29 +264,45 @@ export default function LLMUsageSection() {
         <Tooltip title="All costs are estimates based on published Anthropic pricing. Actual charges may differ.">
           <Chip label="Estimated" size="small" variant="outlined" color="warning" sx={{ fontSize: '0.65rem', height: 18 }} />
         </Tooltip>
+        {(summaryQuery.isFetching || pointsQuery.isFetching) && <CircularProgress size={14} />}
       </Stack>
 
-      {/* ── Date range controls ── */}
-      <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 3 }}>
-        <TextField
-          label="From"
-          type="date"
+      {/* ── Preset toggle + optional custom date pickers ── */}
+      <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mb: 3 }}>
+        <ToggleButtonGroup
+          value={preset}
+          exclusive
           size="small"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 160 }}
-        />
-        <TextField
-          label="To"
-          type="date"
-          size="small"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          slotProps={{ inputLabel: { shrink: true } }}
-          sx={{ width: 160 }}
-        />
-        {summaryQuery.isFetching && <CircularProgress size={16} />}
+          onChange={(_, v) => { if (v) setPreset(v as Preset); }}
+        >
+          {(Object.keys(PRESET_LABELS) as Preset[]).map((p) => (
+            <ToggleButton key={p} value={p} sx={{ px: 2, fontSize: '0.78rem', textTransform: 'none' }}>
+              {PRESET_LABELS[p]}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        {preset === 'custom' && (
+          <>
+            <TextField
+              label="From"
+              type="date"
+              size="small"
+              value={customStart}
+              onChange={(e) => setCustomStart(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ width: 160 }}
+            />
+            <TextField
+              label="To"
+              type="date"
+              size="small"
+              value={customEnd}
+              onChange={(e) => setCustomEnd(e.target.value)}
+              slotProps={{ inputLabel: { shrink: true } }}
+              sx={{ width: 160 }}
+            />
+          </>
+        )}
       </Stack>
 
       {/* ── Summary stat cards ── */}
@@ -277,10 +337,10 @@ export default function LLMUsageSection() {
         <Typography color="error" sx={{ mb: 2 }}>Failed to load usage data.</Typography>
       )}
 
-      {/* ── Daily bar chart ── */}
-      {dailyQuery.data && dailyQuery.data.length > 0 && (
+      {/* ── Bar chart ── */}
+      {pointsQuery.data && pointsQuery.data.length > 0 && (
         <Box sx={{ mb: 4 }}>
-          <DailyBarChart points={dailyQuery.data} />
+          <UsageBarChart points={pointsQuery.data} preset={preset} />
         </Box>
       )}
 

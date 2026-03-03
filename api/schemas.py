@@ -59,7 +59,8 @@ class GuildConfigUpdate(BaseModel):
 class ChannelConfigOut(BaseModel):
     channel_id: int
     guild_id: int
-    always_respond: bool
+    auto_respond: bool
+    auto_respond_threshold: float
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -70,7 +71,9 @@ class ChannelConfigOut(BaseModel):
 
 
 class ChannelConfigUpdate(BaseModel):
-    always_respond: bool | None = None
+    auto_respond: bool | None = None
+    # Must be in the range [0.0, 1.0].
+    auto_respond_threshold: float | None = None
 
 
 class CalendarEventOut(BaseModel):

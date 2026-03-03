@@ -6,6 +6,7 @@ All endpoints are restricted to Grug super-admins.
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
@@ -15,7 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import assert_super_admin, get_current_user, get_db
-from grug.db.models import LLMUsageDailyAggregate
+from grug.db.models import LLMUsageDailyAggregate, LLMUsageRecord
 from grug.llm_usage import MODEL_PRICES, compute_estimated_cost
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,17 @@ class DailyUsagePointOut(BaseModel):
     """A single day's aggregated usage for chart rendering."""
 
     date: date
+    request_count: int
+    input_tokens: int
+    output_tokens: int
+    estimated_cost_usd: float | None
+
+
+class ChartPointOut(BaseModel):
+    """A single bucketed usage point for the preset chart (hourly/daily/weekly)."""
+
+    label: str
+    """ISO-format bucket label: hour (``2026-03-03T14:00``), date (``2026-03-03``), or week-start date."""
     request_count: int
     input_tokens: int
     output_tokens: int
@@ -320,3 +332,246 @@ async def get_usage_daily(
             )
         )
     return points
+
+
+# ---------------------------------------------------------------------------
+# Chart points endpoint — preset-aware bucketed data
+# ---------------------------------------------------------------------------
+
+_PRESET = {"1d", "7d", "1m", "1y", "custom"}
+
+
+@router.get("/api/admin/usage/points", response_model=list[ChartPointOut])
+async def get_usage_points(
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    preset: str = Query(default="1m"),
+    start_date: date = Query(default=None),
+    end_date: date = Query(default=None),
+    guild_id: int | None = Query(default=None),
+    user_id: int | None = Query(default=None),
+) -> list[ChartPointOut]:
+    """Return bucketed usage points for the bar chart.
+
+    ``preset`` controls both the time range and the bucket size:
+
+    - ``1d``     — last 24 h, one point per hour (from ``llm_usage_records``)
+    - ``7d``     — last 7 days, one point per day
+    - ``1m``     — last 30 days, one point per day (default)
+    - ``1y``     — last 52 weeks, one point per week
+    - ``custom`` — ``start_date``/``end_date`` range, one point per day
+    """
+    await assert_super_admin(user)
+
+    today = _today()
+    now_utc = datetime.now(timezone.utc)
+
+    # ── 1d: hourly from raw records ─────────────────────────────────────────
+    if preset == "1d":
+        cutoff = now_utc - timedelta(hours=24)
+        filters = [LLMUsageRecord.created_at >= cutoff]
+        if guild_id is not None:
+            filters.append(LLMUsageRecord.guild_id == guild_id)
+        if user_id is not None:
+            filters.append(LLMUsageRecord.user_id == user_id)
+
+        hour_trunc = func.date_trunc("hour", LLMUsageRecord.created_at)
+        result = await db.execute(
+            select(
+                hour_trunc.label("hour"),
+                LLMUsageRecord.model,
+                func.count().label("request_count"),
+                func.sum(LLMUsageRecord.input_tokens).label("input_tokens"),
+                func.sum(LLMUsageRecord.output_tokens).label("output_tokens"),
+            )
+            .where(*filters)
+            .group_by(hour_trunc, LLMUsageRecord.model)
+            .order_by(hour_trunc)
+        )
+        rows = result.all()
+
+        # Accumulate by hour key
+        hourly: dict[str, dict] = defaultdict(
+            lambda: {
+                "request_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_parts": [],
+            }
+        )
+        for row in rows:
+            key = row.hour.strftime("%Y-%m-%dT%H:00")
+            hourly[key]["request_count"] += int(row.request_count)
+            hourly[key]["input_tokens"] += int(row.input_tokens)
+            hourly[key]["output_tokens"] += int(row.output_tokens)
+            cost = compute_estimated_cost(
+                row.model, int(row.input_tokens), int(row.output_tokens)
+            )
+            if cost is not None:
+                hourly[key]["cost_parts"].append(cost)
+
+        # Fill all 25 hour slots (23h ago → now) so the chart is always complete
+        points_out: list[ChartPointOut] = []
+        for i in range(23, -1, -1):
+            slot = (now_utc - timedelta(hours=i)).replace(
+                minute=0, second=0, microsecond=0
+            )
+            key = slot.strftime("%Y-%m-%dT%H:00")
+            d = hourly.get(
+                key,
+                {
+                    "request_count": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "cost_parts": [],
+                },
+            )
+            points_out.append(
+                ChartPointOut(
+                    label=slot.strftime("%H:%M"),
+                    request_count=d["request_count"],
+                    input_tokens=d["input_tokens"],
+                    output_tokens=d["output_tokens"],
+                    estimated_cost_usd=round(sum(d["cost_parts"]), 6)
+                    if d["cost_parts"]
+                    else None,
+                )
+            )
+        return points_out
+
+    # ── Determine date range for day/week presets ───────────────────────────
+    if preset == "7d":
+        start, end = today - timedelta(days=6), today
+    elif preset == "1y":
+        start, end = today - timedelta(days=364), today
+    else:  # "1m" or "custom" (fallback)
+        start = start_date or today - timedelta(days=29)
+        end = end_date or today
+
+    base_filters = [
+        LLMUsageDailyAggregate.date >= start,
+        LLMUsageDailyAggregate.date <= end,
+    ]
+    if guild_id is not None:
+        base_filters.append(LLMUsageDailyAggregate.guild_id == guild_id)
+    if user_id is not None:
+        base_filters.append(LLMUsageDailyAggregate.user_id == user_id)
+
+    # ── 1y: weekly buckets ──────────────────────────────────────────────────
+    if preset == "1y":
+        from sqlalchemy import DateTime as SADateTime, cast
+
+        week_trunc = func.date_trunc(
+            "week", cast(LLMUsageDailyAggregate.date, SADateTime)
+        )
+        result = await db.execute(
+            select(
+                week_trunc.label("week"),
+                LLMUsageDailyAggregate.model,
+                func.sum(LLMUsageDailyAggregate.request_count).label("request_count"),
+                func.sum(LLMUsageDailyAggregate.input_tokens).label("input_tokens"),
+                func.sum(LLMUsageDailyAggregate.output_tokens).label("output_tokens"),
+            )
+            .where(*base_filters)
+            .group_by(week_trunc, LLMUsageDailyAggregate.model)
+            .order_by(week_trunc)
+        )
+        rows = result.all()
+
+        weekly: dict[str, dict] = defaultdict(
+            lambda: {
+                "request_count": 0,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_parts": [],
+            }
+        )
+        for row in rows:
+            key = (
+                row.week.strftime("%Y-%m-%d")
+                if hasattr(row.week, "strftime")
+                else str(row.week)[:10]
+            )
+            weekly[key]["request_count"] += int(row.request_count)
+            weekly[key]["input_tokens"] += int(row.input_tokens)
+            weekly[key]["output_tokens"] += int(row.output_tokens)
+            cost = compute_estimated_cost(
+                row.model, int(row.input_tokens), int(row.output_tokens)
+            )
+            if cost is not None:
+                weekly[key]["cost_parts"].append(cost)
+
+        # Zero-fill all ISO weeks in the range
+        # Walk from start's Monday to end's Monday in 7-day steps
+        def _week_start(d: date) -> date:
+            return d - timedelta(days=d.weekday())
+
+        all_weeks: list[str] = []
+        cursor = _week_start(start)
+        week_end = _week_start(end)
+        while cursor <= week_end:
+            all_weeks.append(cursor.isoformat())
+            cursor += timedelta(weeks=1)
+
+        return [
+            ChartPointOut(
+                label=w,
+                request_count=weekly[w]["request_count"],
+                input_tokens=weekly[w]["input_tokens"],
+                output_tokens=weekly[w]["output_tokens"],
+                estimated_cost_usd=round(sum(weekly[w]["cost_parts"]), 6)
+                if weekly[w]["cost_parts"]
+                else None,
+            )
+            for w in all_weeks
+        ]
+
+    # ── Daily buckets (7d / 1m / custom) ────────────────────────────────────
+    result = await db.execute(
+        select(
+            LLMUsageDailyAggregate.date,
+            LLMUsageDailyAggregate.model,
+            func.sum(LLMUsageDailyAggregate.request_count).label("request_count"),
+            func.sum(LLMUsageDailyAggregate.input_tokens).label("input_tokens"),
+            func.sum(LLMUsageDailyAggregate.output_tokens).label("output_tokens"),
+        )
+        .where(*base_filters)
+        .group_by(LLMUsageDailyAggregate.date, LLMUsageDailyAggregate.model)
+        .order_by(LLMUsageDailyAggregate.date)
+    )
+    rows = result.all()
+
+    daily_buckets: dict[str, dict] = defaultdict(
+        lambda: {
+            "request_count": 0,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_parts": [],
+        }
+    )
+    for row in rows:
+        key = str(row.date)
+        daily_buckets[key]["request_count"] += int(row.request_count)
+        daily_buckets[key]["input_tokens"] += int(row.input_tokens)
+        daily_buckets[key]["output_tokens"] += int(row.output_tokens)
+        cost = compute_estimated_cost(
+            row.model, int(row.input_tokens), int(row.output_tokens)
+        )
+        if cost is not None:
+            daily_buckets[key]["cost_parts"].append(cost)
+
+    # Zero-fill every day in the range so the chart has the correct shape
+    day_count = (end - start).days + 1
+    all_days = [(start + timedelta(days=i)).isoformat() for i in range(day_count)]
+    return [
+        ChartPointOut(
+            label=key,
+            request_count=daily_buckets[key]["request_count"],
+            input_tokens=daily_buckets[key]["input_tokens"],
+            output_tokens=daily_buckets[key]["output_tokens"],
+            estimated_cost_usd=round(sum(daily_buckets[key]["cost_parts"]), 6)
+            if daily_buckets[key]["cost_parts"]
+            else None,
+        )
+        for key in all_days
+    ]

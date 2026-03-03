@@ -15,7 +15,7 @@ All prices are in USD per million tokens (MTok).
 from __future__ import annotations
 
 import logging
-from datetime import date
+from datetime import datetime, timedelta, timezone
 from enum import StrEnum
 from typing import NamedTuple
 
@@ -55,8 +55,9 @@ def compute_estimated_cost(
     price = MODEL_PRICES.get(model)
     if price is None:
         return None
-    input_cost = (input_tokens / 1_000_000) * price.input_per_mtok
-    output_cost = (output_tokens / 1_000_000) * price.output_per_mtok
+    # Cast to int — PostgreSQL's func.sum() returns decimal.Decimal for integer columns.
+    input_cost = (int(input_tokens) / 1_000_000) * price.input_per_mtok
+    output_cost = (int(output_tokens) / 1_000_000) * price.output_per_mtok
     return round(input_cost + output_cost, 8)
 
 
@@ -73,6 +74,7 @@ class CallType(StrEnum):
     HISTORY_ARCHIVE = "history_archive"
     CHARACTER_PARSE = "character_parse"
     CRON_PARSE = "cron_parse"
+    AUTO_RESPOND_SCORE = "auto_respond_score"
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +91,7 @@ async def record_llm_usage(
     guild_id: int | None = None,
     user_id: int | None = None,
 ) -> None:
-    """Upsert a daily aggregate row for this LLM call.
+    """Upsert a daily aggregate row for this LLM call and insert a raw record.
 
     This function is **fire-and-forget** — it catches and logs all exceptions
     so that tracking never disrupts the user-facing flow.
@@ -103,14 +105,17 @@ async def record_llm_usage(
         user_id: Discord user snowflake, or ``None`` for background tasks.
     """
     try:
+        from sqlalchemy import delete
         from sqlalchemy.dialects.postgresql import insert
 
-        from grug.db.models import LLMUsageDailyAggregate
+        from grug.db.models import LLMUsageDailyAggregate, LLMUsageRecord
         from grug.db.session import get_session_factory
 
-        today = date.today()
+        now = datetime.now(timezone.utc)
+        today = now.date()
         factory = get_session_factory()
         async with factory() as session:
+            # ── Daily aggregate upsert ──────────────────────────────────────
             stmt = (
                 insert(LLMUsageDailyAggregate)
                 .values(
@@ -135,6 +140,26 @@ async def record_llm_usage(
                 )
             )
             await session.execute(stmt)
+
+            # ── Raw record for sub-daily (hourly) reporting ─────────────────
+            await session.execute(
+                insert(LLMUsageRecord).values(
+                    created_at=now,
+                    guild_id=guild_id,
+                    user_id=user_id,
+                    model=model,
+                    call_type=str(call_type),
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                )
+            )
+
+            # ── Prune raw records older than 90 days ─────────────────────────
+            cutoff = now - timedelta(days=90)
+            await session.execute(
+                delete(LLMUsageRecord).where(LLMUsageRecord.created_at < cutoff)
+            )
+
             await session.commit()
     except Exception:
         logger.exception(

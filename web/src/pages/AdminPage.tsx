@@ -16,12 +16,14 @@ import {
   Skeleton,
   Stack,
   Switch,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -140,6 +142,7 @@ export default function AdminPage() {
   const { data: me } = useAuth();
   const qc = useQueryClient();
   const [addOpen, setAddOpen] = useState(false);
+  const [tab, setTab] = useState(0);
   const [newUserId, setNewUserId] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -238,26 +241,35 @@ export default function AdminPage() {
 
   return (
     <Box sx={{ p: 4, maxWidth: 900, mx: 'auto' }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
-        <Typography variant="h5" fontWeight={700}>
-          Admin — User Management
-        </Typography>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<PersonAddIcon />}
-          onClick={() => setAddOpen(true)}
-        >
-          Add User
-        </Button>
-      </Stack>
-
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Manage Discord users and their privileges. Super-admin can be granted here (DB) or set via
-        the <code>GRUG_SUPER_ADMIN_IDS</code> environment variable (env-locked).
+      <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
+        Admin
       </Typography>
 
-      {!users || users.length === 0 ? (
+      <Tabs value={tab} onChange={(_, v) => setTab(v as number)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label="User Management" />
+        <Tab label="LLM Usage & Costs" />
+      </Tabs>
+
+      {/* ── Tab 0: User Management ── */}
+      {tab === 0 && (
+        <>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary">
+              Manage Discord users and their privileges. Super-admin can be granted here (DB) or set via
+              the <code>GRUG_SUPER_ADMIN_IDS</code> environment variable (env-locked).
+            </Typography>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<PersonAddIcon />}
+              onClick={() => setAddOpen(true)}
+              sx={{ ml: 2, flexShrink: 0 }}
+            >
+              Add User
+            </Button>
+          </Stack>
+
+          {!users || users.length === 0 ? (
         <Typography color="text.secondary">No managed users yet.</Typography>
       ) : (
         <TableContainer>
@@ -442,8 +454,11 @@ export default function AdminPage() {
           </Button>
         </DialogActions>
       </Dialog>
+        </>
+      )}
 
-      <LLMUsageSection />
+      {/* ── Tab 1: LLM Usage & Costs ── */}
+      {tab === 1 && <LLMUsageSection />}
     </Box>
   );
 }

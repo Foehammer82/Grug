@@ -31,6 +31,7 @@ Grug is a self-hosted AI agent designed to assist with TTRPGs (Tabletop Role-Pla
 - Dev dependencies (pytest, etc.) live in the `[dependency-groups] dev` section of `pyproject.toml`.
 - Always run Python commands with `uv run` (e.g. `uv run pytest tests/`, `uv run python main.py`).
 - Add new dependencies with `uv add <package>` (or `uv add --dev <package>` for dev-only).
+- **`docker-compose.yml` is the only compose file** — it is a dev compose with live-reload mounts and a Vite dev server (`web-dev` service). There is no separate `docker-compose.dev.yml` or `docker-compose.prod.yml`. Production deployments live in a separate repo and are out of scope here.
 
 ## Testing
 

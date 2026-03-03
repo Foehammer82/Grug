@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -67,8 +68,10 @@ class GuildConfig(Base):
 class ChannelConfig(Base):
     """Per-channel configuration — persists settings that would otherwise live in memory.
 
-    ``always_respond`` replaces the old in-memory ``_ALWAYS_RESPOND_CHANNELS``
-    set so the setting survives bot restarts.
+    ``auto_respond`` enables intelligent auto-response in a channel.  When the
+    threshold is 0.0 Grug responds to every message (equivalent to the old
+    ``always_respond=True``).  When threshold > 0.0 a lightweight LLM scores
+    each message and Grug only responds when ``score >= threshold``.
     """
 
     __tablename__ = "channel_configs"
@@ -83,9 +86,15 @@ class ChannelConfig(Base):
     channel_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
     )
-    # When True, Grug responds to every message here (not just @mentions).
-    always_respond: Mapped[bool] = mapped_column(
+    # When True, Grug considers responding to every message here (not just @mentions).
+    # When threshold == 0.0, Grug always responds; when threshold > 0.0, a lightweight
+    # LLM scores the message and Grug responds only when score >= threshold.
+    auto_respond: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
+    )
+    # Confidence threshold for the auto-respond scorer (0.0 = always, 1.0 = only if certain).
+    auto_respond_threshold: Mapped[float] = mapped_column(
+        Float, default=0.5, server_default="0.5", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -721,3 +730,24 @@ class LLMUsageDailyAggregate(Base):
     request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class LLMUsageRecord(Base):
+    """Raw per-call LLM usage record with a full timestamp.
+
+    Used for sub-daily (e.g. hourly) reporting.  Records older than 90 days
+    are pruned automatically by :func:`grug.llm_usage.record_llm_usage`.
+    """
+
+    __tablename__ = "llm_usage_records"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    call_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)

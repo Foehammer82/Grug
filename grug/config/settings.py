@@ -48,11 +48,11 @@ class Settings(BaseSettings):
         default="change-me", description="Secret key for JWT signing"
     )
     web_cors_origins: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:5173",
         description="Comma-separated allowed CORS origins",
     )
     frontend_url: str = Field(
-        default="http://localhost:3000",
+        default="http://localhost:5173",
         description="URL of the frontend for OAuth redirects",
     )
 

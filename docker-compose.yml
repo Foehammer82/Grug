@@ -85,31 +85,11 @@ services:
       - postgres
 
   # ------------------------------------------------------------------ #
-  # Web — nginx production build                                         #
-  # ------------------------------------------------------------------ #
-  web:
-    build: ./web
-    restart: unless-stopped
-    ports:
-      - "3000:80"
-    environment:
-      - VITE_API_URL=${VITE_API_URL:-http://localhost:8000}
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost:80/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      start_period: 30s
-      retries: 3
-    depends_on:
-      - api
-
-  # ------------------------------------------------------------------ #
   # Web — Vite dev server (hot-module replacement)                       #
   # Activate with:  docker compose --profile dev up                     #
   # The browser uses localhost:8000 for API calls (not the Docker host). #
   # ------------------------------------------------------------------ #
   web-dev:
-    profiles: [dev]
     image: node:22-slim
     working_dir: /app
     volumes:

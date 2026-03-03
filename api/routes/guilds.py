@@ -282,8 +282,21 @@ async def update_channel_config(
         await ensure_guild(guild_id)
         cfg = ChannelConfig(guild_id=guild_id, channel_id=channel_id)
         db.add(cfg)
-    if "always_respond" in body.model_fields_set and body.always_respond is not None:
-        cfg.always_respond = body.always_respond
+    if "auto_respond" in body.model_fields_set:
+        cfg.auto_respond = body.auto_respond
+    if (
+        "auto_respond_threshold" in body.model_fields_set
+        and body.auto_respond_threshold is not None
+    ):
+        threshold = float(body.auto_respond_threshold)
+        if not (0.0 <= threshold <= 1.0):
+            from fastapi import HTTPException
+
+            raise HTTPException(
+                status_code=422,
+                detail="auto_respond_threshold must be between 0.0 and 1.0",
+            )
+        cfg.auto_respond_threshold = threshold
     cfg.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(cfg)

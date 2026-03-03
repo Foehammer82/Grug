@@ -71,7 +71,7 @@ def test_call_type_string_values():
 
 
 async def test_record_llm_usage_inserts_row(mock_db_session):
-    """record_llm_usage should execute an upsert statement and commit."""
+    """record_llm_usage should execute an upsert + raw record insert + prune and commit."""
     mock_factory, mock_session = mock_db_session
 
     with patch("grug.db.session.get_session_factory", return_value=mock_factory):
@@ -84,7 +84,8 @@ async def test_record_llm_usage_inserts_row(mock_db_session):
             user_id=987654321,
         )
 
-    mock_session.execute.assert_called_once()
+    # 1) daily aggregate upsert, 2) raw record insert, 3) prune old records
+    assert mock_session.execute.call_count == 3
     mock_session.commit.assert_called_once()
 
 
@@ -100,7 +101,8 @@ async def test_record_llm_usage_nullable_guild_user(mock_db_session):
             output_tokens=400,
         )
 
-    mock_session.execute.assert_called_once()
+    # 1) daily aggregate upsert, 2) raw record insert, 3) prune old records
+    assert mock_session.execute.call_count == 3
     mock_session.commit.assert_called_once()
 
 
