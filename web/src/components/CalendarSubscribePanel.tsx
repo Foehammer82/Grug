@@ -12,6 +12,11 @@ import {
   Box,
   Button,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
   IconButton,
   InputAdornment,
   TextField,
@@ -70,6 +75,7 @@ export default function CalendarSubscribePanel({ compact = false }: Props) {
   const { isAdmin } = useGuildContext();
   const qc = useQueryClient();
   const [copied, setCopied] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   /* ---- Fetch (or lazily create) the calendar token ---- */
   const { data, isLoading, isError } = useQuery<{ token: string }>({
@@ -208,7 +214,7 @@ export default function CalendarSubscribePanel({ compact = false }: Props) {
             color="warning"
             variant="text"
             startIcon={<RefreshIcon />}
-            onClick={() => regenMutation.mutate()}
+            onClick={() => setConfirmOpen(true)}
             disabled={regenMutation.isPending}
             sx={{ textTransform: 'none' }}
           >
@@ -221,6 +227,33 @@ export default function CalendarSubscribePanel({ compact = false }: Props) {
           )}
         </Box>
       )}
+
+      {/* Confirmation dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
+        <DialogTitle>Regenerate calendar token?</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            This will invalidate the current iCal feed URL. Anyone subscribed
+            with the old URL will stop receiving updates until they re-subscribe
+            with the new one. This cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)} autoFocus>
+            Cancel
+          </Button>
+          <Button
+            color="warning"
+            variant="contained"
+            onClick={() => {
+              setConfirmOpen(false);
+              regenMutation.mutate();
+            }}
+          >
+            Regenerate
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

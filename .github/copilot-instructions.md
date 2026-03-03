@@ -73,6 +73,7 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not introduce unnecessary dependencies or frameworks.
 - Do not commit secrets, API keys, or credentials to the repository.
 - Do not break backward compatibility without a clear migration path and documentation.
+- **Never run git commands (commit, push, add, rebase, merge, etc.) unless the user explicitly asks.** Completing a code change does not imply permission to commit it.
 
 ## Domain Concepts — Context Awareness
 
