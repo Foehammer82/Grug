@@ -137,7 +137,7 @@ async def test_rule_source(
 
     try:
         if body.source_id == "aon_pf2e":
-            text = await _fetch_aon_pf2e(body.query, size=5)
+            text = await _fetch_aon_pf2e(body.query)
         elif body.source_id == "srd_5e":
             text = await _fetch_srd_5e(body.query)
         else:

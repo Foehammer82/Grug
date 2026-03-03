@@ -13,7 +13,6 @@ import NotFoundPage from './pages/NotFoundPage';
 import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
-import RuleSourcesPage from './pages/RuleSourcesPage';
 import TasksPage from './pages/TasksPage';
 
 
@@ -36,7 +35,6 @@ function App() {
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="glossary" element={<GlossaryPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
-          <Route path="rule-sources" element={<RuleSourcesPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

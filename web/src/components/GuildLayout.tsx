@@ -11,7 +11,6 @@ const TABS = [
   { label: 'Documents',    path: 'documents',    adminOnly: false },
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
   { label: 'Campaigns',    path: 'campaigns',    adminOnly: true },
-  { label: 'Rule Sources', path: 'rule-sources', adminOnly: true },
 ];
 
 export default function GuildLayout() {
@@ -23,6 +22,7 @@ export default function GuildLayout() {
 
   const guild = guilds?.find((g) => g.id === guildId);
   const isAdmin = guild?.is_admin ?? false;
+  const guildsLoaded = guilds !== undefined;
 
   // Filter tabs based on admin status
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
@@ -39,9 +39,11 @@ export default function GuildLayout() {
   const lastSegment = location.pathname.split('/').pop() ?? '';
   const activeTab = visibleTabs.findIndex((t) => t.path === lastSegment);
 
-  // If non-admin lands on an admin-only page, redirect to events
+  // Only redirect once guild data has loaded — avoids a false redirect while
+  // isAdmin is still false during the initial fetch (which would replace the
+  // URL with /events on every page refresh for admin-only pages).
   const isAdminOnlyPage = TABS.find((t) => t.path === lastSegment)?.adminOnly;
-  if (!isAdmin && isAdminOnlyPage) {
+  if (guildsLoaded && !isAdmin && isAdminOnlyPage) {
     return <Navigate to={`/guilds/${guildId}/events`} replace />;
   }
 
