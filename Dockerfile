@@ -44,4 +44,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # to persist the database across container restarts.
 # Postgres users do not need any mounts.
 
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
+    CMD test -f /tmp/healthy || exit 1
+
 CMD ["uv", "run", "python", "main.py"]

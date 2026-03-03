@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sys
+from pathlib import Path
 
 import discord
 
@@ -45,6 +46,9 @@ async def main() -> None:
                 name="for adventures 🗡️",
             )
         )
+        # Write a sentinel file so the Docker HEALTHCHECK can confirm the bot
+        # successfully connected to Discord and reached the ready state.
+        Path("/tmp/healthy").touch()
         start_scheduler()
         await run_sync(bot, sync_commands=True)
         schedule_periodic_sync(bot)
