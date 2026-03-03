@@ -208,7 +208,11 @@ def expand_event_occurrences(
             if override.cancelled:
                 continue  # Drop this occurrence entirely.
             occ_start = override.new_start if override.new_start is not None else dt
-            occ_end = override.new_end if override.new_end is not None else occ_start + duration
+            occ_end = (
+                override.new_end
+                if override.new_end is not None
+                else occ_start + duration
+            )
         else:
             occ_start = dt
             occ_end = dt + duration

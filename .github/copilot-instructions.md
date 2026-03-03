@@ -89,7 +89,7 @@ Three levels of context cutoff control how far back Grug reads history:
 | Per-guild | `GuildConfig.context_cutoff` | Server-wide default |
 | Per-user (DMs) | `UserProfile.dm_context_cutoff` | DM sessions only |
 
-`None` at any level means "no cutoff — load all available history."  The effective cutoff is resolved in `_get_effective_context_cutoff()` in `grug/bot/cogs/ai_chat.py` and passed to `GrugAgent.respond()` → `_load_history()`.
+`None` at any level means "use the default rolling window."  When no explicit cutoff is set at any level, both `_get_effective_context_cutoff()` and `_get_dm_context_cutoff()` fall back to `now - 30 days` (controlled by `_DEFAULT_CONTEXT_LOOKBACK_DAYS` in `grug/bot/cogs/ai_chat.py`).  The effective cutoff is resolved there and passed to `GrugAgent.respond()` → `_load_history()`.
 
 ### ChannelConfig model
 
@@ -111,10 +111,16 @@ Defined as a static list in `grug/rules/sources.py`.  Three are built-in: `aon_p
 Guild admins can disable any built-in per-server.  Overrides are stored in the `guild_builtin_overrides` table (`GuildBuiltinOverride` model) keyed by `source_id`.  No row = built-in is **enabled** (safe default).
 
 ### Custom sources
-Stored in the `rule_sources` table (`RuleSource` model) with `guild_id`, `name`, `url`, `system` (nullable), `notes` (nullable), and `enabled`.  Custom sources **are not scraped** — Grug cites the URL so players look it up themselves.  A `system` of `None` means "all systems".
+Stored in the `rule_sources` table (`RuleSource` model) with `guild_id`, `name`, `url`, `system` (nullable), `notes` (nullable), `enabled`, and `sort_order` (integer, default 0 — lower = higher priority within the custom group).  Custom sources **are not scraped** — Grug cites the URL so players look it up themselves.  A `system` of `None` means "all systems".
+
+### Source priority / ordering
+
+Built-in sources are **always consulted before custom sources** — they have implicit highest priority.  Within built-ins, order is fixed by `BUILTIN_RULE_SOURCES` list position.  Within custom sources, `sort_order ASC` (then `created_at ASC` as a tiebreaker) controls the order.  Guild admins reorder custom sources via up/down arrows in the web UI, which PATCHes the `sort_order` of the two swapped rows.  New custom sources are assigned `max(sort_order) + 10` so they land at the bottom, leaving gaps for future insertions.
 
 ### Web UI
-The Config page has sub-tabs: **Server** | **Channels** | **Rule Sources**.  Sub-tabs are MUI `<Tabs>` inside `GuildConfigPage.tsx` — they do **not** add a new GuildLayout-level tab.
+The Config page renders **Server Settings** and **Channel Settings** as stacked sections (no sub-tabs) — a `Typography h6` heading followed by each panel, separated by a `Divider`.
+
+Rule Sources is its own top-level tab in `GuildLayout` (`path: 'rule-sources'`, `adminOnly: true`), implemented in `web/src/pages/RuleSourcesPage.tsx`. It renders a single unified list: built-in sources always appear first (fixed order, "Built-in" chip, enabled `Switch`, no delete/reorder controls), followed by custom sources (up/down `IconButton` arrows to swap `sort_order`, enabled `Switch`, delete `IconButton`).
 
 ### API
 - `GET  /api/guilds/{id}/rule-sources/builtins` — list builtins with effective enabled state

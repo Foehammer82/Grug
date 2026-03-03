@@ -219,6 +219,7 @@ export interface RuleSource {
   system: string | null;
   notes: string | null;
   enabled: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

@@ -317,7 +317,9 @@ class TestOccurrenceOverrides:
         rescheduled = [r for r in result if r["occurrence_start"] == new_start]
         assert len(rescheduled) == 1
         # Duration should still be 3h
-        assert (rescheduled[0]["occurrence_end"] - rescheduled[0]["occurrence_start"]) == timedelta(hours=3)
+        assert (
+            rescheduled[0]["occurrence_end"] - rescheduled[0]["occurrence_start"]
+        ) == timedelta(hours=3)
 
     def test_non_recurring_event_ignores_overrides(self):
         """Overrides on a non-recurring event have no effect."""

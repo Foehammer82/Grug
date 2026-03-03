@@ -2,33 +2,19 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Autocomplete,
   Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   Divider,
   FormControlLabel,
-  IconButton,
   Stack,
   Switch,
-  Tab,
-  Tabs,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
-import DeleteIcon from '@mui/icons-material/Delete';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { isoToLocalInput, localInputToIso } from '../types';
-import type { BuiltinRuleSource, DiscordChannel, GuildConfig, RuleSource } from '../types';
+import type { DiscordChannel, GuildConfig } from '../types';
 
 interface ChannelConfig {
   channel_id: string;
@@ -341,341 +327,29 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-panel: Rule Sources
+// Main GuildConfigPage — stacked server + channel settings
 // ─────────────────────────────────────────────────────────────────────────────
-
-function RuleSourcesPanel({ guildId }: { guildId: string }) {
-  const qc = useQueryClient();
-
-  const { data: builtins, isLoading: builtinsLoading } = useQuery<BuiltinRuleSource[]>({
-    queryKey: ['builtins', guildId],
-    queryFn: async () =>
-      (
-        await client.get<BuiltinRuleSource[]>(
-          `/api/guilds/${guildId}/rule-sources/builtins`
-        )
-      ).data,
-  });
-
-  const { data: custom, isLoading: customLoading } = useQuery<RuleSource[]>({
-    queryKey: ['ruleSources', guildId],
-    queryFn: async () =>
-      (await client.get<RuleSource[]>(`/api/guilds/${guildId}/rule-sources`)).data,
-  });
-
-  const toggleBuiltin = useMutation({
-    mutationFn: ({ source_id, enabled }: { source_id: string; enabled: boolean }) =>
-      client
-        .patch(`/api/guilds/${guildId}/rule-sources/builtins/${source_id}`, { enabled })
-        .then((r) => r.data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['builtins', guildId] }),
-  });
-
-  const deleteCustom = useMutation({
-    mutationFn: (id: number) =>
-      client.delete(`/api/guilds/${guildId}/rule-sources/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['ruleSources', guildId] }),
-  });
-
-  // ── Add custom source dialog ──────────────────────────────────────────────
-  const [addOpen, setAddOpen] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newUrl, setNewUrl] = useState('');
-  const [newSystem, setNewSystem] = useState<string | null>(null);
-  const [newNotes, setNewNotes] = useState('');
-
-  const createCustom = useMutation({
-    mutationFn: () =>
-      client
-        .post(`/api/guilds/${guildId}/rule-sources`, {
-          name: newName,
-          url: newUrl,
-          system: newSystem,
-          notes: newNotes || null,
-          enabled: true,
-        })
-        .then((r) => r.data),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['ruleSources', guildId] });
-      setAddOpen(false);
-      setNewName('');
-      setNewUrl('');
-      setNewSystem(null);
-      setNewNotes('');
-    },
-  });
-
-  return (
-    <Stack spacing={3} sx={{ maxWidth: 640 }}>
-      <Typography variant="body2" color="text.secondary">
-        Control which rule lookup sources Grug uses when answering rules questions.
-      </Typography>
-
-      {/* ── Built-in sources ─────────────────────────────────────────── */}
-      <Stack spacing={1}>
-        <Typography variant="subtitle2" fontWeight={600}>
-          Built-in Sources
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Grug can search these public resources automatically. Disable any you
-          don&apos;t want Grug to use for this server.
-        </Typography>
-      </Stack>
-
-      {builtinsLoading ? (
-        <CircularProgress size={20} />
-      ) : (
-        <Stack spacing={1}>
-          {(builtins ?? []).map((src) => (
-            <Box
-              key={src.source_id}
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 2,
-                p: 1.5,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-              }}
-            >
-              <Stack spacing={0.5} sx={{ flex: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {src.name}
-                  </Typography>
-                  {src.system && (
-                    <Chip
-                      label={systemLabel(src.system)}
-                      size="small"
-                      variant="outlined"
-                    />
-                  )}
-                  <Tooltip title="Open source URL">
-                    <IconButton
-                      size="small"
-                      component="a"
-                      href={src.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <OpenInNewIcon fontSize="inherit" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                <Typography variant="caption" color="text.secondary">
-                  {src.description}
-                </Typography>
-              </Stack>
-              <Switch
-                checked={src.enabled}
-                size="small"
-                disabled={toggleBuiltin.isPending}
-                onChange={(_, checked) =>
-                  toggleBuiltin.mutate({ source_id: src.source_id, enabled: checked })
-                }
-              />
-            </Box>
-          ))}
-        </Stack>
-      )}
-
-      <Divider />
-
-      {/* ── Custom sources ────────────────────────────────────────────── */}
-      <Stack spacing={1}>
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}
-        >
-          <Typography variant="subtitle2" fontWeight={600}>
-            Custom Sources
-          </Typography>
-          <Button size="small" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
-            Add Source
-          </Button>
-        </Box>
-        <Typography variant="body2" color="text.secondary">
-          Add your own rule references. Grug will cite these URLs when answering
-          rules questions — custom sources are not scraped.
-        </Typography>
-      </Stack>
-
-      {customLoading ? (
-        <CircularProgress size={20} />
-      ) : (custom ?? []).length === 0 ? (
-        <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>
-          No custom sources yet. Click &quot;Add Source&quot; to add one.
-        </Typography>
-      ) : (
-        <Stack spacing={1}>
-          {(custom ?? []).map((src) => (
-            <Box
-              key={src.id}
-              sx={{
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'space-between',
-                gap: 2,
-                p: 1.5,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1,
-                opacity: src.enabled ? 1 : 0.5,
-              }}
-            >
-              <Stack spacing={0.5} sx={{ flex: 1 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2" fontWeight={600}>
-                    {src.name}
-                  </Typography>
-                  {src.system && (
-                    <Chip
-                      label={systemLabel(src.system)}
-                      size="small"
-                      variant="outlined"
-                    />
-                  )}
-                  <Tooltip title="Open source URL">
-                    <IconButton
-                      size="small"
-                      component="a"
-                      href={src.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      <OpenInNewIcon fontSize="inherit" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                {src.notes && (
-                  <Typography variant="caption" color="text.secondary">
-                    {src.notes}
-                  </Typography>
-                )}
-                <Typography
-                  variant="caption"
-                  color="text.disabled"
-                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
-                >
-                  {src.url}
-                </Typography>
-              </Stack>
-              <Tooltip title="Delete source">
-                <IconButton
-                  size="small"
-                  color="error"
-                  onClick={() => deleteCustom.mutate(src.id)}
-                  disabled={deleteCustom.isPending}
-                >
-                  <DeleteIcon fontSize="inherit" />
-                </IconButton>
-              </Tooltip>
-            </Box>
-          ))}
-        </Stack>
-      )}
-
-      {/* ── Add custom source dialog ────────────────────────────────── */}
-      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Custom Rule Source</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Name"
-              size="small"
-              fullWidth
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder="e.g. Kobold Press Tome of Beasts"
-            />
-            <TextField
-              label="URL"
-              size="small"
-              fullWidth
-              value={newUrl}
-              onChange={(e) => setNewUrl(e.target.value)}
-              placeholder="https://…"
-            />
-            <Autocomplete
-              size="small"
-              fullWidth
-              options={SYSTEMS}
-              value={newSystem}
-              onChange={(_, v) => setNewSystem(v)}
-              getOptionLabel={(s) => systemLabel(s)}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="System (optional)"
-                  helperText="Leave blank if this source covers multiple systems."
-                />
-              )}
-            />
-            <TextField
-              label="Notes (optional)"
-              size="small"
-              fullWidth
-              multiline
-              rows={2}
-              value={newNotes}
-              onChange={(e) => setNewNotes(e.target.value)}
-              placeholder="Any additional context for Grug…"
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            disabled={!newName || !newUrl || createCustom.isPending}
-            onClick={() => createCustom.mutate()}
-          >
-            Add
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </Stack>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Main GuildConfigPage — sub-tab host
-// ─────────────────────────────────────────────────────────────────────────────
-
-const SUB_TABS = ['Server', 'Channels', 'Rule Sources'] as const;
 
 export default function GuildConfigPage() {
   useAuth();
   const { guildId } = useParams<{ guildId: string }>();
-  const [activeTab, setActiveTab] = useState(0);
-
   if (!guildId) return null;
 
   return (
-    <Stack spacing={0}>
-      {/* Sub-tab bar */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-        <Tabs
-          value={activeTab}
-          onChange={(_, v) => setActiveTab(v)}
-          textColor="inherit"
-          TabIndicatorProps={{ style: { height: 2 } }}
-        >
-          {SUB_TABS.map((label) => (
-            <Tab key={label} label={label} sx={{ fontSize: '0.8125rem' }} />
-          ))}
-        </Tabs>
+    <Stack spacing={4}>
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
+          Server Settings
+        </Typography>
+        <ServerSettingsPanel guildId={guildId} />
       </Box>
-
-      {/* Panel content */}
-      {activeTab === 0 && <ServerSettingsPanel guildId={guildId} />}
-      {activeTab === 1 && <ChannelSettingsPanel guildId={guildId} />}
-      {activeTab === 2 && <RuleSourcesPanel guildId={guildId} />}
+      <Divider />
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
+          Channel Settings
+        </Typography>
+        <ChannelSettingsPanel guildId={guildId} />
+      </Box>
     </Stack>
   );
 }

@@ -18,7 +18,7 @@ from grug.agent.core import GrugDeps
 logger = logging.getLogger(__name__)
 
 # Maximum characters returned per source so Grug's context stays manageable.
-_MAX_SOURCE_CHARS = 1500
+_MAX_SOURCE_CHARS = 6000
 
 
 # Source attribution strings included in every result block so Grug can cite them.
@@ -29,53 +29,108 @@ _SOURCE_HEADERS = {
 }
 
 
-async def _fetch_aon_pf2e(query: str) -> str:
-    """Scrape Archives of Nethys search results for query."""
-    from bs4 import BeautifulSoup
+async def _fetch_aon_pf2e(query: str, *, size: int = 3) -> str:
+    """Query the Archives of Nethys Elasticsearch index directly.
+
+    Args:
+        query: Search query string.
+        size: Maximum number of hits to return.  Defaults to 3 for agent calls;
+            the admin test UI passes a higher value.
+    """
+    from elasticsearch import AsyncElasticsearch
 
     header = f"Source: {_SOURCE_HEADERS['aon_pf2e']}"
-    url = f"https://2e.aonprd.com/Search.aspx?query={quote_plus(query)}&include-types=spell,feat,action,monster,equipment,condition,hazard,rule"
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as http:
-            resp = await http.get(url, headers={"User-Agent": "GrugBot/1.0"})
-        if resp.status_code != 200:
-            return f"{header}\nArchives of Nethys returned HTTP {resp.status_code}."
-        soup = BeautifulSoup(resp.text, "html.parser")
-        # AON search results are inside .result-item elements
-        results = soup.select(".result-item")[:6]
-        if not results:
-            # Fallback: grab first few link titles from search results
-            links = soup.select("a[href*='/']")[:6]
-            if not links:
-                return f"{header}\nNo results found on Archives of Nethys."
-            parts = []
-            for a in links:
-                text = a.get_text(strip=True)
-                if not text:
-                    continue
-                href = a.get("href", "")
-                page_url = (
-                    f"https://2e.aonprd.com{href}" if href.startswith("/") else href
-                )
-                parts.append(f"• {text}: {page_url}" if page_url else f"• {text}")
-            return header + "\nArchives of Nethys results:\n" + "\n".join(parts[:6])
+        async with AsyncElasticsearch(
+            "https://elasticsearch.aonprd.com/",
+            headers={
+                "Accept": "application/vnd.elasticsearch+json",
+                "Content-Type": "application/vnd.elasticsearch+json",
+            },
+        ) as es:
+            es_response = await es.search(
+                index="aon",
+                query={
+                    "function_score": {
+                        "query": {
+                            "bool": {
+                                "should": [
+                                    {
+                                        "match_phrase_prefix": {
+                                            "name.sayt": {"query": query}
+                                        }
+                                    },
+                                    {
+                                        "match_phrase_prefix": {
+                                            "text.sayt": {"query": query, "boost": 0.1}
+                                        }
+                                    },
+                                    {"term": {"name": query}},
+                                    {
+                                        "bool": {
+                                            "must": [
+                                                {
+                                                    "multi_match": {
+                                                        "query": word,
+                                                        "type": "best_fields",
+                                                        "fields": [
+                                                            "name",
+                                                            "text^0.1",
+                                                            "trait_raw",
+                                                            "type",
+                                                        ],
+                                                        "fuzziness": "auto",
+                                                    }
+                                                }
+                                                for word in query.split(" ")
+                                            ]
+                                        }
+                                    },
+                                ],
+                                "must_not": [{"term": {"exclude_from_search": True}}],
+                                "minimum_should_match": 1,
+                            }
+                        },
+                        "boost_mode": "multiply",
+                        "functions": [
+                            {
+                                "filter": {"terms": {"type": ["Ancestry", "Class"]}},
+                                "weight": 1.1,
+                            },
+                            {"filter": {"terms": {"type": ["Trait"]}}, "weight": 1.05},
+                        ],
+                    }
+                },
+                sort=["_score", "_doc"],
+                source={},
+                size=size,
+            )
+
+        hits = es_response["hits"]["hits"]
+        if not hits:
+            return f"{header}\nNo results found on Archives of Nethys."
+
         parts = []
-        for r in results:
-            # Prefer the anchor inside the title element so we get the direct URL
-            title_el = r.select_one(".result-title a, h2 a, h3 a, a")
-            desc_el = r.select_one(".result-body, p")
-            title = title_el.get_text(strip=True) if title_el else "?"
-            href = title_el.get("href", "") if title_el else ""
-            page_url = f"https://2e.aonprd.com{href}" if href.startswith("/") else href
-            desc = desc_el.get_text(strip=True)[:300] if desc_el else ""
-            entry = f"**{title}** ({page_url})" if page_url else f"**{title}**"
-            if desc:
-                entry += f": {desc}"
+        for hit in hits:
+            src = hit["_source"]
+            name = src.get("name", "?")
+            entry_type = src.get("type", "")
+            # Prefer full text when available (test mode); fall back to summary snippet.
+            body_text = (src.get("text") or src.get("summary") or "").strip()
+            entry_url = f"https://2e.aonprd.com{src['url']}" if src.get("url") else ""
+            entry = f"**{name}**"
+            if entry_type:
+                entry += f" ({entry_type})"
+            if entry_url:
+                entry += f" — {entry_url}"
+            if body_text:
+                entry += f": {body_text}"
             parts.append(entry)
+
         return header + "\nArchives of Nethys results:\n" + "\n".join(parts)
     except Exception as exc:
-        logger.warning("AON lookup failed: %s", exc)
-        return f"{header}\nCould not reach Archives of Nethys: {exc}"
+        logger.warning("AON Elasticsearch lookup failed: %s", exc)
+        return f"{header}\nCould not reach Archives of Nethys Elasticsearch: {exc}"
 
 
 async def _fetch_srd_5e(query: str) -> str:
@@ -243,12 +298,14 @@ def register_rules_tools(agent: Agent[GrugDeps, str]) -> None:
             override_rows = result.scalars().all()
             overrides: dict[str, bool] = {r.source_id: r.enabled for r in override_rows}
 
-            # Load custom sources
+            # Load custom sources ordered by priority
             result = await session.execute(
-                select(RuleSource).where(
+                select(RuleSource)
+                .where(
                     RuleSource.guild_id == ctx.deps.guild_id,
                     RuleSource.enabled.is_(True),
                 )
+                .order_by(RuleSource.sort_order, RuleSource.created_at)
             )
             custom_sources = result.scalars().all()
 

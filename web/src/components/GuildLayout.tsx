@@ -5,12 +5,13 @@ import { useGuilds } from '../hooks/useGuilds';
 
 /** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
 const TABS = [
-  { label: 'Config',     path: 'config',    adminOnly: true },
-  { label: 'Events',     path: 'events',    adminOnly: false },
-  { label: 'Tasks',      path: 'tasks',     adminOnly: true },
-  { label: 'Documents',  path: 'documents', adminOnly: false },
-  { label: 'Glossary',   path: 'glossary',  adminOnly: false },
-  { label: 'Campaigns',  path: 'campaigns', adminOnly: true },
+  { label: 'Config',       path: 'config',       adminOnly: true },
+  { label: 'Events',       path: 'events',       adminOnly: false },
+  { label: 'Tasks',        path: 'tasks',        adminOnly: true },
+  { label: 'Documents',    path: 'documents',    adminOnly: false },
+  { label: 'Glossary',     path: 'glossary',     adminOnly: false },
+  { label: 'Campaigns',    path: 'campaigns',    adminOnly: true },
+  { label: 'Rule Sources', path: 'rule-sources', adminOnly: true },
 ];
 
 export default function GuildLayout() {

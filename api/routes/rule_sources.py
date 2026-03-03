@@ -19,6 +19,8 @@ from api.schemas import (
     BuiltinRuleSourceOut,
     RuleSourceCreate,
     RuleSourceOut,
+    RuleSourceTestRequest,
+    RuleSourceTestResult,
     RuleSourceUpdate,
 )
 from grug.db.models import GuildBuiltinOverride, RuleSource
@@ -128,14 +130,14 @@ async def list_rule_sources(
     guild_id: int,
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[RuleSourceOut]:
+) -> list[RuleSource]:
     """Return all custom rule sources configured for this guild."""
     assert_guild_member(guild_id, user)
 
     result = await db.execute(
         select(RuleSource)
         .where(RuleSource.guild_id == guild_id)
-        .order_by(RuleSource.created_at)
+        .order_by(RuleSource.sort_order, RuleSource.created_at)
     )
     return list(result.scalars().all())
 
@@ -150,14 +152,23 @@ async def create_rule_source(
     body: RuleSourceCreate,
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> RuleSourceOut:
+) -> RuleSource:
     """Add a new custom rule source for this guild."""
     assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
 
+    from sqlalchemy import func
     from grug.utils import ensure_guild
 
     await ensure_guild(guild_id)
+
+    # Place the new source at the end of the custom list (max sort_order + 10, or 0).
+    max_result = await db.execute(
+        select(func.max(RuleSource.sort_order)).where(RuleSource.guild_id == guild_id)
+    )
+    max_order = max_result.scalar_one_or_none()
+    next_order = (max_order + 10) if max_order is not None else 0
+
     now = datetime.now(timezone.utc)
     src = RuleSource(
         guild_id=guild_id,
@@ -166,6 +177,7 @@ async def create_rule_source(
         system=body.system,
         notes=body.notes,
         enabled=body.enabled,
+        sort_order=next_order,
         created_at=now,
         updated_at=now,
     )
@@ -185,7 +197,7 @@ async def update_rule_source(
     body: RuleSourceUpdate,
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> RuleSourceOut:
+) -> RuleSource:
     """Update a custom rule source."""
     assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
@@ -235,3 +247,49 @@ async def delete_rule_source(
 
     await db.delete(src)
     await db.commit()
+
+
+# ── Test a source ────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/api/guilds/{guild_id}/rule-sources/test",
+    response_model=RuleSourceTestResult,
+)
+async def test_rule_source(
+    guild_id: int,
+    body: RuleSourceTestRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> RuleSourceTestResult:
+    """Run a live test query against a single rule source and return raw text."""
+    assert_guild_member(guild_id, user)
+
+    from grug.agent.tools.rules_tools import (
+        _fetch_aon_pf2e,
+        _fetch_custom_source,
+        _fetch_open5e,
+        _fetch_srd_5e,
+    )
+
+    try:
+        if body.source_id == "aon_pf2e":
+            text = await _fetch_aon_pf2e(body.query, size=3)
+        elif body.source_id == "srd_5e":
+            text = await _fetch_srd_5e(body.query)
+        elif body.source_id == "open5e":
+            text = await _fetch_open5e(body.query)
+        elif body.source_name and body.source_url:
+            text = await _fetch_custom_source(
+                body.source_name, body.source_url, body.query
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Supply source_id for built-ins or source_name+source_url for custom.",
+            )
+        return RuleSourceTestResult(result=text)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Rule source test failed: %s", exc)
+        return RuleSourceTestResult(result=str(exc), error=True)

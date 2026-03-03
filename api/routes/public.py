@@ -30,7 +30,6 @@ async def export_ical(
     in Google Calendar, Apple Calendar, Outlook, and any other iCal-compatible
     application.
     """
-    from datetime import timedelta
 
     from icalendar import Calendar, Event as ICalEvent, vText  # type: ignore[import-untyped]
 

@@ -247,9 +247,7 @@ async def list_rsvps(
         CalendarEvent.guild_id == guild_id,
         detail="Event not found",
     )
-    result = await db.execute(
-        select(EventRSVP).where(EventRSVP.event_id == event_id)
-    )
+    result = await db.execute(select(EventRSVP).where(EventRSVP.event_id == event_id))
     return list(result.scalars().all())
 
 
@@ -737,9 +735,7 @@ async def upsert_poll_vote(
     return vote
 
 
-@router.delete(
-    "/api/guilds/{guild_id}/polls/{poll_id}/vote", status_code=204
-)
+@router.delete("/api/guilds/{guild_id}/polls/{poll_id}/vote", status_code=204)
 async def delete_poll_vote(
     guild_id: int,
     poll_id: int,
@@ -910,4 +906,3 @@ async def delete_task(
     )
     await db.delete(task)
     await db.commit()
-

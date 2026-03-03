@@ -284,7 +284,10 @@ class EventRSVP(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # 'attending' | 'maybe' | 'declined'
@@ -301,7 +304,9 @@ class EventRSVP(Base):
 
     event: Mapped["CalendarEvent"] = relationship(back_populates="rsvps")
 
-    __table_args__ = (UniqueConstraint("event_id", "discord_user_id", name="uq_event_rsvp"),)
+    __table_args__ = (
+        UniqueConstraint("event_id", "discord_user_id", name="uq_event_rsvp"),
+    )
 
 
 class EventNote(Base):
@@ -314,7 +319,10 @@ class EventNote(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     done: Mapped[bool] = mapped_column(
@@ -346,7 +354,10 @@ class EventOccurrenceOverride(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     # Identifies the specific recurrence being overridden.
     original_start: Mapped[datetime] = mapped_column(
@@ -375,7 +386,9 @@ class EventOccurrenceOverride(Base):
     event: Mapped["CalendarEvent"] = relationship(back_populates="occurrence_overrides")
 
     __table_args__ = (
-        UniqueConstraint("event_id", "original_start", name="uq_event_occurrence_override"),
+        UniqueConstraint(
+            "event_id", "original_start", name="uq_event_occurrence_override"
+        ),
     )
 
 
@@ -394,7 +407,10 @@ class AvailabilityPoll(Base):
     )
     # Optional link to a calendar event this poll is associated with.
     event_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer,
+        ForeignKey("calendar_events.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     title: Mapped[str] = mapped_column(String(256), nullable=False)
     # JSON: list of {id, label, start_time?, end_time?}
@@ -431,7 +447,10 @@ class PollVote(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     poll_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("availability_polls.id", ondelete="CASCADE"), nullable=False, index=True
+        Integer,
+        ForeignKey("availability_polls.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # JSON: list of option IDs this user voted for
@@ -447,7 +466,9 @@ class PollVote(Base):
 
     poll: Mapped["AvailabilityPoll"] = relationship(back_populates="votes")
 
-    __table_args__ = (UniqueConstraint("poll_id", "discord_user_id", name="uq_poll_vote"),)
+    __table_args__ = (
+        UniqueConstraint("poll_id", "discord_user_id", name="uq_poll_vote"),
+    )
 
 
 class ScheduledTask(Base):
@@ -632,6 +653,8 @@ class RuleSource(Base):
     system: Mapped[str | None] = mapped_column(String(128), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    """Lower value = higher priority. Built-in sources are always consulted first."""
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

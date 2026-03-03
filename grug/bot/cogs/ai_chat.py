@@ -1,7 +1,7 @@
 """AI chat cog — routes Discord messages to the Grug agent."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import discord
 from discord import app_commands
@@ -13,6 +13,9 @@ from grug.bot.cogs.base import GrugCogBase
 from grug.utils import get_campaign_id_for_channel
 
 logger = logging.getLogger(__name__)
+
+# Default lookback window applied when no explicit context cutoff is configured.
+_DEFAULT_CONTEXT_LOOKBACK_DAYS = 30
 
 # Sentinel guild_id for DM sessions (no real guild)
 _DM_GUILD_ID = 0
@@ -259,7 +262,7 @@ async def _get_effective_context_cutoff(
     """Return the context cutoff for a channel, falling back to the guild setting.
 
     Precedence: channel-level ``context_cutoff`` > guild-level ``context_cutoff``.
-    Returns ``None`` if neither is set (no cutoff applied).
+    Falls back to a rolling 30-day window when neither is explicitly set.
     """
     from grug.db.models import ChannelConfig, GuildConfig
     from grug.db.session import get_session_factory
@@ -277,13 +280,13 @@ async def _get_effective_context_cutoff(
             select(GuildConfig).where(GuildConfig.guild_id == guild_id)
         )
         g_cfg = g_result.scalar_one_or_none()
-        if g_cfg is not None:
+        if g_cfg is not None and g_cfg.context_cutoff is not None:
             return g_cfg.context_cutoff
-    return None
+    return datetime.now(timezone.utc) - timedelta(days=_DEFAULT_CONTEXT_LOOKBACK_DAYS)
 
 
 async def _get_dm_context_cutoff(discord_user_id: int) -> datetime | None:
-    """Return the DM context cutoff for a user, or None if not configured."""
+    """Return the DM context cutoff for a user, falling back to a 30-day rolling window."""
     from grug.db.models import UserProfile
     from grug.db.session import get_session_factory
 
@@ -293,9 +296,9 @@ async def _get_dm_context_cutoff(discord_user_id: int) -> datetime | None:
             select(UserProfile).where(UserProfile.discord_user_id == discord_user_id)
         )
         profile = result.scalar_one_or_none()
-        if profile is not None:
+        if profile is not None and profile.dm_context_cutoff is not None:
             return profile.dm_context_cutoff
-    return None
+    return datetime.now(timezone.utc) - timedelta(days=_DEFAULT_CONTEXT_LOOKBACK_DAYS)
 
 
 async def _get_user_character_context(
