@@ -22,6 +22,7 @@ services:
     volumes:
       - ./grug:/app/grug
       - ./api:/app/api
+      - ./alembic:/app/alembic
       - ./roadmap.md:/app/roadmap.md
     # --reload watches /app for any .py change and restarts the worker automatically.
     command: >

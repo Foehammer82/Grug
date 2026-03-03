@@ -1,7 +1,7 @@
 """Add pathbuilder_id column to characters for Pathbuilder 2e sync.
 
 Revision ID: 20260303_0001_character_pathbuilder_id
-Revises: 20260303_0000_initial_schema
+Revises: 20260302_0002_document_content_hash
 Create Date: 2026-03-03
 
 Adds a nullable ``pathbuilder_id`` integer column to the ``characters``
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "20260303_0001_character_pathbuilder_id"
-down_revision = "20260303_0000_initial_schema"
+down_revision = "20260302_0002_document_content_hash"
 branch_labels = None
 depends_on = None
 
