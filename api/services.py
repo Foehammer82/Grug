@@ -29,4 +29,13 @@ async def parse_cron_from_text(text: str) -> str:
         ),
     )
     result = await agent.run(text)
+    _usage = result.usage()
+    from grug.llm_usage import CallType, record_llm_usage
+
+    await record_llm_usage(
+        model=settings.anthropic_model,
+        call_type=CallType.CRON_PARSE,
+        input_tokens=_usage.request_tokens or 0,
+        output_tokens=_usage.response_tokens or 0,
+    )
     return result.output.cron_expression

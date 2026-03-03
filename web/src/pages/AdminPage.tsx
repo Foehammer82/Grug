@@ -31,6 +31,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import LLMUsageSection from '../components/LLMUsageSection';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -441,6 +442,8 @@ export default function AdminPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      <LLMUsageSection />
     </Box>
   );
 }

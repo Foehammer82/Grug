@@ -25,6 +25,7 @@ from api.routes import (
     public,
     rule_sources,
     system,
+    usage,
 )
 from grug.config.settings import get_settings
 
@@ -75,3 +76,4 @@ app.include_router(campaigns.router, dependencies=_auth_required)
 app.include_router(characters.router, dependencies=_auth_required)
 app.include_router(admin.router, dependencies=_auth_required)
 app.include_router(rule_sources.router, dependencies=_auth_required)
+app.include_router(usage.router, dependencies=_auth_required)

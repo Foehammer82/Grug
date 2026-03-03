@@ -1,10 +1,11 @@
 """SQLAlchemy ORM models for Grug."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     Integer,
@@ -686,3 +687,37 @@ class GuildBuiltinOverride(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="builtin_overrides")
+
+
+class LLMUsageDailyAggregate(Base):
+    """Daily aggregate of LLM API token usage, keyed by date, guild, user, model, and call type.
+
+    Costs are **not** stored — they are computed at read time from the price
+    table in :mod:`grug.llm_usage` so that retroactive price updates apply
+    automatically.
+    """
+
+    __tablename__ = "llm_usage_daily_aggregates"
+    __table_args__ = (
+        UniqueConstraint(
+            "date",
+            "guild_id",
+            "user_id",
+            "model",
+            "call_type",
+            name="uq_llm_usage_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Nullable — DMs or background tasks have no guild / user.
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Exact model name as returned by the API, e.g. "claude-haiku-4-5".
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Feature that triggered the call — see grug.llm_usage.CallType.
+    call_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)

@@ -137,9 +137,9 @@ async def test_rule_source(
 
     try:
         if body.source_id == "aon_pf2e":
-            text = await _fetch_aon_pf2e(body.query)
+            text = await _fetch_aon_pf2e(body.query, guild_id=guild_id, size=5)
         elif body.source_id == "srd_5e":
-            text = await _fetch_srd_5e(body.query)
+            text = await _fetch_srd_5e(body.query, guild_id=guild_id)
         else:
             raise HTTPException(
                 status_code=400,
