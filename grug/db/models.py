@@ -38,6 +38,9 @@ class GuildConfig(Base):
     context_cutoff: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Random token used to authenticate the public iCal feed URL.
+    # Generated on first use; can be regenerated to invalidate old subscriptions.
+    calendar_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

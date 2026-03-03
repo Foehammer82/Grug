@@ -1,8 +1,9 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Box, Button, CircularProgress, Typography, useTheme } from '@mui/material';
+import { Box, Button, CircularProgress, Collapse, Divider, Typography, useTheme } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -15,6 +16,7 @@ import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import EventCreateModal from '../components/EventCreateModal';
+import CalendarSubscribePanel from '../components/CalendarSubscribePanel';
 import type { CalendarEvent, ScheduledTask } from '../types';
 import EventDetailModal from '../components/EventDetailModal';
 import TaskDetailModal from '../components/TaskDetailModal';
@@ -41,6 +43,7 @@ export default function EventsPage() {
   const [createDefault, setCreateDefault] = useState<string>('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   /* ---- data fetching ---- */
   const { data: events, isLoading: eventsLoading } = useQuery<CalendarEvent[]>({
@@ -244,18 +247,45 @@ export default function EventsPage() {
           Click a date to create an event or click an item for details.
           {isAdmin && ' Drag events to reschedule them.'}
         </Typography>
-        {isAdmin && (
+        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
           <Button
-            variant="contained"
+            variant="outlined"
             size="small"
-            startIcon={<AddIcon />}
-            onClick={() => { setCreateDefault(''); setCreateOpen(true); }}
-            sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+            startIcon={<CalendarMonthIcon />}
+            onClick={() => setSubscribeOpen((v) => !v)}
+            sx={{ whiteSpace: 'nowrap' }}
           >
-            New Event
+            Subscribe
           </Button>
-        )}
+          {isAdmin && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => { setCreateDefault(''); setCreateOpen(true); }}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              New Event
+            </Button>
+          )}
+        </Box>
       </Box>
+
+      {/* Collapsible subscribe panel */}
+      <Collapse in={subscribeOpen}>
+        <Box
+          sx={{
+            p: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <CalendarSubscribePanel compact />
+        </Box>
+        <Divider sx={{ mt: 2 }} />
+      </Collapse>
 
       {/* Calendar */}
       {eventsLoading && !events ? (

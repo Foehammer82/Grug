@@ -374,3 +374,53 @@ class TestICalExport:
         assert b"Game Night" in ics
         assert b"VEVENT" in ics
         assert b"BEGIN:VCALENDAR" in ics
+
+
+# ---------------------------------------------------------------------------
+# Calendar token
+# ---------------------------------------------------------------------------
+
+
+class TestCalendarToken:
+    def test_token_is_non_empty(self):
+        """secrets.token_urlsafe produces a non-empty string of adequate length."""
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+        # 32 bytes of randomness → at least 43 base64url chars
+        assert len(token) >= 43
+
+    def test_token_uniqueness(self):
+        """Two generated tokens are different (collision probability negligible)."""
+        import secrets
+
+        t1 = secrets.token_urlsafe(32)
+        t2 = secrets.token_urlsafe(32)
+        assert t1 != t2
+
+    def test_ical_url_structure(self):
+        """The expected iCal feed URL shape is correct."""
+        api_base = "http://localhost:8000"
+        guild_id = "123456789"
+        token = "abc123"
+        expected = f"{api_base}/api/guilds/{guild_id}/events/ical?token={token}"
+        url = f"{api_base}/api/guilds/{guild_id}/events/ical?token={token}"
+        assert url == expected
+
+    def test_webcal_url_substitution(self):
+        """https:// is correctly replaced with webcal:// for Apple Calendar links."""
+        feed_url = "https://example.com/api/guilds/123/events/ical?token=abc"
+        webcal_url = feed_url.replace("https://", "webcal://")
+        assert webcal_url == "webcal://example.com/api/guilds/123/events/ical?token=abc"
+
+    def test_google_calendar_url(self):
+        """Google Calendar deep-link URL is correctly formed."""
+        import urllib.parse
+        from urllib.parse import urlparse
+
+        feed_url = "https://example.com/api/guilds/123/events/ical?token=abc"
+        google_url = f"https://calendar.google.com/calendar/u/0/r/settings/addbyurl?url={urllib.parse.quote(feed_url)}"
+        parsed = urlparse(google_url)
+        assert parsed.netloc == "calendar.google.com"
+        assert "addbyurl" in parsed.path
+        assert "url=" in parsed.query

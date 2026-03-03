@@ -221,3 +221,65 @@ async def update_channel_config(
     await db.commit()
     await db.refresh(cfg)
     return cfg
+
+
+# --------------------------------------------------------------------------- #
+# Calendar feed token                                                          #
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/api/guilds/{guild_id}/calendar-token")
+async def get_calendar_token(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Return the guild's calendar feed token, generating one if missing.
+
+    Any guild member can call this endpoint to get the token (so they can
+    subscribe to the feed).  The token acts like a shareable-but-secret URL
+    segment — anyone with the URL can read the calendar, so the regenerate
+    endpoint is admin-only.
+    """
+    import secrets
+
+    assert_guild_member(guild_id, user)
+    cfg = await get_or_404(
+        db,
+        GuildConfig,
+        GuildConfig.guild_id == guild_id,
+        detail="Guild config not found",
+    )
+    if not cfg.calendar_token:
+        cfg.calendar_token = secrets.token_urlsafe(32)
+        cfg.updated_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(cfg)
+    return {"token": cfg.calendar_token}
+
+
+@router.post("/api/guilds/{guild_id}/calendar-token/regenerate")
+async def regenerate_calendar_token(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Regenerate the guild's calendar feed token (invalidates existing subscriptions).
+
+    All subscribers must update their feed URL with the new token.  Admin-only.
+    """
+    import secrets
+
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    cfg = await get_or_404(
+        db,
+        GuildConfig,
+        GuildConfig.guild_id == guild_id,
+        detail="Guild config not found",
+    )
+    cfg.calendar_token = secrets.token_urlsafe(32)
+    cfg.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(cfg)
+    return {"token": cfg.calendar_token}

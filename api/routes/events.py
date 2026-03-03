@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -55,77 +55,6 @@ router = APIRouter(tags=["events"])
 # --------------------------------------------------------------------------- #
 # Calendar events                                                              #
 # --------------------------------------------------------------------------- #
-
-
-@router.get("/api/guilds/{guild_id}/events/ical")
-async def export_ical(
-    guild_id: int,
-    db: AsyncSession = Depends(get_db),
-) -> Response:
-    """Export guild calendar events as a subscribable iCal (.ics) feed.
-
-    This endpoint is unauthenticated so it can be subscribed to directly from
-    calendar applications.  To restrict access, add a secret token query
-    parameter in a future iteration.
-    """
-    from icalendar import Calendar, Event as ICalEvent, vText  # type: ignore[import-untyped]
-
-    result = await db.execute(
-        select(CalendarEvent).where(CalendarEvent.guild_id == guild_id)
-    )
-    events = result.scalars().all()
-
-    # Load overrides for all events at once.
-    event_ids = [e.id for e in events]
-    overrides_result = await db.execute(
-        select(EventOccurrenceOverride).where(
-            EventOccurrenceOverride.event_id.in_(event_ids)
-        )
-    )
-    overrides_by_event: dict[int, list] = {}
-    for ov in overrides_result.scalars().all():
-        overrides_by_event.setdefault(ov.event_id, []).append(ov)
-
-    cal = Calendar()
-    cal.add("prodid", "-//Grug Bot//Grug Calendar//EN")
-    cal.add("version", "2.0")
-    cal.add("calscale", "GREGORIAN")
-    cal.add("x-wr-calname", f"Guild {guild_id} Events")
-
-    # Expand a wide window (2 years back, 2 years forward) for the .ics feed.
-    now = datetime.now(timezone.utc)
-    from datetime import timedelta
-
-    window_start = now.replace(year=now.year - 2, month=1, day=1)
-    window_end = now.replace(year=now.year + 2, month=12, day=31)
-
-    for ev in events:
-        overrides = overrides_by_event.get(ev.id, [])
-        occurrences = expand_event_occurrences(
-            ev, window_start, window_end, overrides=overrides
-        )
-        for occ in occurrences:
-            ical_ev = ICalEvent()
-            uid = f"grug-{ev.id}-{occ['occurrence_start'].strftime('%Y%m%dT%H%M%SZ')}@grug"
-            ical_ev.add("uid", uid)
-            ical_ev.add("summary", ev.title)
-            ical_ev.add("dtstart", occ["occurrence_start"])
-            ical_ev.add("dtend", occ["occurrence_end"])
-            if ev.description:
-                ical_ev.add("description", vText(ev.description))
-            if ev.location:
-                ical_ev.add("location", vText(ev.location))
-            ical_ev.add("dtstamp", now)
-            cal.add_component(ical_ev)
-
-    ics_bytes = cal.to_ical()
-    return Response(
-        content=ics_bytes,
-        media_type="text/calendar; charset=utf-8",
-        headers={
-            "Content-Disposition": f'attachment; filename="guild-{guild_id}-events.ics"'
-        },
-    )
 
 
 @router.get("/api/guilds/{guild_id}/events", response_model=list[CalendarEventOut])
