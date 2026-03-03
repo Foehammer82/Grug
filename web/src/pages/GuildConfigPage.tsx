@@ -10,17 +10,22 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
-  FormControlLabel,
   IconButton,
   Stack,
   Switch,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ScienceIcon from '@mui/icons-material/Science';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
@@ -190,7 +195,7 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
 
 function ChannelSettingsPanel({ guildId }: { guildId: string }) {
   const qc = useQueryClient();
-  const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
+  const [filter, setFilter] = useState('');
 
   const {
     data: channels,
@@ -203,65 +208,41 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
     enabled: !!guildId,
   });
 
-  const { data: channelConfig } = useQuery<ChannelConfig>({
-    queryKey: ['channelConfig', guildId, selectedChannel?.id],
+  const { data: channelConfigs } = useQuery<ChannelConfig[]>({
+    queryKey: ['channelConfigs', guildId],
     queryFn: async () =>
-      (
-        await client.get<ChannelConfig>(
-          `/api/guilds/${guildId}/channels/${selectedChannel!.id}/config`
-        )
-      ).data,
-    enabled: !!guildId && !!selectedChannel,
+      (await client.get<ChannelConfig[]>(`/api/guilds/${guildId}/channels/configs`)).data,
+    enabled: !!guildId,
   });
+
+  const configMap = useMemo(
+    () => new Map((channelConfigs ?? []).map((c) => [c.channel_id, c])),
+    [channelConfigs],
+  );
 
   const channelMutation = useMutation({
-    mutationFn: async (patch: Record<string, unknown>) => {
-      await client.patch(
-        `/api/guilds/${guildId}/channels/${selectedChannel!.id}/config`,
-        patch
-      );
+    mutationFn: async ({
+      channelId,
+      patch,
+    }: {
+      channelId: string;
+      patch: Record<string, unknown>;
+    }) => {
+      await client.patch(`/api/guilds/${guildId}/channels/${channelId}/config`, patch);
     },
-    onSuccess: () =>
-      qc.invalidateQueries({
-        queryKey: ['channelConfig', guildId, selectedChannel?.id],
-      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['channelConfigs', guildId] }),
   });
 
-  return (
-    <Stack spacing={2.5} sx={{ maxWidth: 520 }}>
-      <Typography variant="body2" color="text.secondary">
-        Override server-wide settings for a specific channel.
-      </Typography>
+  const filtered = useMemo(() => {
+    const q = filter.toLowerCase();
+    return (channels ?? []).filter((ch) => ch.name.toLowerCase().includes(q));
+  }, [channels, filter]);
 
-      <Autocomplete
-        size="small"
-        fullWidth
-        options={channels ?? []}
-        loading={channelsLoading}
-        value={selectedChannel}
-        onChange={(_, ch) => setSelectedChannel(ch)}
-        getOptionLabel={(ch) => `#${ch.name}`}
-        filterOptions={(opts, { inputValue }) => {
-          const q = inputValue.toLowerCase();
-          return opts.filter(
-            (ch) => ch.name.toLowerCase().includes(q) || ch.id.includes(q)
-          );
-        }}
-        isOptionEqualToValue={(a, b) => a.id === b.id}
-        renderOption={(props, ch) => (
-          <Box component="li" {...props} key={ch.id}>
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-              <span>#{ch.name}</span>
-              <Typography component="span" variant="caption" color="text.disabled">
-                {ch.id}
-              </Typography>
-            </Box>
-          </Box>
-        )}
-        renderInput={(params) => (
-          <TextField {...params} label="Select Channel to Configure" />
-        )}
-      />
+  return (
+    <Stack spacing={2}>
+      <Typography variant="body2" color="text.secondary">
+        Configure per-channel settings. Changes save instantly.
+      </Typography>
 
       {channelsError && (
         <Typography variant="caption" color="warning.main">
@@ -269,36 +250,88 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
         </Typography>
       )}
 
-      {selectedChannel && (
-        <Stack spacing={2} sx={{ pl: 1 }}>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={channelConfig?.always_respond ?? false}
-                onChange={(_, checked) =>
-                  channelMutation.mutate({ always_respond: checked })
-                }
-                disabled={channelMutation.isPending || !channelConfig}
-                size="small"
-              />
-            }
-            label={
-              <Stack>
-                <Typography variant="body2">Always Respond</Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Grug replies to every message here, not just @mentions.
-                </Typography>
-              </Stack>
-            }
-            sx={{ alignItems: 'flex-start', mt: 0.5 }}
+      {channelsLoading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+          <CircularProgress size={20} />
+        </Box>
+      ) : (
+        <>
+          <TextField
+            size="small"
+            placeholder="Filter channels…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            sx={{ maxWidth: 320 }}
           />
-
+          <TableContainer
+            sx={{
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 1,
+              maxHeight: 420,
+            }}
+          >
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Channel</TableCell>
+                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
+                    Always Respond
+                  </TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2}>
+                      <Typography variant="body2" color="text.secondary">
+                        No channels found.
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((ch) => {
+                    const cfg = configMap.get(ch.id);
+                    const alwaysRespond = cfg?.always_respond ?? false;
+                    return (
+                      <TableRow key={ch.id} hover>
+                        <TableCell>
+                          <Typography variant="body2">#{ch.name}</Typography>
+                        </TableCell>
+                        <TableCell align="center">
+                          <Tooltip
+                            title={
+                              alwaysRespond
+                                ? 'Grug replies to every message here'
+                                : 'Grug only replies to @mentions'
+                            }
+                          >
+                            <Switch
+                              size="small"
+                              checked={alwaysRespond}
+                              onChange={(_, checked) =>
+                                channelMutation.mutate({
+                                  channelId: ch.id,
+                                  patch: { always_respond: checked },
+                                })
+                              }
+                              disabled={channelMutation.isPending}
+                            />
+                          </Tooltip>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
           {channelMutation.isError && (
             <Typography variant="caption" color="error.main">
               Failed to save channel settings — please try again.
             </Typography>
           )}
-        </Stack>
+        </>
       )}
     </Stack>
   );
