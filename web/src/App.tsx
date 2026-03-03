@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/AppLayout';
 import GuildLayout from './components/GuildLayout';
@@ -16,9 +17,20 @@ import CampaignsPage from './pages/CampaignsPage';
 import CharactersPage from './pages/CharactersPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
 import TasksPage from './pages/TasksPage';
+import { useBotAvatar } from './hooks/useBotAvatar';
 
 
 function App() {
+  const botAvatar = useBotAvatar();
+
+  // Keep the favicon in sync with the bot's Discord profile picture.
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+    if (link && botAvatar) {
+      link.href = botAvatar;
+    }
+  }, [botAvatar]);
+
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />

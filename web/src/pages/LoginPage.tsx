@@ -4,7 +4,7 @@ import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
-import grugNb from '../assets/grug_nb.png';
+import { useBotAvatar } from '../hooks/useBotAvatar';
 import { getEnv } from '../env';
 
 const API_URL = getEnv('VITE_API_URL') ?? 'http://localhost:8000';
@@ -17,6 +17,7 @@ const DiscordIcon = () => (
 
 export default function LoginPage() {
   const [hovered, setHovered] = useState(false);
+  const botAvatar = useBotAvatar();
 
   return (
     <Box
@@ -47,7 +48,7 @@ export default function LoginPage() {
         }}
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-          <Box component="img" src={grugNb} alt="Grug" sx={{ width: 80, height: 80, objectFit: 'contain' }} />
+          <Box component="img" src={botAvatar} alt="Grug" sx={{ width: 80, height: 80, objectFit: 'contain', borderRadius: '50%' }} />
           <Typography variant="h5" fontWeight={700} letterSpacing="-0.02em">
             Grug Dashboard
           </Typography>

@@ -1,9 +1,10 @@
 import { Box, Typography } from '@mui/material';
-import grugNb from '../assets/grug_nb.png';
+import { useBotAvatar } from '../hooks/useBotAvatar';
 import { useGuilds } from '../hooks/useGuilds';
 
 export default function DashboardPage() {
   const { data: guilds, isLoading } = useGuilds();
+  const botAvatar = useBotAvatar();
 
   return (
     <Box
@@ -19,9 +20,9 @@ export default function DashboardPage() {
     >
       <Box
         component="img"
-        src={grugNb}
+        src={botAvatar}
         alt="Grug"
-        sx={{ width: 80, height: 80, opacity: 0.35, objectFit: 'contain' }}
+        sx={{ width: 80, height: 80, opacity: 0.35, objectFit: 'contain', borderRadius: '50%' }}
       />
       {isLoading ? (
         <Typography color="text.secondary">Loading servers…</Typography>

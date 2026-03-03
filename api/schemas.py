@@ -18,6 +18,12 @@ class DefaultsOut(BaseModel):
     default_timezone: str
 
 
+class BotInfoOut(BaseModel):
+    id: str
+    username: str
+    avatar_url: str | None = None
+
+
 class GuildOut(BaseModel):
     id: str
     name: str

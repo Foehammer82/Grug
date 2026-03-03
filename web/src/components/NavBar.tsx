@@ -21,7 +21,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import grugNb from '../assets/grug_nb.png';
+import { useBotAvatar } from '../hooks/useBotAvatar';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { ThemePreference, useThemePreference } from '../context/ThemeContext';
@@ -44,6 +44,7 @@ export default function NavBar() {
   const { data: user } = useAuth();
   const navigate = useNavigate();
   const { preference, setPreference } = useThemePreference();
+  const botAvatar = useBotAvatar();
 
   const canInvite = user?.is_super_admin || user?.can_invite;
 
@@ -83,9 +84,9 @@ export default function NavBar() {
             <IconButton onClick={() => navigate('/dashboard')} size="small" sx={{ p: 0.5 }}>
               <Box
                 component="img"
-                src={grugNb}
+                src={botAvatar}
                 alt="Home"
-                sx={{ width: 38, height: 38, objectFit: 'contain' }}
+                sx={{ width: 38, height: 38, objectFit: 'contain', borderRadius: '50%' }}
               />
             </IconButton>
           </Tooltip>
