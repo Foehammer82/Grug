@@ -32,9 +32,11 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Start the in-process scheduler for personal (DM) task execution."""
+    """Run DB migrations and start the in-process scheduler for personal (DM) task execution."""
+    from grug.db.session import init_db
     from grug.scheduler.manager import start_scheduler, stop_scheduler
 
+    await init_db()
     start_scheduler()
     try:
         yield
