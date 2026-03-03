@@ -47,9 +47,82 @@ export interface CalendarEvent {
   channel_id: string | null;
   occurrence_start?: string;
   occurrence_end?: string;
+  /** original_start is present for recurring event occurrences */
+  original_start?: string;
   created_by: string;
   created_at: string;
   updated_at: string;
+}
+
+/* ── Event RSVP ───────────────────────────────────────────────────── */
+
+export type RSVPStatus = 'attending' | 'maybe' | 'declined';
+
+export interface EventRSVP {
+  id: number;
+  event_id: number;
+  discord_user_id: string;
+  status: RSVPStatus;
+  note: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/* ── Event Notes ──────────────────────────────────────────────────── */
+
+export interface EventNote {
+  id: number;
+  event_id: number;
+  content: string;
+  done: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+/* ── Occurrence Overrides ─────────────────────────────────────────── */
+
+export interface EventOccurrenceOverride {
+  id: number;
+  event_id: number;
+  original_start: string;
+  new_start: string | null;
+  new_end: string | null;
+  cancelled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/* ── Availability Polls ───────────────────────────────────────────── */
+
+export interface PollOption {
+  id: number;
+  label: string;
+  start_time?: string | null;
+  end_time?: string | null;
+}
+
+export interface PollVote {
+  id: number;
+  poll_id: number;
+  discord_user_id: string;
+  option_ids: number[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AvailabilityPoll {
+  id: number;
+  guild_id: string;
+  event_id: number | null;
+  title: string;
+  options: PollOption[];
+  closes_at: string | null;
+  winner_option_id: number | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  votes: PollVote[];
 }
 
 /* ── Guild config ─────────────────────────────────────────────────── */

@@ -21,6 +21,7 @@ from api.routes import (
     glossary,
     guilds,
     personal,
+    public,
     system,
 )
 from grug.config.settings import get_settings
@@ -54,6 +55,8 @@ app.add_middleware(
 app.include_router(auth.router)
 # Public system routes (server defaults etc. — no auth required).
 app.include_router(system.router)
+# Public calendar feed — token-gated, no session auth required.
+app.include_router(public.router)
 
 # All remaining routes require an authenticated session at the router level.
 # Individual endpoints that also declare Depends(get_current_user) to access

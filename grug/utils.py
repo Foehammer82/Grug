@@ -116,6 +116,7 @@ def expand_event_occurrences(
     range_end: datetime,
     *,
     max_occurrences: int = 200,
+    overrides: list | None = None,
 ) -> list[dict]:
     """Expand a recurring ``CalendarEvent`` into concrete occurrences.
 
@@ -138,10 +139,24 @@ def expand_event_occurrences(
         The window to enumerate occurrences within (inclusive of start).
     max_occurrences:
         Safety cap to prevent unbounded expansion.
+    overrides:
+        Optional list of ``EventOccurrenceOverride`` ORM objects.  When
+        supplied, cancelled occurrences are excluded and rescheduled
+        occurrences use ``new_start`` / ``new_end`` instead of the
+        RRULE-computed values.
     """
     duration = (
         (event.end_time - event.start_time) if event.end_time else timedelta(hours=1)
     )
+
+    # Build a lookup from original_start → override for quick access.
+    override_map: dict[datetime, object] = {}
+    if overrides:
+        for ov in overrides:
+            key = ov.original_start
+            if key.tzinfo is None:
+                key = key.replace(tzinfo=timezone.utc)
+            override_map[key] = ov
 
     base = {
         "id": event.id,
@@ -186,13 +201,25 @@ def expand_event_occurrences(
             dt = dt.replace(tzinfo=timezone.utc)
         if dt > range_end:
             break
-        occ_end = dt + duration
+
+        # Apply any per-occurrence override.
+        override = override_map.get(dt)
+        if override is not None:
+            if override.cancelled:
+                continue  # Drop this occurrence entirely.
+            occ_start = override.new_start if override.new_start is not None else dt
+            occ_end = override.new_end if override.new_end is not None else occ_start + duration
+        else:
+            occ_start = dt
+            occ_end = dt + duration
+
         if occ_end >= range_start:
             occurrences.append(
                 {
                     **base,
-                    "occurrence_start": dt,
+                    "occurrence_start": occ_start,
                     "occurrence_end": occ_end,
+                    "original_start": dt,
                 }
             )
         if len(occurrences) >= max_occurrences:

@@ -1,19 +1,22 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { Box, Button, CircularProgress, Typography, useTheme } from '@mui/material';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Box, Button, CircularProgress, Collapse, Divider, Typography, useTheme } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin, { type DateClickArg } from '@fullcalendar/interaction';
-import type { EventClickArg, DatesSetArg, EventInput } from '@fullcalendar/core';
+import type { EventClickArg, DatesSetArg, EventDropArg, EventInput } from '@fullcalendar/core';
+import type { EventResizeDoneArg } from '@fullcalendar/interaction';
 
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import EventCreateModal from '../components/EventCreateModal';
+import CalendarSubscribePanel from '../components/CalendarSubscribePanel';
 import type { CalendarEvent, ScheduledTask } from '../types';
 import EventDetailModal from '../components/EventDetailModal';
 import TaskDetailModal from '../components/TaskDetailModal';
@@ -30,6 +33,7 @@ export default function EventsPage() {
   const theme = useTheme();
   const calRef = useRef<FullCalendar>(null);
   const { isAdmin } = useGuildContext();
+  const qc = useQueryClient();
 
   /* ---- visible date range (controlled by FullCalendar) ---- */
   const [range, setRange] = useState<{ start: string; end: string } | null>(null);
@@ -39,6 +43,7 @@ export default function EventsPage() {
   const [createDefault, setCreateDefault] = useState<string>('');
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<ScheduledTask | null>(null);
+  const [subscribeOpen, setSubscribeOpen] = useState(false);
 
   /* ---- data fetching ---- */
   const { data: events, isLoading: eventsLoading } = useQuery<CalendarEvent[]>({
@@ -61,6 +66,94 @@ export default function EventsPage() {
     },
     enabled: !!guildId,
   });
+
+  /* ---- drag-and-drop rescheduling ---- */
+  const patchEventMutation = useMutation({
+    mutationFn: async ({
+      eventId,
+      originalStart,
+      newStart,
+      newEnd,
+      isRecurringOccurrence,
+    }: {
+      eventId: number;
+      originalStart: string | undefined;
+      newStart: string;
+      newEnd: string | null;
+      isRecurringOccurrence: boolean;
+    }) => {
+      if (isRecurringOccurrence && originalStart) {
+        // For a recurring event occurrence, create an override instead of
+        // mutating the whole series.
+        await client.put(`/api/guilds/${guildId}/events/${eventId}/overrides`, {
+          original_start: originalStart,
+          new_start: newStart,
+          new_end: newEnd,
+          cancelled: false,
+        });
+      } else {
+        await client.patch(`/api/guilds/${guildId}/events/${eventId}`, {
+          start_time: newStart,
+          end_time: newEnd,
+        });
+      }
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['events', guildId] }),
+  });
+
+  const handleEventDrop = useCallback(
+    (arg: EventDropArg) => {
+      const { type, data } = arg.event.extendedProps as {
+        type: string;
+        data: CalendarEvent;
+      };
+      if (type !== 'event') {
+        arg.revert();
+        return;
+      }
+      const newStart = arg.event.startStr;
+      const newEnd = arg.event.endStr || null;
+      const isRecurring = !!data.rrule;
+      patchEventMutation.mutate(
+        {
+          eventId: data.id,
+          originalStart: data.original_start ?? data.occurrence_start,
+          newStart,
+          newEnd,
+          isRecurringOccurrence: isRecurring,
+        },
+        { onError: () => arg.revert() }
+      );
+    },
+    [patchEventMutation]
+  );
+
+  const handleEventResize = useCallback(
+    (arg: EventResizeDoneArg) => {
+      const { type, data } = arg.event.extendedProps as {
+        type: string;
+        data: CalendarEvent;
+      };
+      if (type !== 'event') {
+        arg.revert();
+        return;
+      }
+      const newStart = arg.event.startStr;
+      const newEnd = arg.event.endStr || null;
+      const isRecurring = !!data.rrule;
+      patchEventMutation.mutate(
+        {
+          eventId: data.id,
+          originalStart: data.original_start ?? data.occurrence_start,
+          newStart,
+          newEnd,
+          isRecurringOccurrence: isRecurring,
+        },
+        { onError: () => arg.revert() }
+      );
+    },
+    [patchEventMutation]
+  );
 
   /* ---- merge events + tasks into FullCalendar EventInputs ---- */
   const calendarEvents: EventInput[] = useMemo(() => {
@@ -96,6 +189,8 @@ export default function EventsPage() {
         color: theme.palette.success.main,
         classNames: ['fc-event-task'],
         extendedProps: { type: 'task' as const, data: t },
+        // Tasks are not draggable
+        editable: false,
       });
     }
 
@@ -150,19 +245,47 @@ export default function EventsPage() {
         <Typography variant="body2" color="text.secondary">
           Session calendar — plan your games, track events, and see upcoming tasks.
           Click a date to create an event or click an item for details.
+          {isAdmin && ' Drag events to reschedule them.'}
         </Typography>
-        {isAdmin && (
+        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
           <Button
-            variant="contained"
+            variant="outlined"
             size="small"
-            startIcon={<AddIcon />}
-            onClick={() => { setCreateDefault(''); setCreateOpen(true); }}
-            sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+            startIcon={<CalendarMonthIcon />}
+            onClick={() => setSubscribeOpen((v) => !v)}
+            sx={{ whiteSpace: 'nowrap' }}
           >
-            New Event
+            Subscribe
           </Button>
-        )}
+          {isAdmin && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => { setCreateDefault(''); setCreateOpen(true); }}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              New Event
+            </Button>
+          )}
+        </Box>
       </Box>
+
+      {/* Collapsible subscribe panel */}
+      <Collapse in={subscribeOpen}>
+        <Box
+          sx={{
+            p: 2,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            bgcolor: 'background.paper',
+          }}
+        >
+          <CalendarSubscribePanel compact />
+        </Box>
+        <Divider sx={{ mt: 2 }} />
+      </Collapse>
 
       {/* Calendar */}
       {eventsLoading && !events ? (
@@ -184,6 +307,10 @@ export default function EventsPage() {
             datesSet={handleDatesSet}
             eventClick={handleEventClick}
             dateClick={handleDateClick}
+            eventDrop={isAdmin ? handleEventDrop : undefined}
+            eventResize={isAdmin ? handleEventResize : undefined}
+            editable={isAdmin}
+            droppable={isAdmin}
             height="auto"
             dayMaxEvents={4}
             nowIndicator

@@ -87,6 +87,8 @@ class CalendarEventOut(BaseModel):
     # as the series anchor.
     occurrence_start: datetime | None = None
     occurrence_end: datetime | None = None
+    # Original start of the occurrence (for identifying overrides)
+    original_start: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -383,3 +385,147 @@ class DiscordMemberOut(BaseModel):
 
 class InviteUrlOut(BaseModel):
     url: str
+
+
+# --------------------------------------------------------------------------- #
+# RSVP schemas                                                                 #
+# --------------------------------------------------------------------------- #
+
+
+class EventRSVPOut(BaseModel):
+    id: int
+    event_id: int
+    discord_user_id: int
+    status: str
+    note: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("discord_user_id")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+
+class EventRSVPUpsert(BaseModel):
+    status: str  # 'attending' | 'maybe' | 'declined'
+    note: str | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Planning Notes schemas                                                       #
+# --------------------------------------------------------------------------- #
+
+
+class EventNoteOut(BaseModel):
+    id: int
+    event_id: int
+    content: str
+    done: bool
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+
+class EventNoteCreate(BaseModel):
+    content: str
+
+
+class EventNoteUpdate(BaseModel):
+    content: str | None = None
+    done: bool | None = None
+
+
+# --------------------------------------------------------------------------- #
+# Occurrence Override schemas                                                  #
+# --------------------------------------------------------------------------- #
+
+
+class EventOccurrenceOverrideOut(BaseModel):
+    id: int
+    event_id: int
+    original_start: datetime
+    new_start: datetime | None
+    new_end: datetime | None
+    cancelled: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EventOccurrenceOverrideUpsert(BaseModel):
+    original_start: datetime
+    new_start: datetime | None = None
+    new_end: datetime | None = None
+    cancelled: bool = False
+
+
+# --------------------------------------------------------------------------- #
+# Availability Poll schemas                                                    #
+# --------------------------------------------------------------------------- #
+
+
+class PollOptionIn(BaseModel):
+    id: int
+    label: str
+    start_time: datetime | None = None
+    end_time: datetime | None = None
+
+
+class AvailabilityPollCreate(BaseModel):
+    title: str
+    options: list[PollOptionIn]
+    event_id: int | None = None
+    closes_at: datetime | None = None
+
+
+class PollVoteOut(BaseModel):
+    id: int
+    poll_id: int
+    discord_user_id: int
+    option_ids: list[int]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("discord_user_id")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+
+class AvailabilityPollOut(BaseModel):
+    id: int
+    guild_id: int
+    event_id: int | None
+    title: str
+    options: list[dict]
+    closes_at: datetime | None
+    winner_option_id: int | None
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    votes: list[PollVoteOut] = []
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflake(self, v: int) -> str:
+        return str(v)
+
+
+class PollVoteUpsert(BaseModel):
+    option_ids: list[int]
+
+
+class AvailabilityPollUpdate(BaseModel):
+    winner_option_id: int | None = None
+    closes_at: datetime | None = None

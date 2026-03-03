@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.deps import (
     assert_guild_admin,
@@ -15,16 +16,37 @@ from api.deps import (
     get_or_404,
 )
 from api.schemas import (
+    AvailabilityPollCreate,
+    AvailabilityPollOut,
+    AvailabilityPollUpdate,
     CalendarEventCreate,
     CalendarEventOut,
     CalendarEventUpdate,
     CronFromTextOut,
     CronFromTextRequest,
+    EventNoteCreate,
+    EventNoteOut,
+    EventNoteUpdate,
+    EventOccurrenceOverrideOut,
+    EventOccurrenceOverrideUpsert,
+    EventRSVPOut,
+    EventRSVPUpsert,
+    PollVoteOut,
+    PollVoteUpsert,
     ScheduledTaskCreate,
     ScheduledTaskOut,
     TaskToggle,
 )
-from grug.db.models import CalendarEvent, GuildConfig, ScheduledTask
+from grug.db.models import (
+    AvailabilityPoll,
+    CalendarEvent,
+    EventNote,
+    EventOccurrenceOverride,
+    EventRSVP,
+    GuildConfig,
+    PollVote,
+    ScheduledTask,
+)
 from grug.utils import ensure_guild, expand_event_occurrences
 
 router = APIRouter(tags=["events"])
@@ -63,9 +85,28 @@ async def list_events(
             select(CalendarEvent).where(CalendarEvent.guild_id == guild_id)
         )
         events = result.scalars().all()
+
+        # Load occurrence overrides for all events in one query.
+        event_ids = [e.id for e in events]
+        if event_ids:
+            ov_result = await db.execute(
+                select(EventOccurrenceOverride).where(
+                    EventOccurrenceOverride.event_id.in_(event_ids)
+                )
+            )
+            overrides_by_event: dict[int, list] = {}
+            for ov in ov_result.scalars().all():
+                overrides_by_event.setdefault(ov.event_id, []).append(ov)
+        else:
+            overrides_by_event = {}
+
         occurrences: list[dict] = []
         for ev in events:
-            occurrences.extend(expand_event_occurrences(ev, start, end))
+            occurrences.extend(
+                expand_event_occurrences(
+                    ev, start, end, overrides=overrides_by_event.get(ev.id, [])
+                )
+            )
         occurrences.sort(key=lambda o: o["occurrence_start"])
         return occurrences
     else:
@@ -180,6 +221,566 @@ async def delete_event(
     )
     await db.delete(event)
     await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# RSVP                                                                        #
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/api/guilds/{guild_id}/events/{event_id}/rsvps",
+    response_model=list[EventRSVPOut],
+)
+async def list_rsvps(
+    guild_id: int,
+    event_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[EventRSVP]:
+    """List all RSVPs for a calendar event."""
+    assert_guild_member(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    result = await db.execute(
+        select(EventRSVP).where(EventRSVP.event_id == event_id)
+    )
+    return list(result.scalars().all())
+
+
+@router.put(
+    "/api/guilds/{guild_id}/events/{event_id}/rsvp",
+    response_model=EventRSVPOut,
+)
+async def upsert_rsvp(
+    guild_id: int,
+    event_id: int,
+    body: EventRSVPUpsert,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventRSVP:
+    """Set or update the current user's RSVP for an event."""
+    assert_guild_member(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    discord_user_id = int(user["id"])
+    result = await db.execute(
+        select(EventRSVP).where(
+            EventRSVP.event_id == event_id,
+            EventRSVP.discord_user_id == discord_user_id,
+        )
+    )
+    rsvp = result.scalar_one_or_none()
+    if rsvp is None:
+        rsvp = EventRSVP(
+            event_id=event_id,
+            discord_user_id=discord_user_id,
+            status=body.status,
+            note=body.note,
+        )
+        db.add(rsvp)
+    else:
+        rsvp.status = body.status
+        rsvp.note = body.note
+    await db.commit()
+    await db.refresh(rsvp)
+    return rsvp
+
+
+@router.delete("/api/guilds/{guild_id}/events/{event_id}/rsvp", status_code=204)
+async def delete_rsvp(
+    guild_id: int,
+    event_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove the current user's RSVP for an event."""
+    assert_guild_member(guild_id, user)
+    discord_user_id = int(user["id"])
+    result = await db.execute(
+        select(EventRSVP).where(
+            EventRSVP.event_id == event_id,
+            EventRSVP.discord_user_id == discord_user_id,
+        )
+    )
+    rsvp = result.scalar_one_or_none()
+    if rsvp is not None:
+        await db.delete(rsvp)
+        await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Planning notes                                                               #
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/api/guilds/{guild_id}/events/{event_id}/notes",
+    response_model=list[EventNoteOut],
+)
+async def list_notes(
+    guild_id: int,
+    event_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[EventNote]:
+    """List planning notes for a calendar event."""
+    assert_guild_member(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    result = await db.execute(
+        select(EventNote)
+        .where(EventNote.event_id == event_id)
+        .order_by(EventNote.created_at)
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/api/guilds/{guild_id}/events/{event_id}/notes",
+    response_model=EventNoteOut,
+    status_code=201,
+)
+async def create_note(
+    guild_id: int,
+    event_id: int,
+    body: EventNoteCreate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventNote:
+    """Add a planning note to a calendar event."""
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    note = EventNote(
+        event_id=event_id,
+        content=body.content,
+        created_by=int(user["id"]),
+    )
+    db.add(note)
+    await db.commit()
+    await db.refresh(note)
+    return note
+
+
+@router.patch(
+    "/api/guilds/{guild_id}/events/{event_id}/notes/{note_id}",
+    response_model=EventNoteOut,
+)
+async def update_note(
+    guild_id: int,
+    event_id: int,
+    note_id: int,
+    body: EventNoteUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventNote:
+    """Update a planning note's content or done state."""
+    assert_guild_member(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    note = await get_or_404(
+        db,
+        EventNote,
+        EventNote.id == note_id,
+        EventNote.event_id == event_id,
+        detail="Note not found",
+    )
+    for field in body.model_fields_set:
+        setattr(note, field, getattr(body, field))
+    await db.commit()
+    await db.refresh(note)
+    return note
+
+
+@router.delete(
+    "/api/guilds/{guild_id}/events/{event_id}/notes/{note_id}", status_code=204
+)
+async def delete_note(
+    guild_id: int,
+    event_id: int,
+    note_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a planning note."""
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    note = await get_or_404(
+        db,
+        EventNote,
+        EventNote.id == note_id,
+        EventNote.event_id == event_id,
+        detail="Note not found",
+    )
+    await db.delete(note)
+    await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Occurrence overrides                                                         #
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/api/guilds/{guild_id}/events/{event_id}/overrides",
+    response_model=list[EventOccurrenceOverrideOut],
+)
+async def list_overrides(
+    guild_id: int,
+    event_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[EventOccurrenceOverride]:
+    """List per-occurrence overrides for a recurring event."""
+    assert_guild_member(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    result = await db.execute(
+        select(EventOccurrenceOverride)
+        .where(EventOccurrenceOverride.event_id == event_id)
+        .order_by(EventOccurrenceOverride.original_start)
+    )
+    return list(result.scalars().all())
+
+
+@router.put(
+    "/api/guilds/{guild_id}/events/{event_id}/overrides",
+    response_model=EventOccurrenceOverrideOut,
+)
+async def upsert_override(
+    guild_id: int,
+    event_id: int,
+    body: EventOccurrenceOverrideUpsert,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> EventOccurrenceOverride:
+    """Create or update a per-occurrence override for a recurring event.
+
+    Identified by ``original_start`` — pass ``cancelled=true`` to hide the
+    occurrence; set ``new_start`` / ``new_end`` to reschedule it.
+    """
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    await get_or_404(
+        db,
+        CalendarEvent,
+        CalendarEvent.id == event_id,
+        CalendarEvent.guild_id == guild_id,
+        detail="Event not found",
+    )
+    original_start = body.original_start
+    if original_start.tzinfo is None:
+        original_start = original_start.replace(tzinfo=timezone.utc)
+
+    result = await db.execute(
+        select(EventOccurrenceOverride).where(
+            EventOccurrenceOverride.event_id == event_id,
+            EventOccurrenceOverride.original_start == original_start,
+        )
+    )
+    override = result.scalar_one_or_none()
+    if override is None:
+        override = EventOccurrenceOverride(
+            event_id=event_id,
+            original_start=original_start,
+            new_start=body.new_start,
+            new_end=body.new_end,
+            cancelled=body.cancelled,
+        )
+        db.add(override)
+    else:
+        override.new_start = body.new_start
+        override.new_end = body.new_end
+        override.cancelled = body.cancelled
+    await db.commit()
+    await db.refresh(override)
+    return override
+
+
+@router.delete(
+    "/api/guilds/{guild_id}/events/{event_id}/overrides/{override_id}",
+    status_code=204,
+)
+async def delete_override(
+    guild_id: int,
+    event_id: int,
+    override_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a per-occurrence override, restoring the normal RRULE occurrence."""
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    override = await get_or_404(
+        db,
+        EventOccurrenceOverride,
+        EventOccurrenceOverride.id == override_id,
+        EventOccurrenceOverride.event_id == event_id,
+        detail="Override not found",
+    )
+    await db.delete(override)
+    await db.commit()
+
+
+# --------------------------------------------------------------------------- #
+# Availability polls                                                           #
+# --------------------------------------------------------------------------- #
+
+
+@router.get(
+    "/api/guilds/{guild_id}/polls",
+    response_model=list[AvailabilityPollOut],
+)
+async def list_polls(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[AvailabilityPoll]:
+    """List availability polls for a guild."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(AvailabilityPoll)
+        .where(AvailabilityPoll.guild_id == guild_id)
+        .options(selectinload(AvailabilityPoll.votes))
+        .order_by(AvailabilityPoll.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/api/guilds/{guild_id}/polls",
+    response_model=AvailabilityPollOut,
+    status_code=201,
+)
+async def create_poll(
+    guild_id: int,
+    body: AvailabilityPollCreate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AvailabilityPoll:
+    """Create a new availability poll for a guild."""
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    await ensure_guild(guild_id)
+
+    options = [o.model_dump(mode="json") for o in body.options]
+    poll = AvailabilityPoll(
+        guild_id=guild_id,
+        event_id=body.event_id,
+        title=body.title,
+        options=options,
+        closes_at=body.closes_at,
+        created_by=int(user["id"]),
+    )
+    db.add(poll)
+    await db.commit()
+    await db.refresh(poll)
+    # Eager-load votes (empty on creation)
+    result = await db.execute(
+        select(AvailabilityPoll)
+        .where(AvailabilityPoll.id == poll.id)
+        .options(selectinload(AvailabilityPoll.votes))
+    )
+    return result.scalar_one()
+
+
+@router.get(
+    "/api/guilds/{guild_id}/polls/{poll_id}",
+    response_model=AvailabilityPollOut,
+)
+async def get_poll(
+    guild_id: int,
+    poll_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AvailabilityPoll:
+    """Get a single availability poll with its votes."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(AvailabilityPoll)
+        .where(
+            AvailabilityPoll.id == poll_id,
+            AvailabilityPoll.guild_id == guild_id,
+        )
+        .options(selectinload(AvailabilityPoll.votes))
+    )
+    poll = result.scalar_one_or_none()
+    if poll is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Poll not found")
+    return poll
+
+
+@router.patch(
+    "/api/guilds/{guild_id}/polls/{poll_id}",
+    response_model=AvailabilityPollOut,
+)
+async def update_poll(
+    guild_id: int,
+    poll_id: int,
+    body: AvailabilityPollUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AvailabilityPoll:
+    """Update a poll (e.g. set winner or close it)."""
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    result = await db.execute(
+        select(AvailabilityPoll)
+        .where(
+            AvailabilityPoll.id == poll_id,
+            AvailabilityPoll.guild_id == guild_id,
+        )
+        .options(selectinload(AvailabilityPoll.votes))
+    )
+    poll = result.scalar_one_or_none()
+    if poll is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Poll not found")
+    for field in body.model_fields_set:
+        setattr(poll, field, getattr(body, field))
+    await db.commit()
+    await db.refresh(poll)
+    result = await db.execute(
+        select(AvailabilityPoll)
+        .where(AvailabilityPoll.id == poll.id)
+        .options(selectinload(AvailabilityPoll.votes))
+    )
+    return result.scalar_one()
+
+
+@router.put(
+    "/api/guilds/{guild_id}/polls/{poll_id}/vote",
+    response_model=PollVoteOut,
+)
+async def upsert_poll_vote(
+    guild_id: int,
+    poll_id: int,
+    body: PollVoteUpsert,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> PollVote:
+    """Cast or update the current user's vote on a poll."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(AvailabilityPoll).where(
+            AvailabilityPoll.id == poll_id,
+            AvailabilityPoll.guild_id == guild_id,
+        )
+    )
+    poll = result.scalar_one_or_none()
+    if poll is None:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="Poll not found")
+
+    discord_user_id = int(user["id"])
+    vote_result = await db.execute(
+        select(PollVote).where(
+            PollVote.poll_id == poll_id,
+            PollVote.discord_user_id == discord_user_id,
+        )
+    )
+    vote = vote_result.scalar_one_or_none()
+    if vote is None:
+        vote = PollVote(
+            poll_id=poll_id,
+            discord_user_id=discord_user_id,
+            option_ids=body.option_ids,
+        )
+        db.add(vote)
+    else:
+        vote.option_ids = body.option_ids
+    await db.commit()
+    await db.refresh(vote)
+    return vote
+
+
+@router.delete(
+    "/api/guilds/{guild_id}/polls/{poll_id}/vote", status_code=204
+)
+async def delete_poll_vote(
+    guild_id: int,
+    poll_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Remove the current user's vote from a poll."""
+    assert_guild_member(guild_id, user)
+    discord_user_id = int(user["id"])
+    result = await db.execute(
+        select(PollVote).where(
+            PollVote.poll_id == poll_id,
+            PollVote.discord_user_id == discord_user_id,
+        )
+    )
+    vote = result.scalar_one_or_none()
+    if vote is not None:
+        await db.delete(vote)
+        await db.commit()
+
+
+@router.delete("/api/guilds/{guild_id}/polls/{poll_id}", status_code=204)
+async def delete_poll(
+    guild_id: int,
+    poll_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete an availability poll."""
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    result = await db.execute(
+        select(AvailabilityPoll).where(
+            AvailabilityPoll.id == poll_id,
+            AvailabilityPoll.guild_id == guild_id,
+        )
+    )
+    poll = result.scalar_one_or_none()
+    if poll is not None:
+        await db.delete(poll)
+        await db.commit()
 
 
 # --------------------------------------------------------------------------- #
@@ -309,3 +910,4 @@ async def delete_task(
     )
     await db.delete(task)
     await db.commit()
+
