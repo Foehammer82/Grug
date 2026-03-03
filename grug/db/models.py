@@ -11,6 +11,7 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -246,6 +247,195 @@ class CalendarEvent(Base):
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
+    rsvps: Mapped[list["EventRSVP"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+    notes: Mapped[list["EventNote"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+    occurrence_overrides: Mapped[list["EventOccurrenceOverride"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+    polls: Mapped[list["AvailabilityPoll"]] = relationship(
+        back_populates="event", cascade="all, delete-orphan"
+    )
+
+
+class EventRSVP(Base):
+    """A member's RSVP for a specific calendar event.
+
+    Status values: ``'attending'``, ``'maybe'``, ``'declined'``.
+    One row per (event, user) pair — upsert on conflict.
+    """
+
+    __tablename__ = "event_rsvps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # 'attending' | 'maybe' | 'declined'
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    event: Mapped["CalendarEvent"] = relationship(back_populates="rsvps")
+
+    __table_args__ = (UniqueConstraint("event_id", "discord_user_id", name="uq_event_rsvp"),)
+
+
+class EventNote(Base):
+    """A planning note or to-do item attached to a calendar event.
+
+    ``done`` can be toggled to track completion of to-do items.
+    """
+
+    __tablename__ = "event_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    done: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    event: Mapped["CalendarEvent"] = relationship(back_populates="notes")
+
+
+class EventOccurrenceOverride(Base):
+    """Reschedule or cancel a single occurrence of a recurring event.
+
+    ``original_start`` identifies which occurrence is being overridden.
+    Set ``cancelled=True`` to drop that occurrence without rescheduling.
+    Set ``new_start`` / ``new_end`` to move it.
+    The ``(event_id, original_start)`` pair must be unique.
+    """
+
+    __tablename__ = "event_occurrence_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Identifies the specific recurrence being overridden.
+    original_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    # New start/end — None means unchanged from what the RRULE would produce.
+    new_start: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    new_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # When True this occurrence is hidden entirely from the expanded set.
+    cancelled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    event: Mapped["CalendarEvent"] = relationship(back_populates="occurrence_overrides")
+
+    __table_args__ = (
+        UniqueConstraint("event_id", "original_start", name="uq_event_occurrence_override"),
+    )
+
+
+class AvailabilityPoll(Base):
+    """A Rallly-style scheduling poll — propose date/time options, let members vote.
+
+    ``options`` is a JSON array of ``{"id": <int>, "start_time": <iso>, "end_time": <iso>, "label": <str>}``
+    objects.  ``event_id`` is an optional link to an existing calendar event.
+    """
+
+    __tablename__ = "availability_polls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("guild_configs.guild_id"), nullable=False, index=True
+    )
+    # Optional link to a calendar event this poll is associated with.
+    event_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String(256), nullable=False)
+    # JSON: list of {id, label, start_time?, end_time?}
+    options: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    closes_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # When set, this option index was chosen as the winner.
+    winner_option_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    event: Mapped["CalendarEvent | None"] = relationship(back_populates="polls")
+    votes: Mapped[list["PollVote"]] = relationship(
+        back_populates="poll", cascade="all, delete-orphan"
+    )
+
+
+class PollVote(Base):
+    """A member's vote on an availability poll.
+
+    ``option_ids`` is a JSON array of option IDs the member selected.
+    One row per (poll, user) — upsert on conflict.
+    """
+
+    __tablename__ = "poll_votes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    poll_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("availability_polls.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # JSON: list of option IDs this user voted for
+    option_ids: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    poll: Mapped["AvailabilityPoll"] = relationship(back_populates="votes")
+
+    __table_args__ = (UniqueConstraint("poll_id", "discord_user_id", name="uq_poll_vote"),)
 
 
 class ScheduledTask(Base):
