@@ -249,7 +249,7 @@ async def update_channel_config(
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChannelConfig:
-    """Update per-channel config fields (always_respond, context_cutoff)."""
+    """Update per-channel config fields (always_respond)."""
     assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
@@ -267,8 +267,6 @@ async def update_channel_config(
         db.add(cfg)
     if "always_respond" in body.model_fields_set and body.always_respond is not None:
         cfg.always_respond = body.always_respond
-    if "context_cutoff" in body.model_fields_set:
-        cfg.context_cutoff = body.context_cutoff
     cfg.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(cfg)

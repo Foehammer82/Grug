@@ -35,7 +35,6 @@ class GuildConfigOut(BaseModel):
     guild_id: int
     timezone: str
     announce_channel_id: int | None
-    context_cutoff: datetime | None
     default_ttrpg_system: str | None = None
 
     model_config = {"from_attributes": True}
@@ -54,7 +53,6 @@ class GuildConfigUpdate(BaseModel):
     timezone: str | None = None
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     announce_channel_id: str | int | None = None
-    context_cutoff: datetime | None = None
     default_ttrpg_system: str | None = None
 
 
@@ -62,7 +60,6 @@ class ChannelConfigOut(BaseModel):
     channel_id: int
     guild_id: int
     always_respond: bool
-    context_cutoff: datetime | None
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -74,7 +71,6 @@ class ChannelConfigOut(BaseModel):
 
 class ChannelConfigUpdate(BaseModel):
     always_respond: bool | None = None
-    context_cutoff: datetime | None = None
 
 
 class CalendarEventOut(BaseModel):

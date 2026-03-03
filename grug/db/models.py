@@ -33,11 +33,6 @@ class GuildConfig(Base):
     announce_channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     # Discord snowflake ID of the auto-created "grug-admin" role in this guild.
     grug_admin_role_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
-    # Messages timestamped before this are excluded from Grug's context window.
-    # None means no cutoff — load all available history.
-    context_cutoff: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     # Random token used to authenticate the public iCal feed URL.
     # Generated on first use; can be regenerated to invalidate old subscriptions.
     calendar_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
@@ -69,13 +64,10 @@ class GuildConfig(Base):
 
 
 class ChannelConfig(Base):
-    """Per-channel configuration — overrides guild-level defaults where set.
+    """Per-channel configuration — persists settings that would otherwise live in memory.
 
     ``always_respond`` replaces the old in-memory ``_ALWAYS_RESPOND_CHANNELS``
     set so the setting survives bot restarts.
-
-    ``context_cutoff`` overrides the guild-level cutoff for this specific
-    channel.  ``None`` means "fall back to the guild setting".
     """
 
     __tablename__ = "channel_configs"
@@ -93,10 +85,6 @@ class ChannelConfig(Base):
     # When True, Grug responds to every message here (not just @mentions).
     always_respond: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
-    )
-    # Channel-level override for the context cutoff.  None = use guild default.
-    context_cutoff: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

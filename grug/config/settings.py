@@ -98,6 +98,10 @@ class Settings(BaseSettings):
         default=100,
         description="Max number of per-channel history summaries kept in the vector store (oldest pruned beyond this)",
     )
+    agent_context_lookback_days: int = Field(
+        default=30,
+        description="Rolling lookback window (days) used when no explicit per-channel context cutoff is set",
+    )
     flush_chat_history: bool = Field(
         default=False,
         description="Archive all conversation history on startup (useful for testing prompt changes)",

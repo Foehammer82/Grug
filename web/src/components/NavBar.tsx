@@ -21,7 +21,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useBotAvatar } from '../hooks/useBotAvatar';
+import { useBotInfo } from '../hooks/useBotAvatar';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { ThemePreference, useThemePreference } from '../context/ThemeContext';
@@ -44,7 +44,7 @@ export default function NavBar() {
   const { data: user } = useAuth();
   const navigate = useNavigate();
   const { preference, setPreference } = useThemePreference();
-  const botAvatar = useBotAvatar();
+  const { name: botName, avatarUrl: botAvatar } = useBotInfo();
 
   const canInvite = user?.is_super_admin || user?.can_invite;
 
@@ -96,7 +96,7 @@ export default function NavBar() {
             fontWeight={700}
             sx={{ letterSpacing: '0.02em', color: 'text.primary', cursor: 'default', userSelect: 'none', lineHeight: 1 }}
           >
-            Grug
+            {botName}
           </Typography>
           <Typography
             variant="h6"

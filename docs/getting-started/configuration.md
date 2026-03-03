@@ -35,6 +35,7 @@ All Grug settings are read from environment variables at startup. The recommende
 | `ANTHROPIC_MODEL` | `claude-3-5-sonnet-20241022` | The Anthropic model Grug uses for all responses. Replace with any model your API key has access to (e.g. `claude-opus-4-5`). |
 | `AGENT_MAX_ITERATIONS` | `10` | Maximum number of tool-calling rounds Grug will perform per message before returning a response. Increase if Grug is cutting off complex tasks. |
 | `AGENT_CONTEXT_WINDOW` | `20` | Number of recent messages kept in the active context window per channel. Older messages are archived to the vector store automatically. |
+| `AGENT_CONTEXT_LOOKBACK_DAYS` | `30` | How far back (in days) Grug reads passive message history when no per-channel cutoff is set. |
 | `AGENT_HISTORY_ARCHIVE_BATCH` | `10` | Minimum number of overflow messages required before the archiver runs. |
 | `AGENT_HISTORY_MAX_SUMMARIES` | `100` | Maximum number of per-channel history summary chunks stored in the vector store. |
 

@@ -81,15 +81,13 @@ Grug passively logs **every** non-bot guild message to `conversation_messages` w
 
 ### Context Cutoff — Precedence
 
-Three levels of context cutoff control how far back Grug reads history:
+There is only one configurable cutoff level:
 
 | Level | Model field | Scope |
 |---|---|---|
-| Per-channel | `ChannelConfig.context_cutoff` | Highest priority; overrides guild |
-| Per-guild | `GuildConfig.context_cutoff` | Server-wide default |
 | Per-user (DMs) | `UserProfile.dm_context_cutoff` | DM sessions only |
 
-`None` at any level means "use the default rolling window."  When no explicit cutoff is set at any level, both `_get_effective_context_cutoff()` and `_get_dm_context_cutoff()` fall back to `now - 30 days` (controlled by `_DEFAULT_CONTEXT_LOOKBACK_DAYS` in `grug/bot/cogs/ai_chat.py`).  The effective cutoff is resolved there and passed to `GrugAgent.respond()` → `_load_history()`.
+For guild channels, context history is always bounded by the rolling window `now - AGENT_CONTEXT_LOOKBACK_DAYS` days (default 30, env var, read from `Settings.agent_context_lookback_days`).  This is computed directly in the `on_message` handler — there is no longer a `_get_effective_context_cutoff()` helper.  `_get_dm_context_cutoff()` still exists for DM sessions and falls back to the same rolling window when no per-user cutoff is set.  The resolved cutoff is passed to `GrugAgent.respond()` → `_load_history()`.
 
 ### Guild admin authorization
 
@@ -103,7 +101,6 @@ Three levels of context cutoff control how far back Grug reads history:
 
 `ChannelConfig` (table `channel_configs`) stores per-channel settings:
 - `always_respond: bool` — replaces the old in-memory `_ALWAYS_RESPOND_CHANNELS` set; persists across restarts
-- `context_cutoff: datetime | None` — per-channel cutoff override
 - `guild_id` FK → `guild_configs.guild_id`
 - `channel_id` unique index
 

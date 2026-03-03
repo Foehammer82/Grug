@@ -10,12 +10,10 @@ from sqlalchemy import select
 
 from grug.agent.core import GrugAgent
 from grug.bot.cogs.base import GrugCogBase
+from grug.config.settings import get_settings
 from grug.utils import get_campaign_id_for_channel
 
 logger = logging.getLogger(__name__)
-
-# Default lookback window applied when no explicit context cutoff is configured.
-_DEFAULT_CONTEXT_LOOKBACK_DAYS = 30
 
 # Sentinel guild_id for DM sessions (no real guild)
 _DM_GUILD_ID = 0
@@ -99,11 +97,9 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
         # Resolve campaign_id for this channel (used for campaign-scoped RAG).
         campaign_id = await get_campaign_id_for_channel(message.channel.id)
 
-        # Determine the effective context cutoff: channel override > guild default.
-        context_cutoff = await _get_effective_context_cutoff(
-            guild_id=message.guild.id,
-            channel_id=message.channel.id,
-        )
+        # Determine the effective context cutoff from the rolling lookback window.
+        lookback = get_settings().agent_context_lookback_days
+        context_cutoff = datetime.now(timezone.utc) - timedelta(days=lookback)
 
         try:
             async with message.channel.typing():
@@ -256,37 +252,8 @@ async def _get_channel_config(channel_id: int):
         return result.scalar_one_or_none()
 
 
-async def _get_effective_context_cutoff(
-    guild_id: int, channel_id: int
-) -> datetime | None:
-    """Return the context cutoff for a channel, falling back to the guild setting.
-
-    Precedence: channel-level ``context_cutoff`` > guild-level ``context_cutoff``.
-    Falls back to a rolling 30-day window when neither is explicitly set.
-    """
-    from grug.db.models import ChannelConfig, GuildConfig
-    from grug.db.session import get_session_factory
-
-    factory = get_session_factory()
-    async with factory() as session:
-        ch_result = await session.execute(
-            select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
-        )
-        ch_cfg = ch_result.scalar_one_or_none()
-        if ch_cfg is not None and ch_cfg.context_cutoff is not None:
-            return ch_cfg.context_cutoff
-
-        g_result = await session.execute(
-            select(GuildConfig).where(GuildConfig.guild_id == guild_id)
-        )
-        g_cfg = g_result.scalar_one_or_none()
-        if g_cfg is not None and g_cfg.context_cutoff is not None:
-            return g_cfg.context_cutoff
-    return datetime.now(timezone.utc) - timedelta(days=_DEFAULT_CONTEXT_LOOKBACK_DAYS)
-
-
 async def _get_dm_context_cutoff(discord_user_id: int) -> datetime | None:
-    """Return the DM context cutoff for a user, falling back to a 30-day rolling window."""
+    """Return the DM context cutoff for a user, falling back to the configured rolling window."""
     from grug.db.models import UserProfile
     from grug.db.session import get_session_factory
 
@@ -298,7 +265,8 @@ async def _get_dm_context_cutoff(discord_user_id: int) -> datetime | None:
         profile = result.scalar_one_or_none()
         if profile is not None and profile.dm_context_cutoff is not None:
             return profile.dm_context_cutoff
-    return datetime.now(timezone.utc) - timedelta(days=_DEFAULT_CONTEXT_LOOKBACK_DAYS)
+    lookback = get_settings().agent_context_lookback_days
+    return datetime.now(timezone.utc) - timedelta(days=lookback)
 
 
 async def _get_user_character_context(

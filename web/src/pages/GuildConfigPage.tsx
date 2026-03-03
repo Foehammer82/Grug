@@ -24,14 +24,12 @@ import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
-import { isoToLocalInput, localInputToIso } from '../types';
 import type { BuiltinRuleSource, DiscordChannel, GuildConfig } from '../types';
 
 interface ChannelConfig {
   channel_id: string;
   guild_id: string;
   always_respond: boolean;
-  context_cutoff: string | null;
   updated_at: string;
 }
 
@@ -149,18 +147,6 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
             helperText="Where Grug posts announcements and responds by default."
           />
         )}
-      />
-
-      <TextField
-        size="small"
-        fullWidth
-        label="Global Context Cutoff (UTC)"
-        type="datetime-local"
-        value={isoToLocalInput(config.context_cutoff)}
-        onChange={(e) => mutation.mutate({ context_cutoff: localInputToIso(e.target.value) })}
-        disabled={mutation.isPending}
-        helperText="Grug ignores messages sent before this time, server-wide. Leave blank for no cutoff."
-        InputLabelProps={{ shrink: true }}
       />
 
       <Autocomplete
@@ -305,22 +291,6 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               </Stack>
             }
             sx={{ alignItems: 'flex-start', mt: 0.5 }}
-          />
-
-          <TextField
-            size="small"
-            fullWidth
-            label="Channel Context Cutoff (UTC)"
-            type="datetime-local"
-            value={isoToLocalInput(channelConfig?.context_cutoff ?? null)}
-            onChange={(e) =>
-              channelMutation.mutate({
-                context_cutoff: localInputToIso(e.target.value),
-              })
-            }
-            disabled={channelMutation.isPending || !channelConfig}
-            helperText="Overrides server-wide cutoff for this channel. Leave blank to use the server default."
-            InputLabelProps={{ shrink: true }}
           />
 
           {channelMutation.isError && (

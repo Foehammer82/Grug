@@ -9,10 +9,11 @@ interface BotInfo {
 }
 
 /**
- * Returns the bot's Discord avatar URL, falling back to the bundled
- * placeholder image if the API is unavailable or the bot has no avatar.
+ * Returns the bot's Discord username and avatar URL.
+ * Falls back to "Grug" / the bundled placeholder image if the API is
+ * unavailable or the bot has no avatar set.
  */
-export function useBotAvatar(): string {
+export function useBotInfo(): { name: string; avatarUrl: string } {
   const { data } = useQuery<BotInfo>({
     queryKey: ['bot-info'],
     queryFn: async () => {
@@ -23,5 +24,13 @@ export function useBotAvatar(): string {
     retry: false,
   });
 
-  return data?.avatar_url ?? grugNb;
+  return {
+    name: data?.username ?? 'Grug',
+    avatarUrl: data?.avatar_url ?? grugNb,
+  };
+}
+
+/** Convenience wrapper — returns just the avatar URL (backwards compat). */
+export function useBotAvatar(): string {
+  return useBotInfo().avatarUrl;
 }

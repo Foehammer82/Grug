@@ -132,7 +132,6 @@ export interface GuildConfig {
   timezone: string;
   /** Returned as a string to preserve Discord snowflake precision (> MAX_SAFE_INTEGER). */
   announce_channel_id: string | null;
-  context_cutoff: string | null;
   default_ttrpg_system: string | null;
 }
 
