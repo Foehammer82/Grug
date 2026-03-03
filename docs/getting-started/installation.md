@@ -61,13 +61,23 @@ Grug supports two deployment profiles:
 
 === "SQLite (default — simplest)"
 
-    No extra config needed. Grug uses a local SQLite database and ChromaDB for vector storage.
+    No extra config needed. Grug uses a local SQLite database for storage.
 
     ```dotenv
     # .env — leave DATABASE_URL unset or use:
     DATABASE_URL=sqlite+aiosqlite:///./data/grug.db
-    CHROMA_PERSIST_DIR=/app/chroma_data
     ```
+
+    !!! warning "Persist your data"
+        The image does **not** declare Docker volumes automatically. If you want your SQLite database to survive container restarts, mount `/app/data` from your host or a named volume:
+
+        ```yaml
+        # docker-compose.yml (grug service)
+        volumes:
+          - grug_db:/app/data  # SQLite database
+        ```
+
+        Without this mount all data is lost when the container is removed.
 
 === "PostgreSQL + pgvector (production)"
 
@@ -97,9 +107,16 @@ This starts all four services:
 |---|---|---|
 | `grug` | — | Discord bot process |
 | `api` | `http://localhost:8000` | REST API |
-| `web` | `http://localhost:3000` | Web dashboard |
-| `postgres` | `localhost:5432` | Database (PostgreSQL profile only) |
-| `docs` | `http://localhost:8080` | This documentation site |
+| `web` | `http://localhost:3000` | Web dashboard (nginx) |
+| `postgres` | `localhost:5432` | Database |
+
+To use the Vite hot-reload dev server instead of nginx, activate the `dev` profile:
+
+```bash
+docker compose --profile dev up -d
+```
+
+This replaces the nginx `web` service with the Vite dev server on `http://localhost:5173` and automatically reloads the API on Python file changes.
 
 Check that everything started cleanly:
 
@@ -138,5 +155,95 @@ docker compose up -d
 
 ---
 
+## Deploying with prebuilt images
+
+If you prefer not to build from source, published images are available on GHCR. Create a `docker-compose.yml` like the following and adjust the environment variables to match your setup:
+
+```yaml
+services:
+  postgres:
+    image: ghcr.io/foehammer82/grug-postgres:latest
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: grug
+      POSTGRES_USER: grug
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grug -d grug"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    image: ghcr.io/foehammer82/grug:latest
+    restart: unless-stopped
+    volumes:
+      - files:/app/file_data
+    environment:
+      DATABASE_URL: postgresql+asyncpg://grug:${POSTGRES_PASSWORD}@postgres:5432/grug
+      FILE_DATA_DIR: /app/file_data
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI}
+      WEB_SECRET_KEY: ${WEB_SECRET_KEY}
+      WEB_CORS_ORIGINS: ${WEB_CORS_ORIGINS:-https://your-domain.example.com}
+      FRONTEND_URL: ${FRONTEND_URL:-https://your-domain.example.com}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
+      ANTHROPIC_BIG_BRAIN_MODEL: ${ANTHROPIC_BIG_BRAIN_MODEL:-claude-sonnet-4-6}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/Chicago}
+      GRUG_SUPER_ADMIN_IDS: ${GRUG_SUPER_ADMIN_IDS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api:
+    image: ghcr.io/foehammer82/grug-api:latest
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://grug:${POSTGRES_PASSWORD}@postgres:5432/grug
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_REDIRECT_URI: ${DISCORD_REDIRECT_URI}
+      WEB_SECRET_KEY: ${WEB_SECRET_KEY}
+      WEB_CORS_ORIGINS: ${WEB_CORS_ORIGINS:-https://your-domain.example.com}
+      FRONTEND_URL: ${FRONTEND_URL:-https://your-domain.example.com}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-haiku-4-5}
+      ANTHROPIC_BIG_BRAIN_MODEL: ${ANTHROPIC_BIG_BRAIN_MODEL:-claude-sonnet-4-6}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-America/Chicago}
+      GRUG_SUPER_ADMIN_IDS: ${GRUG_SUPER_ADMIN_IDS}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - bot
+      - postgres
+
+  web:
+    image: ghcr.io/foehammer82/grug-web:latest
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: ${API_URL:-https://your-api-domain.example.com}
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+
+volumes:
+  files:
+  postgres-data:
+```
+
+Set all variables in a `.env` file alongside the compose file, or pass them as environment variables. See the [Configuration reference](configuration.md) for the full list.
+
+!!! tip "Reverse proxy"
+    In production, put a reverse proxy (Caddy, nginx, Traefik) in front of the `api` and `web` services rather than exposing ports directly. Set `WEB_CORS_ORIGINS` and `FRONTEND_URL` to the public URL of your web service, and `DISCORD_REDIRECT_URI` to your OAuth callback URL.
+
+---
+
 !!! note "Ports in use?"
-    If ports 3000, 8000, or 8080 clash with existing services, edit the `ports:` entries in `docker-compose.yml` before starting.
+    If ports 3000 or 8000 clash with existing services, edit the `ports:` entries in `docker-compose.yml` before starting.

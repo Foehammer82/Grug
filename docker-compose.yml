@@ -28,6 +28,11 @@ services:
     volumes:
       - grug_db:/app/data
       - grug_files:/app/file_data
+      # Live-reload: mount your working tree so code changes take effect on restart.
+      - ./grug:/app/grug
+      - ./main.py:/app/main.py
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
     environment:
       - DATABASE_URL=postgresql+asyncpg://grug:grug@postgres:5432/grug
       - FILE_DATA_DIR=/app/file_data
@@ -44,14 +49,32 @@ services:
       - .env
     volumes:
       - grug_db:/app/data
+      # Live-reload: mount source directories so uvicorn --reload picks up changes.
+      - ./grug:/app/grug
+      - ./api:/app/api
+      - ./alembic:/app/alembic
+      - ./roadmap.md:/app/roadmap.md
     environment:
       - DATABASE_URL=postgresql+asyncpg://grug:grug@postgres:5432/grug
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:5173}
+      - WEB_CORS_ORIGINS=${WEB_CORS_ORIGINS:-http://localhost:5173}
+    # uvicorn with --reload watches /app/grug and /app/api for .py changes.
+    command: >
+      uv run uvicorn api.main:app
+        --host 0.0.0.0
+        --port 8000
+        --reload
+        --reload-dir /app/grug
+        --reload-dir /app/api
     ports:
       - "8000:8000"
     depends_on:
       - grug
       - postgres
 
+  # ------------------------------------------------------------------ #
+  # Web — nginx production build                                         #
+  # ------------------------------------------------------------------ #
   web:
     build: ./web
     restart: unless-stopped
@@ -62,7 +85,29 @@ services:
     depends_on:
       - api
 
+  # ------------------------------------------------------------------ #
+  # Web — Vite dev server (hot-module replacement)                       #
+  # Activate with:  docker compose --profile dev up                     #
+  # The browser uses localhost:8000 for API calls (not the Docker host). #
+  # ------------------------------------------------------------------ #
+  web-dev:
+    profiles: [dev]
+    image: node:22-slim
+    working_dir: /app
+    volumes:
+      - ./web:/app
+      # Keep node_modules in a named volume so npm install isn't re-run every start.
+      - web_node_modules:/app/node_modules
+    command: sh -c "npm install && npm run dev -- --host"
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - api
+
 volumes:
   grug_db:
   grug_files:
   grug_postgres_data:
+  web_node_modules:

@@ -45,10 +45,10 @@ uv sync               # install all dependencies (including dev)
 cp .env.example .env   # fill in values
 ```
 
-You need a running Postgres instance with pgvector. The dev compose file brings one up for you:
+You need a running Postgres instance with pgvector. The compose file brings one up for you — the `dev` profile also starts the Vite hot-reload server on port 5173:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+docker compose --profile dev up -d
 ```
 
 Or start just the database:

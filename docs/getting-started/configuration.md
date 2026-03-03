@@ -21,10 +21,9 @@ All Grug settings are read from environment variables at startup. The recommende
 | `POSTGRES_USER` | `grug` | Postgres username (PostgreSQL profile only). |
 | `POSTGRES_PASSWORD` | `grug` | Postgres password. **Change this in production.** |
 | `POSTGRES_DB` | `grug` | Postgres database name. |
-| `CHROMA_PERSIST_DIR` | `./chroma_data` | Where ChromaDB stores its data on disk. Only used when `DATABASE_URL` points to SQLite. |
 
-!!! info "Vector backend is auto-detected"
-    When `DATABASE_URL` contains `postgresql`, Grug uses pgvector for all embedding storage. Otherwise it uses ChromaDB. You do not need to set anything extra.
+!!! info "Vector embeddings"
+    Grug uses pgvector for all embedding storage and requires a Postgres deployment. The ChromaDB library is still installed (its ONNX model generates embeddings), but it is not used as a vector database and writes nothing to disk.
 
 ---
 

@@ -35,14 +35,13 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
     uv sync --no-dev --frozen
 
-# Create data directories
-RUN mkdir -p /app/chroma_data
-
 # DATABASE_URL is intentionally NOT set here.
 # Supply it via .env or docker-compose environment so the user controls
 # whether they get SQLite or Postgres without rebuilding the image.
-ENV CHROMA_PERSIST_DIR=/app/chroma_data
 
-VOLUME ["/app/data", "/app/chroma_data"]
+# No VOLUME declarations — volumes are opt-in.
+# If you are using SQLite, mount /app/data from your host or a named volume
+# to persist the database across container restarts.
+# Postgres users do not need any mounts.
 
 CMD ["uv", "run", "python", "main.py"]
