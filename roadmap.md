@@ -1,7 +1,5 @@
 # Grug Roadmap
 
-## TTRPG Features
-
 ## Web UI
 
 - **Character Sheet Manager (Pathfinder 2e first):** A mobile-friendly character sheet web UI so players can manage characters from the Grug app instead of a third-party app. Target PF2e first, then expand.
