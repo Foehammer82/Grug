@@ -133,6 +133,7 @@ export interface GuildConfig {
   /** Returned as a string to preserve Discord snowflake precision (> MAX_SAFE_INTEGER). */
   announce_channel_id: string | null;
   context_cutoff: string | null;
+  default_ttrpg_system: string | null;
 }
 
 /* ── Glossary ─────────────────────────────────────────────────────── */
@@ -187,6 +188,7 @@ export interface Character {
   updated_at: string;
 }
 
+
 /* ── Table styling ────────────────────────────────────────────────── */
 
 /** Standardised header-cell styling for data tables. */
@@ -197,6 +199,29 @@ export const TABLE_HEADER_SX = {
   letterSpacing: '0.05em',
   color: 'text.secondary',
 } as const;
+
+/* ── Rule Sources ─────────────────────────────────────────────────── */
+
+export interface BuiltinRuleSource {
+  source_id: string;
+  name: string;
+  description: string;
+  system: string | null;
+  url: string;
+  enabled: boolean;
+}
+
+export interface RuleSource {
+  id: number;
+  guild_id: number;
+  name: string;
+  url: string;
+  system: string | null;
+  notes: string | null;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 /* ── Datetime helpers ─────────────────────────────────────────────── */
 

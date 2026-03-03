@@ -41,6 +41,9 @@ class GuildConfig(Base):
     # Random token used to authenticate the public iCal feed URL.
     # Generated on first use; can be regenerated to invalidate old subscriptions.
     calendar_token: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Default TTRPG system for this guild (e.g. "pf2e", "dnd5e").
+    # When set, Grug uses this as the fallback system for rule lookups.
+    default_ttrpg_system: Mapped[str | None] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -56,6 +59,12 @@ class GuildConfig(Base):
     )
     channel_configs: Mapped[list["ChannelConfig"]] = relationship(
         back_populates="guild"
+    )
+    rule_sources: Mapped[list["RuleSource"]] = relationship(
+        back_populates="guild", cascade="all, delete-orphan"
+    )
+    builtin_overrides: Mapped[list["GuildBuiltinOverride"]] = relationship(
+        back_populates="guild", cascade="all, delete-orphan"
     )
 
 
@@ -600,3 +609,62 @@ class GlossaryTermHistory(Base):
     )
 
     term_ref: Mapped["GlossaryTerm"] = relationship(back_populates="history")
+
+
+class RuleSource(Base):
+    """A custom TTRPG rule source added by a guild administrator.
+
+    Grug can query these URLs when answering rules questions.  A ``system``
+    value of ``None`` means the source applies to all game systems.
+    """
+
+    __tablename__ = "rule_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("guild_configs.guild_id"),
+        nullable=False,
+        index=True,
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    system: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    guild: Mapped["GuildConfig"] = relationship(back_populates="rule_sources")
+
+
+class GuildBuiltinOverride(Base):
+    """Per-guild enable/disable override for a built-in rule source.
+
+    Built-in sources are defined in ``grug/rules/sources.py``.  A guild admin
+    can disable a built-in by creating a row with ``enabled=False``.
+    Only explicit overrides are stored; built-ins default to enabled.
+    """
+
+    __tablename__ = "guild_builtin_overrides"
+    __table_args__ = (
+        UniqueConstraint("guild_id", "source_id", name="uq_guild_builtin_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("guild_configs.guild_id"),
+        nullable=False,
+        index=True,
+    )
+    source_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
+
+    guild: Mapped["GuildConfig"] = relationship(back_populates="builtin_overrides")

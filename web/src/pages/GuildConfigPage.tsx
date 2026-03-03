@@ -2,25 +2,39 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Autocomplete,
   Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   FormControlLabel,
+  IconButton,
   Stack,
   Switch,
+  Tab,
+  Tabs,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { isoToLocalInput, localInputToIso } from '../types';
-import type { DiscordChannel, GuildConfig } from '../types';
+import type { BuiltinRuleSource, DiscordChannel, GuildConfig, RuleSource } from '../types';
 
 interface ChannelConfig {
   channel_id: string;
   guild_id: string;
   always_respond: boolean;
-  context_cutoff: string | null; // ISO 8601 UTC datetime string
+  context_cutoff: string | null;
   updated_at: string;
 }
 
@@ -28,63 +42,196 @@ interface Defaults {
   default_timezone: string;
 }
 
-// Full IANA timezone list from the browser's built-in Intl API
 const TIMEZONES: string[] = Intl.supportedValuesOf('timeZone');
 
-export default function GuildConfigPage() {
-  useAuth();
-  const { guildId } = useParams<{ guildId: string }>();
+// TTRPG system name → display label
+const SYSTEM_LABELS: Record<string, string> = {
+  dnd5e: 'D&D 5e',
+  pf2e: 'Pathfinder 2e',
+  coc7: 'Call of Cthulhu 7e',
+  mothership: 'Mothership',
+  'blades-in-the-dark': 'Blades in the Dark',
+  shadowdark: 'Shadowdark',
+  shadowrun: 'Shadowrun',
+  'warhammer-fantasy': 'Warhammer Fantasy',
+  unknown: 'Unknown',
+};
+const SYSTEMS = Object.keys(SYSTEM_LABELS);
+
+function systemLabel(sys: string | null): string {
+  if (!sys) return 'All systems';
+  return SYSTEM_LABELS[sys] ?? sys;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-panel: Server Settings
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ServerSettingsPanel({ guildId }: { guildId: string }) {
   const qc = useQueryClient();
 
-  // Track which channel is selected for per-channel override editing.
-  const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
-
-  const { data: config, isLoading: configLoading } = useQuery<GuildConfig>({
+  const { data: config, isLoading } = useQuery<GuildConfig>({
     queryKey: ['config', guildId],
-    queryFn: async () => {
-      const res = await client.get<GuildConfig>(`/api/guilds/${guildId}/config`);
-      return res.data;
-    },
+    queryFn: async () => (await client.get<GuildConfig>(`/api/guilds/${guildId}/config`)).data,
     enabled: !!guildId,
   });
-
   const { data: defaults } = useQuery<Defaults>({
     queryKey: ['defaults'],
-    queryFn: async () => {
-      const res = await client.get<Defaults>('/api/defaults');
-      return res.data;
-    },
+    queryFn: async () => (await client.get<Defaults>('/api/defaults')).data,
     staleTime: Infinity,
   });
-
-  const { data: channels, isLoading: channelsLoading, isError: channelsError } = useQuery<DiscordChannel[]>({
+  const {
+    data: channels,
+    isLoading: channelsLoading,
+    isError: channelsError,
+  } = useQuery<DiscordChannel[]>({
     queryKey: ['channels', guildId],
-    queryFn: async () => {
-      const res = await client.get<DiscordChannel[]>(`/api/guilds/${guildId}/channels`);
-      return res.data;
-    },
+    queryFn: async () =>
+      (await client.get<DiscordChannel[]>(`/api/guilds/${guildId}/channels`)).data,
     enabled: !!guildId,
   });
 
-  // Per-channel config — fetched when a channel is selected.
-  const { data: channelConfig } = useQuery<ChannelConfig>({
-    queryKey: ['channelConfig', guildId, selectedChannel?.id],
-    queryFn: async () => {
-      const res = await client.get<ChannelConfig>(
-        `/api/guilds/${guildId}/channels/${selectedChannel!.id}/config`
-      );
-      return res.data;
-    },
-    enabled: !!guildId && !!selectedChannel,
-  });
-
-  const guildMutation = useMutation({
+  const mutation = useMutation({
     mutationFn: async (patch: Record<string, unknown>) => {
       await client.patch(`/api/guilds/${guildId}/config`, patch);
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['config', guildId] });
-    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['config', guildId] }),
+  });
+
+  if (isLoading) return <Typography color="text.secondary">Loading…</Typography>;
+  if (!config) return null;
+
+  return (
+    <Stack spacing={2.5} sx={{ maxWidth: 520 }}>
+      <Typography variant="body2" color="text.secondary">
+        Server-wide settings. Changes save instantly.
+      </Typography>
+
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={TIMEZONES}
+        value={config.timezone ?? defaults?.default_timezone ?? 'UTC'}
+        onChange={(_, v) => v && mutation.mutate({ timezone: v })}
+        disabled={mutation.isPending}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Server Timezone"
+            helperText="Used for scheduling, event display, and cron expressions."
+          />
+        )}
+      />
+
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={channels ?? []}
+        loading={channelsLoading}
+        value={channels?.find((c) => c.id === config.announce_channel_id) ?? null}
+        onChange={(_, ch) =>
+          mutation.mutate({ announce_channel_id: ch?.id ?? null })
+        }
+        disabled={mutation.isPending}
+        getOptionLabel={(ch) => `#${ch.name}`}
+        filterOptions={(opts, { inputValue }) => {
+          const q = inputValue.toLowerCase();
+          return opts.filter(
+            (ch) => ch.name.toLowerCase().includes(q) || ch.id.includes(q)
+          );
+        }}
+        isOptionEqualToValue={(a, b) => a.id === b.id}
+        renderOption={(props, ch) => (
+          <Box component="li" {...props} key={ch.id}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <span>#{ch.name}</span>
+              <Typography component="span" variant="caption" color="text.disabled">
+                {ch.id}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Bot Channel"
+            helperText="Where Grug posts announcements and responds by default."
+          />
+        )}
+      />
+
+      <TextField
+        size="small"
+        fullWidth
+        label="Global Context Cutoff (UTC)"
+        type="datetime-local"
+        value={isoToLocalInput(config.context_cutoff)}
+        onChange={(e) => mutation.mutate({ context_cutoff: localInputToIso(e.target.value) })}
+        disabled={mutation.isPending}
+        helperText="Grug ignores messages sent before this time, server-wide. Leave blank for no cutoff."
+        InputLabelProps={{ shrink: true }}
+      />
+
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={[null, ...SYSTEMS]}
+        value={config.default_ttrpg_system ?? null}
+        onChange={(_, v) => mutation.mutate({ default_ttrpg_system: v })}
+        disabled={mutation.isPending}
+        getOptionLabel={(v) => systemLabel(v)}
+        isOptionEqualToValue={(a, b) => a === b}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            label="Default TTRPG System"
+            helperText="Grug uses this when looking up rules and no specific system is mentioned. Leave blank for all systems."
+          />
+        )}
+      />
+
+      {channelsError && (
+        <Typography variant="caption" color="warning.main">
+          Could not load channels from Discord — check that the bot token is configured.
+        </Typography>
+      )}
+      {mutation.isError && (
+        <Typography variant="caption" color="error.main">
+          Failed to save — please try again.
+        </Typography>
+      )}
+    </Stack>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-panel: Channel Settings
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ChannelSettingsPanel({ guildId }: { guildId: string }) {
+  const qc = useQueryClient();
+  const [selectedChannel, setSelectedChannel] = useState<DiscordChannel | null>(null);
+
+  const {
+    data: channels,
+    isLoading: channelsLoading,
+    isError: channelsError,
+  } = useQuery<DiscordChannel[]>({
+    queryKey: ['channels', guildId],
+    queryFn: async () =>
+      (await client.get<DiscordChannel[]>(`/api/guilds/${guildId}/channels`)).data,
+    enabled: !!guildId,
+  });
+
+  const { data: channelConfig } = useQuery<ChannelConfig>({
+    queryKey: ['channelConfig', guildId, selectedChannel?.id],
+    queryFn: async () =>
+      (
+        await client.get<ChannelConfig>(
+          `/api/guilds/${guildId}/channels/${selectedChannel!.id}/config`
+        )
+      ).data,
+    enabled: !!guildId && !!selectedChannel,
   });
 
   const channelMutation = useMutation({
@@ -94,208 +241,441 @@ export default function GuildConfigPage() {
         patch
       );
     },
+    onSuccess: () =>
+      qc.invalidateQueries({
+        queryKey: ['channelConfig', guildId, selectedChannel?.id],
+      }),
+  });
+
+  return (
+    <Stack spacing={2.5} sx={{ maxWidth: 520 }}>
+      <Typography variant="body2" color="text.secondary">
+        Override server-wide settings for a specific channel.
+      </Typography>
+
+      <Autocomplete
+        size="small"
+        fullWidth
+        options={channels ?? []}
+        loading={channelsLoading}
+        value={selectedChannel}
+        onChange={(_, ch) => setSelectedChannel(ch)}
+        getOptionLabel={(ch) => `#${ch.name}`}
+        filterOptions={(opts, { inputValue }) => {
+          const q = inputValue.toLowerCase();
+          return opts.filter(
+            (ch) => ch.name.toLowerCase().includes(q) || ch.id.includes(q)
+          );
+        }}
+        isOptionEqualToValue={(a, b) => a.id === b.id}
+        renderOption={(props, ch) => (
+          <Box component="li" {...props} key={ch.id}>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <span>#{ch.name}</span>
+              <Typography component="span" variant="caption" color="text.disabled">
+                {ch.id}
+              </Typography>
+            </Box>
+          </Box>
+        )}
+        renderInput={(params) => (
+          <TextField {...params} label="Select Channel to Configure" />
+        )}
+      />
+
+      {channelsError && (
+        <Typography variant="caption" color="warning.main">
+          Could not load channels from Discord.
+        </Typography>
+      )}
+
+      {selectedChannel && (
+        <Stack spacing={2} sx={{ pl: 1 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={channelConfig?.always_respond ?? false}
+                onChange={(_, checked) =>
+                  channelMutation.mutate({ always_respond: checked })
+                }
+                disabled={channelMutation.isPending || !channelConfig}
+                size="small"
+              />
+            }
+            label={
+              <Stack>
+                <Typography variant="body2">Always Respond</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Grug replies to every message here, not just @mentions.
+                </Typography>
+              </Stack>
+            }
+            sx={{ alignItems: 'flex-start', mt: 0.5 }}
+          />
+
+          <TextField
+            size="small"
+            fullWidth
+            label="Channel Context Cutoff (UTC)"
+            type="datetime-local"
+            value={isoToLocalInput(channelConfig?.context_cutoff ?? null)}
+            onChange={(e) =>
+              channelMutation.mutate({
+                context_cutoff: localInputToIso(e.target.value),
+              })
+            }
+            disabled={channelMutation.isPending || !channelConfig}
+            helperText="Overrides server-wide cutoff for this channel. Leave blank to use the server default."
+            InputLabelProps={{ shrink: true }}
+          />
+
+          {channelMutation.isError && (
+            <Typography variant="caption" color="error.main">
+              Failed to save channel settings — please try again.
+            </Typography>
+          )}
+        </Stack>
+      )}
+    </Stack>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-panel: Rule Sources
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RuleSourcesPanel({ guildId }: { guildId: string }) {
+  const qc = useQueryClient();
+
+  const { data: builtins, isLoading: builtinsLoading } = useQuery<BuiltinRuleSource[]>({
+    queryKey: ['builtins', guildId],
+    queryFn: async () =>
+      (
+        await client.get<BuiltinRuleSource[]>(
+          `/api/guilds/${guildId}/rule-sources/builtins`
+        )
+      ).data,
+  });
+
+  const { data: custom, isLoading: customLoading } = useQuery<RuleSource[]>({
+    queryKey: ['ruleSources', guildId],
+    queryFn: async () =>
+      (await client.get<RuleSource[]>(`/api/guilds/${guildId}/rule-sources`)).data,
+  });
+
+  const toggleBuiltin = useMutation({
+    mutationFn: ({ source_id, enabled }: { source_id: string; enabled: boolean }) =>
+      client
+        .patch(`/api/guilds/${guildId}/rule-sources/builtins/${source_id}`, { enabled })
+        .then((r) => r.data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['builtins', guildId] }),
+  });
+
+  const deleteCustom = useMutation({
+    mutationFn: (id: number) =>
+      client.delete(`/api/guilds/${guildId}/rule-sources/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ruleSources', guildId] }),
+  });
+
+  // ── Add custom source dialog ──────────────────────────────────────────────
+  const [addOpen, setAddOpen] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newUrl, setNewUrl] = useState('');
+  const [newSystem, setNewSystem] = useState<string | null>(null);
+  const [newNotes, setNewNotes] = useState('');
+
+  const createCustom = useMutation({
+    mutationFn: () =>
+      client
+        .post(`/api/guilds/${guildId}/rule-sources`, {
+          name: newName,
+          url: newUrl,
+          system: newSystem,
+          notes: newNotes || null,
+          enabled: true,
+        })
+        .then((r) => r.data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['channelConfig', guildId, selectedChannel?.id] });
+      qc.invalidateQueries({ queryKey: ['ruleSources', guildId] });
+      setAddOpen(false);
+      setNewName('');
+      setNewUrl('');
+      setNewSystem(null);
+      setNewNotes('');
     },
   });
 
-  function handleTimezoneChange(_: unknown, value: string | null) {
-    if (value) guildMutation.mutate({ timezone: value });
-  }
-
-  function handleAnnounceChannelChange(_: unknown, value: DiscordChannel | null) {
-    // Always send the string ID — never parseInt(). Discord snowflake IDs exceed
-    // Number.MAX_SAFE_INTEGER and will be silently mangled by JS if converted to number.
-    guildMutation.mutate({ announce_channel_id: value?.id ?? null });
-  }
-
-  function handleGuildCutoffChange(e: React.ChangeEvent<HTMLInputElement>) {
-    guildMutation.mutate({ context_cutoff: localInputToIso(e.target.value) });
-  }
-
-  function handleAlwaysRespondChange(_: React.ChangeEvent<HTMLInputElement>, checked: boolean) {
-    channelMutation.mutate({ always_respond: checked });
-  }
-
-  function handleChannelCutoffChange(e: React.ChangeEvent<HTMLInputElement>) {
-    channelMutation.mutate({ context_cutoff: localInputToIso(e.target.value) });
-  }
-
-  if (configLoading) return <Typography color="text.secondary">Loading…</Typography>;
-  if (!config) return null;
-
   return (
-    <Stack spacing={4} sx={{ maxWidth: 520 }}>
-      {/* Section header */}
+    <Stack spacing={3} sx={{ maxWidth: 640 }}>
       <Typography variant="body2" color="text.secondary">
-        Settings for this Discord server. Changes save instantly.
+        Control which rule lookup sources Grug uses when answering rules questions.
       </Typography>
 
-      {/* ── Server-wide settings ─────────────────────────────────── */}
-      <Stack spacing={2.5}>
-        <Autocomplete
-          size="small"
-          fullWidth
-          options={TIMEZONES}
-          value={config.timezone ?? defaults?.default_timezone ?? 'UTC'}
-          onChange={handleTimezoneChange}
-          disabled={guildMutation.isPending}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Server Timezone"
-              helperText="Used for scheduling, event display, and cron expressions. All times are stored in UTC and converted to this timezone when shown."
-            />
-          )}
-        />
-
-        <Autocomplete
-          size="small"
-          fullWidth
-          options={channels ?? []}
-          loading={channelsLoading}
-          value={channels?.find((c) => c.id === config.announce_channel_id) ?? null}
-          onChange={handleAnnounceChannelChange}
-          disabled={guildMutation.isPending}
-          getOptionLabel={(ch) => `#${ch.name}`}
-          filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.toLowerCase();
-            return opts.filter((ch) =>
-              ch.name.toLowerCase().includes(q) || ch.id.includes(q)
-            );
-          }}
-          isOptionEqualToValue={(a, b) => a.id === b.id}
-          renderOption={(props, ch) => (
-            <Box component="li" {...props} key={ch.id}>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                <span>#{ch.name}</span>
-                <Typography component="span" variant="caption" color="text.disabled">
-                  {ch.id}
-                </Typography>
-              </Box>
-            </Box>
-          )}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Bot Channel"
-              helperText="The channel where Grug posts announcements and responds to @mentions by default."
-            />
-          )}
-        />
-
-        {/* Global context cutoff */}
-        <TextField
-          size="small"
-          fullWidth
-          label="Global Context Cutoff (UTC)"
-          type="datetime-local"
-          value={isoToLocalInput(config.context_cutoff)}
-          onChange={handleGuildCutoffChange}
-          disabled={guildMutation.isPending}
-          helperText="Grug ignores messages sent before this time, server-wide. Leave blank for no cutoff."
-          InputLabelProps={{ shrink: true }}
-        />
-
-        {channelsError && (
-          <Typography variant="caption" color="warning.main">
-            Could not load channels from Discord — check that the bot token is configured correctly.
-          </Typography>
-        )}
-
-        {guildMutation.isError && (
-          <Typography variant="caption" color="error.main">
-            Failed to save — please try again.
-          </Typography>
-        )}
+      {/* ── Built-in sources ─────────────────────────────────────────── */}
+      <Stack spacing={1}>
+        <Typography variant="subtitle2" fontWeight={600}>
+          Built-in Sources
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Grug can search these public resources automatically. Disable any you
+          don&apos;t want Grug to use for this server.
+        </Typography>
       </Stack>
+
+      {builtinsLoading ? (
+        <CircularProgress size={20} />
+      ) : (
+        <Stack spacing={1}>
+          {(builtins ?? []).map((src) => (
+            <Box
+              key={src.source_id}
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 2,
+                p: 1.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+              }}
+            >
+              <Stack spacing={0.5} sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body2" fontWeight={600}>
+                    {src.name}
+                  </Typography>
+                  {src.system && (
+                    <Chip
+                      label={systemLabel(src.system)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                  <Tooltip title="Open source URL">
+                    <IconButton
+                      size="small"
+                      component="a"
+                      href={src.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <OpenInNewIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Typography variant="caption" color="text.secondary">
+                  {src.description}
+                </Typography>
+              </Stack>
+              <Switch
+                checked={src.enabled}
+                size="small"
+                disabled={toggleBuiltin.isPending}
+                onChange={(_, checked) =>
+                  toggleBuiltin.mutate({ source_id: src.source_id, enabled: checked })
+                }
+              />
+            </Box>
+          ))}
+        </Stack>
+      )}
 
       <Divider />
 
-      {/* ── Per-channel overrides ─────────────────────────────────── */}
+      {/* ── Custom sources ────────────────────────────────────────────── */}
       <Stack spacing={1}>
-        <Typography variant="subtitle2" fontWeight={600}>
-          Channel Overrides
-        </Typography>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Typography variant="subtitle2" fontWeight={600}>
+            Custom Sources
+          </Typography>
+          <Button size="small" startIcon={<AddIcon />} onClick={() => setAddOpen(true)}>
+            Add Source
+          </Button>
+        </Box>
         <Typography variant="body2" color="text.secondary">
-          Configure a specific channel to override server-wide context settings or
-          enable Grug to respond to every message.
+          Add your own rule references. Grug will cite these URLs when answering
+          rules questions — custom sources are not scraped.
         </Typography>
       </Stack>
 
-      <Stack spacing={2.5}>
-        <Autocomplete
-          size="small"
-          fullWidth
-          options={channels ?? []}
-          loading={channelsLoading}
-          value={selectedChannel}
-          onChange={(_, ch) => setSelectedChannel(ch)}
-          getOptionLabel={(ch) => `#${ch.name}`}
-          filterOptions={(opts, { inputValue }) => {
-            const q = inputValue.toLowerCase();
-            return opts.filter((ch) =>
-              ch.name.toLowerCase().includes(q) || ch.id.includes(q)
-            );
-          }}
-          isOptionEqualToValue={(a, b) => a.id === b.id}
-          renderOption={(props, ch) => (
-            <Box component="li" {...props} key={ch.id}>
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                <span>#{ch.name}</span>
-                <Typography component="span" variant="caption" color="text.disabled">
-                  {ch.id}
-                </Typography>
-              </Box>
-            </Box>
-          )}
-          renderInput={(params) => (
-            <TextField {...params} label="Select Channel to Configure" />
-          )}
-        />
-
-        {selectedChannel && (
-          <Stack spacing={2} sx={{ pl: 1 }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={channelConfig?.always_respond ?? false}
-                  onChange={handleAlwaysRespondChange}
-                  disabled={channelMutation.isPending || !channelConfig}
-                  size="small"
-                />
-              }
-              label={
-                <Stack>
-                  <Typography variant="body2">Always Respond</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Grug replies to every message in this channel, not just @mentions.
+      {customLoading ? (
+        <CircularProgress size={20} />
+      ) : (custom ?? []).length === 0 ? (
+        <Typography variant="body2" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+          No custom sources yet. Click &quot;Add Source&quot; to add one.
+        </Typography>
+      ) : (
+        <Stack spacing={1}>
+          {(custom ?? []).map((src) => (
+            <Box
+              key={src.id}
+              sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: 2,
+                p: 1.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                opacity: src.enabled ? 1 : 0.5,
+              }}
+            >
+              <Stack spacing={0.5} sx={{ flex: 1 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="body2" fontWeight={600}>
+                    {src.name}
                   </Typography>
-                </Stack>
-              }
-              sx={{ alignItems: 'flex-start', mt: 0.5 }}
-            />
+                  {src.system && (
+                    <Chip
+                      label={systemLabel(src.system)}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                  <Tooltip title="Open source URL">
+                    <IconButton
+                      size="small"
+                      component="a"
+                      href={src.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <OpenInNewIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {src.notes && (
+                  <Typography variant="caption" color="text.secondary">
+                    {src.notes}
+                  </Typography>
+                )}
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                >
+                  {src.url}
+                </Typography>
+              </Stack>
+              <Tooltip title="Delete source">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => deleteCustom.mutate(src.id)}
+                  disabled={deleteCustom.isPending}
+                >
+                  <DeleteIcon fontSize="inherit" />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          ))}
+        </Stack>
+      )}
 
+      {/* ── Add custom source dialog ────────────────────────────────── */}
+      <Dialog open={addOpen} onClose={() => setAddOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add Custom Rule Source</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
+              label="Name"
               size="small"
               fullWidth
-              label="Channel Context Cutoff (UTC)"
-              type="datetime-local"
-              value={isoToLocalInput(channelConfig?.context_cutoff ?? null)}
-              onChange={handleChannelCutoffChange}
-              disabled={channelMutation.isPending || !channelConfig}
-              helperText="Overrides the server-wide cutoff for this channel only. Leave blank to use server default."
-              InputLabelProps={{ shrink: true }}
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="e.g. Kobold Press Tome of Beasts"
             />
-
-            {channelMutation.isError && (
-              <Typography variant="caption" color="error.main">
-                Failed to save channel settings — please try again.
-              </Typography>
-            )}
+            <TextField
+              label="URL"
+              size="small"
+              fullWidth
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              placeholder="https://…"
+            />
+            <Autocomplete
+              size="small"
+              fullWidth
+              options={SYSTEMS}
+              value={newSystem}
+              onChange={(_, v) => setNewSystem(v)}
+              getOptionLabel={(s) => systemLabel(s)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="System (optional)"
+                  helperText="Leave blank if this source covers multiple systems."
+                />
+              )}
+            />
+            <TextField
+              label="Notes (optional)"
+              size="small"
+              fullWidth
+              multiline
+              rows={2}
+              value={newNotes}
+              onChange={(e) => setNewNotes(e.target.value)}
+              placeholder="Any additional context for Grug…"
+            />
           </Stack>
-        )}
-      </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddOpen(false)}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!newName || !newUrl || createCustom.isPending}
+            onClick={() => createCustom.mutate()}
+          >
+            Add
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Stack>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main GuildConfigPage — sub-tab host
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SUB_TABS = ['Server', 'Channels', 'Rule Sources'] as const;
+
+export default function GuildConfigPage() {
+  useAuth();
+  const { guildId } = useParams<{ guildId: string }>();
+  const [activeTab, setActiveTab] = useState(0);
+
+  if (!guildId) return null;
+
+  return (
+    <Stack spacing={0}>
+      {/* Sub-tab bar */}
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          textColor="inherit"
+          TabIndicatorProps={{ style: { height: 2 } }}
+        >
+          {SUB_TABS.map((label) => (
+            <Tab key={label} label={label} sx={{ fontSize: '0.8125rem' }} />
+          ))}
+        </Tabs>
+      </Box>
+
+      {/* Panel content */}
+      {activeTab === 0 && <ServerSettingsPanel guildId={guildId} />}
+      {activeTab === 1 && <ChannelSettingsPanel guildId={guildId} />}
+      {activeTab === 2 && <RuleSourcesPanel guildId={guildId} />}
     </Stack>
   );
 }

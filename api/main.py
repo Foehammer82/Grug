@@ -22,6 +22,7 @@ from api.routes import (
     guilds,
     personal,
     public,
+    rule_sources,
     system,
 )
 from grug.config.settings import get_settings
@@ -69,3 +70,4 @@ app.include_router(documents.router, dependencies=_auth_required)
 app.include_router(glossary.router, dependencies=_auth_required)
 app.include_router(campaigns.router, dependencies=_auth_required)
 app.include_router(admin.router, dependencies=_auth_required)
+app.include_router(rule_sources.router, dependencies=_auth_required)

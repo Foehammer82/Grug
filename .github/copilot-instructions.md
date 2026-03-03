@@ -100,6 +100,29 @@ Three levels of context cutoff control how far back Grug reads history:
 
 The `/chat_here` slash command now reads/writes this table instead of an in-memory set.
 
+## Domain Concepts — Rule Sources
+
+Grug can look up TTRPG rules on demand via the `lookup_ttrpg_rules` agent tool (`grug/agent/tools/rules_tools.py`).  The data model has two layers:
+
+### Built-in sources
+Defined as a static list in `grug/rules/sources.py`.  Three are built-in: `aon_pf2e` (Archives of Nethys — scrapes the search page), `srd_5e` (dnd5eapi.co JSON API), and `open5e` (Open5e JSON API).
+
+Guild admins can disable any built-in per-server.  Overrides are stored in the `guild_builtin_overrides` table (`GuildBuiltinOverride` model) keyed by `source_id`.  No row = built-in is **enabled** (safe default).
+
+### Custom sources
+Stored in the `rule_sources` table (`RuleSource` model) with `guild_id`, `name`, `url`, `system` (nullable), `notes` (nullable), and `enabled`.  Custom sources **are not scraped** — Grug cites the URL so players look it up themselves.  A `system` of `None` means "all systems".
+
+### Web UI
+The Config page has sub-tabs: **Server** | **Channels** | **Rule Sources**.  Sub-tabs are MUI `<Tabs>` inside `GuildConfigPage.tsx` — they do **not** add a new GuildLayout-level tab.
+
+### API
+- `GET  /api/guilds/{id}/rule-sources/builtins` — list builtins with effective enabled state
+- `PATCH /api/guilds/{id}/rule-sources/builtins/{source_id}` — toggle a builtin
+- `GET  /api/guilds/{id}/rule-sources` — list custom sources
+- `POST /api/guilds/{id}/rule-sources` — add a custom source
+- `PATCH /api/guilds/{id}/rule-sources/{source_id}` — update a custom source
+- `DELETE /api/guilds/{id}/rule-sources/{source_id}` — remove a custom source
+
 ## Domain Concepts — Scheduled Tasks
 
 **Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:

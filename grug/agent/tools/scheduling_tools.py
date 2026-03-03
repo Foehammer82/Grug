@@ -21,8 +21,6 @@ logger = logging.getLogger(__name__)
 
 
 def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
-    """Register all scheduling-related tools on *agent*."""
-
     @agent.tool
     async def create_calendar_event(
         ctx: RunContext[GrugDeps],

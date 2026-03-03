@@ -30,6 +30,7 @@ class GuildConfigOut(BaseModel):
     timezone: str
     announce_channel_id: int | None
     context_cutoff: datetime | None
+    default_ttrpg_system: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -48,6 +49,7 @@ class GuildConfigUpdate(BaseModel):
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     announce_channel_id: str | int | None = None
     context_cutoff: datetime | None = None
+    default_ttrpg_system: str | None = None
 
 
 class ChannelConfigOut(BaseModel):
@@ -529,3 +531,54 @@ class PollVoteUpsert(BaseModel):
 class AvailabilityPollUpdate(BaseModel):
     winner_option_id: int | None = None
     closes_at: datetime | None = None
+
+
+# ── Rule Sources ────────────────────────────────────────────────────────────
+
+
+class BuiltinRuleSourceOut(BaseModel):
+    """A built-in rule source with its effective enabled state for a guild."""
+
+    source_id: str
+    name: str
+    description: str
+    system: str | None
+    url: str
+    enabled: bool
+    """True if this source is active for the guild (default True, overridden via DB)."""
+
+
+class BuiltinOverrideUpdate(BaseModel):
+    enabled: bool
+
+
+class RuleSourceOut(BaseModel):
+    """A custom guild-configured rule source."""
+
+    id: int
+    guild_id: int
+    name: str
+    url: str
+    system: str | None
+    notes: str | None
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class RuleSourceCreate(BaseModel):
+    name: str
+    url: str
+    system: str | None = None
+    notes: str | None = None
+    enabled: bool = True
+
+
+class RuleSourceUpdate(BaseModel):
+    name: str | None = None
+    url: str | None = None
+    system: str | None = None
+    notes: str | None = None
+    enabled: bool | None = None
