@@ -307,6 +307,7 @@ class CampaignOut(BaseModel):
     is_active: bool
     created_by: int
     created_at: datetime
+    character_count: int = 0
 
     model_config = {"from_attributes": True}
 

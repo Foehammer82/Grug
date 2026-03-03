@@ -22,6 +22,7 @@ from api.schemas import (
     ChannelConfigOut,
     ChannelConfigUpdate,
     DiscordChannelOut,
+    DiscordMemberOut,
     GuildConfigOut,
     GuildConfigUpdate,
     GuildOut,
@@ -154,6 +155,57 @@ async def list_guild_channels(
         for c in channels
         if c.get("type") in (0, 5)
     ]
+
+
+@router.get(
+    "/api/guilds/{guild_id}/members/{user_id}",
+    response_model=DiscordMemberOut,
+)
+async def get_guild_member(
+    guild_id: int,
+    user_id: str,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> DiscordMemberOut:
+    """Resolve a Discord user ID to their display name and avatar within a guild.
+
+    Uses the guild-member endpoint so server nicknames are preferred over
+    global display names.  Guild-admin only.
+    """
+    await assert_guild_admin(guild_id, user)
+    bot_token = get_bot_token()
+    async with httpx.AsyncClient(timeout=5.0) as http:
+        resp = await http.get(
+            f"https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}",
+            headers={"Authorization": f"Bot {bot_token}"},
+        )
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Member not found in guild")
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Discord API returned {resp.status_code}",
+        )
+    data = resp.json()
+    u = data.get("user", {})
+    uid = u.get("id", user_id)
+    avatar_hash = data.get("avatar") or u.get("avatar")
+    if avatar_hash:
+        if data.get("avatar"):
+            avatar_url = (
+                f"https://cdn.discordapp.com/guilds/{guild_id}"
+                f"/users/{uid}/avatars/{avatar_hash}.png"
+            )
+        else:
+            avatar_url = f"https://cdn.discordapp.com/avatars/{uid}/{avatar_hash}.png"
+    else:
+        avatar_url = None
+    display_name = data.get("nick") or u.get("global_name") or u.get("username", uid)
+    return DiscordMemberOut(
+        discord_user_id=uid,
+        username=u.get("username", uid),
+        display_name=display_name,
+        avatar_url=avatar_url,
+    )
 
 
 @router.get(

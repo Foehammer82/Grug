@@ -185,9 +185,51 @@ export interface Campaign {
   is_active: boolean;
   created_by: string;
   created_at: string;
+  character_count: number;
 }
 
 /* ── Characters ───────────────────────────────────────────────────── */
+
+export interface CharacterSheetHP {
+  current?: number | null;
+  max?: number | null;
+  temp?: number | null;
+}
+
+export interface CharacterSheetAbilityScores {
+  STR?: number | null;
+  DEX?: number | null;
+  CON?: number | null;
+  INT?: number | null;
+  WIS?: number | null;
+  CHA?: number | null;
+}
+
+/** Structured data extracted from an uploaded character sheet. All fields optional. */
+export interface CharacterSheet {
+  system?: string | null;
+  name?: string | null;
+  player_name?: string | null;
+  level?: number | null;
+  class_and_subclass?: string | null;
+  race_or_ancestry?: string | null;
+  background?: string | null;
+  alignment?: string | null;
+  hp?: CharacterSheetHP | null;
+  ability_scores?: CharacterSheetAbilityScores | null;
+  armor_class?: number | null;
+  speed?: string | null;
+  initiative?: number | null;
+  proficiency_bonus?: number | null;
+  attacks?: unknown[] | null;
+  spells?: unknown[] | null;
+  features_and_traits?: unknown[] | null;
+  inventory?: unknown[] | null;
+  currency?: Record<string, unknown> | null;
+  languages?: string[] | null;
+  notes?: string | null;
+  extra?: Record<string, unknown> | null;
+}
 
 export interface Character {
   id: number;
@@ -195,10 +237,18 @@ export interface Character {
   campaign_id: number | null;
   name: string;
   system: string;
-  structured_data: Record<string, unknown> | null;
+  structured_data: CharacterSheet | null;
   file_path: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** A Discord guild member resolved via the bot token. */
+export interface GuildMember {
+  discord_user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
 }
 
 

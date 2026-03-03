@@ -40,14 +40,6 @@ All Grug settings are read from environment variables at startup. The recommende
 
 ---
 
-## Discord bot
-
-| Variable | Default | Description |
-|---|---|---|
-| `DISCORD_PREFIX` | `!` | Command prefix for all prefix-style commands (e.g. `!grug_status`). |
-
----
-
 ## General
 
 | Variable | Default | Description |
@@ -100,9 +92,6 @@ ANTHROPIC_API_KEY=sk-ant-...
 ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 AGENT_MAX_ITERATIONS=10
 AGENT_CONTEXT_WINDOW=20
-
-# ── Bot ───────────────────────────────────────────────────────────────────
-DISCORD_PREFIX=!
 
 # ── Misc ──────────────────────────────────────────────────────────────────
 LOG_LEVEL=INFO

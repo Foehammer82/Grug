@@ -158,6 +158,9 @@ class Character(Base):
     raw_sheet_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Structured JSON extracted by the parser (stats, abilities, etc.).
     structured_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # Pathbuilder 2e character ID for sync.  When set, structured_data is
+    # populated from the Pathbuilder JSON endpoint instead of Claude extraction.
+    pathbuilder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Relative path within the grug_files volume, e.g. characters/123/fighter.pdf
     file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
