@@ -18,13 +18,41 @@ from grug.db.session import get_session_factory
 T = TypeVar("T")
 logger = logging.getLogger(__name__)
 
-# Discord permission bits
-_ADMINISTRATOR_BIT = 0x8
-
-# Simple in-memory cache for guild member role lookups.
+# ---------------------------------------------------------------------------
+# Bounded in-memory cache for guild member role lookups.
 # Key: (guild_id, user_id) -> (roles_list, timestamp)
-_ROLE_CACHE: dict[tuple[str, str], tuple[list[str], float]] = {}
+# ---------------------------------------------------------------------------
 _ROLE_CACHE_TTL = 300  # 5 minutes
+_ROLE_CACHE_MAXSIZE = 2048
+
+
+class _BoundedTTLCache:
+    """Simple bounded TTL cache that evicts the oldest entry when full.
+
+    Avoids unbounded memory growth for long-running processes with many
+    unique (guild_id, user_id) pairs.
+    """
+
+    def __init__(self, maxsize: int, ttl: float) -> None:
+        self._maxsize = maxsize
+        self._ttl = ttl
+        self._cache: dict[tuple[str, str], tuple[list[str], float]] = {}
+
+    def get(self, key: tuple[str, str]) -> tuple[list[str], float] | None:
+        return self._cache.get(key)
+
+    def set(self, key: tuple[str, str], roles: list[str], timestamp: float) -> None:
+        if len(self._cache) >= self._maxsize:
+            # Evict the oldest entry by insertion order (dict preserves it in 3.7+).
+            oldest = next(iter(self._cache))
+            del self._cache[oldest]
+        self._cache[key] = (roles, timestamp)
+
+    def is_fresh(self, timestamp: float) -> bool:
+        return time.time() - timestamp < self._ttl
+
+
+_ROLE_CACHE = _BoundedTTLCache(maxsize=_ROLE_CACHE_MAXSIZE, ttl=_ROLE_CACHE_TTL)
 
 
 async def get_current_user(
@@ -157,16 +185,13 @@ async def assert_can_invite(user: dict[str, Any]) -> None:
 
 
 def _has_guild_admin_permission(guild_id: int | str, user: dict[str, Any]) -> bool:
-    """Check if the user has Discord ADMINISTRATOR permission for a guild.
+    """Deprecated — always returns False.
 
-    This is inferred from the ``permissions`` string stored in the JWT
-    for each guild.
+    The ``permissions`` field was removed from the JWT in the CSRF-state fix
+    (short-lived state cookie).  Guild admin access is now determined via live
+    Discord role checks only, so stale JWT permission bits can no longer be
+    used to gain elevated access.
     """
-    guild_id_str = str(guild_id)
-    for g in user.get("guilds", []):
-        if g["id"] == guild_id_str:
-            perms = int(g.get("permissions", "0"))
-            return bool(perms & _ADMINISTRATOR_BIT)
     return False
 
 
@@ -182,10 +207,10 @@ async def _has_grug_admin_role(guild_id: int | str, user_id: str) -> bool:
     now = time.time()
 
     # Check cache first
-    if cache_key in _ROLE_CACHE:
-        cached_roles, cached_at = _ROLE_CACHE[cache_key]
-        if now - cached_at < _ROLE_CACHE_TTL:
-            return await _check_role_match(guild_id_str, cached_roles)
+    cached_entry = _ROLE_CACHE.get(cache_key)
+    if cached_entry and _ROLE_CACHE.is_fresh(cached_entry[1]):
+        cached_roles, _ = cached_entry
+        return await _check_role_match(guild_id_str, cached_roles)
 
     # Fetch from Discord
     try:
@@ -197,7 +222,7 @@ async def _has_grug_admin_role(guild_id: int | str, user_id: str) -> bool:
             )
         if resp.status_code == 200:
             member_roles = resp.json().get("roles", [])
-            _ROLE_CACHE[cache_key] = (member_roles, now)
+            _ROLE_CACHE.set(cache_key, member_roles, now)
             return await _check_role_match(guild_id_str, member_roles)
     except HTTPException:
         pass  # Bot token not configured
@@ -234,12 +259,13 @@ async def is_guild_admin(guild_id: int | str, user: dict[str, Any]) -> bool:
 
     Admin access is granted if any of the following are true:
     1. The user is a Grug super-admin (env var or DB flag).
-    2. The JWT shows Discord ADMINISTRATOR permission for this guild.
-    3. The user has the ``grug-admin`` role in the Discord guild.
+    2. The user has the ``grug-admin`` role in the Discord guild (live check).
+
+    Note: Discord ADMINISTRATOR permission bits are no longer read from the JWT
+    to avoid stale-permission escalation.  Discord server admins who are not
+    Grug super-admins must be assigned the ``grug-admin`` role via guild config.
     """
     if await is_super_admin_full(user):
-        return True
-    if _has_guild_admin_permission(guild_id, user):
         return True
     user_id = str(user.get("sub", user.get("id", "")))
     return await _has_grug_admin_role(guild_id, user_id)

@@ -1,5 +1,7 @@
 """Discord OAuth helpers and JWT creation/verification."""
 
+import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -12,15 +14,36 @@ DISCORD_API = "https://discord.com/api/v10"
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
+# In-memory revocation set.  Entries are JWT IDs (jti) that have been
+# explicitly invalidated (e.g. on logout).  This is process-scoped — a
+# server restart clears it, but token TTL is only 24 h so the exposure
+# window is bounded.  Replace with a Redis/DB set for multi-process deploys.
+_REVOKED_TOKENS: set[str] = set()
 
-def build_discord_oauth_url(state: str = "") -> str:
-    """Build the Discord OAuth2 authorization URL."""
+
+def generate_state() -> str:
+    """Generate a cryptographically random OAuth state token."""
+    return secrets.token_urlsafe(32)
+
+
+def revoke_token(jti: str) -> None:
+    """Add a JWT ID to the revocation set."""
+    _REVOKED_TOKENS.add(jti)
+
+
+def build_discord_oauth_url(state: str) -> str:
+    """Build the Discord OAuth2 authorization URL.
+
+    ``state`` is required — callers must generate one with :func:`generate_state`
+    and store it in a short-lived signed cookie to prevent login-CSRF.
+    """
     settings = get_settings()
     params = (
         f"client_id={settings.discord_client_id}"
         f"&redirect_uri={settings.discord_redirect_uri}"
         "&response_type=code"
-        "&scope=identify+guilds" + (f"&state={state}" if state else "")
+        f"&scope=identify+guilds"
+        f"&state={state}"
     )
     return f"https://discord.com/api/oauth2/authorize?{params}"
 
@@ -67,14 +90,21 @@ async def fetch_discord_guilds(access_token: str) -> list[dict[str, Any]]:
 
 
 def create_jwt(payload: dict[str, Any]) -> str:
-    """Create a signed JWT with a 24-hour expiry."""
+    """Create a signed JWT with a 24-hour expiry and a unique jti claim."""
     settings = get_settings()
     data = payload.copy()
     data["exp"] = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    data["jti"] = str(uuid.uuid4())
     return jwt.encode(data, settings.web_secret_key, algorithm=ALGORITHM)
 
 
 def decode_jwt(token: str) -> dict[str, Any]:
-    """Decode and verify a JWT."""
+    """Decode and verify a JWT, rejecting explicitly revoked tokens."""
     settings = get_settings()
-    return jwt.decode(token, settings.web_secret_key, algorithms=[ALGORITHM])
+    payload = jwt.decode(token, settings.web_secret_key, algorithms=[ALGORITHM])
+    jti = payload.get("jti")
+    if jti and jti in _REVOKED_TOKENS:
+        from jose import JWTError
+
+        raise JWTError("Token has been revoked")
+    return payload

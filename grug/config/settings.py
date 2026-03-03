@@ -4,7 +4,7 @@ from functools import cache
 import json
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -127,6 +127,16 @@ class Settings(BaseSettings):
 
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
+
+    @model_validator(mode="after")
+    def _validate_secret_key(self) -> "Settings":
+        """Refuse to start with the default insecure secret key."""
+        if self.web_secret_key == "change-me":
+            raise ValueError(
+                "WEB_SECRET_KEY is still set to the default value 'change-me'. "
+                "Set a strong random secret before running in any environment."
+            )
+        return self
 
 
 @cache

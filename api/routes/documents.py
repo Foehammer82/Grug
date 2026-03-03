@@ -71,11 +71,14 @@ async def upload_document(
             detail=f"File exceeds {_MAX_SIZE_MB} MB limit.",
         )
 
+    # Strip any directory components from the filename to prevent path traversal.
+    safe_filename = Path(file.filename or "upload").name or "upload"
+
     uploader_id = int(user["id"])
 
     doc = Document(
         guild_id=guild_id,
-        filename=file.filename,
+        filename=safe_filename,
         description=description or None,
         chroma_collection=f"guild_{guild_id}",
         chunk_count=0,
@@ -87,7 +90,7 @@ async def upload_document(
     await db.refresh(doc)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
-        tmp_path = Path(tmp_dir) / (file.filename or "upload")
+        tmp_path = Path(tmp_dir) / safe_filename
         tmp_path.write_bytes(contents)
         chunk_count = await _indexer.index_file(
             guild_id=guild_id,

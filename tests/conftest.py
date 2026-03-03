@@ -20,6 +20,9 @@ def mock_settings(monkeypatch):
     monkeypatch.setenv("DISCORD_TOKEN", "test-token")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-20241022")
+    monkeypatch.setenv("WEB_SECRET_KEY", "test-secret-key-for-testing-only")
+    # Override any .env file value so tests start with a clean slate.
+    monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "")
     import grug.config.settings as s
 
     s.get_settings.cache_clear()

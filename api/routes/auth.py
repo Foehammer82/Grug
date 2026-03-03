@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.responses import RedirectResponse
 
 from api.auth import (
@@ -11,6 +11,8 @@ from api.auth import (
     exchange_code,
     fetch_discord_guilds,
     fetch_discord_user,
+    generate_state,
+    revoke_token,
 )
 from api.deps import get_current_user, has_can_invite, is_super_admin_full
 from api.schemas import UserOut
@@ -20,14 +22,45 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.get("/discord/login")
-async def discord_login() -> RedirectResponse:
-    """Redirect the user to Discord's OAuth2 authorization page."""
-    return RedirectResponse(build_discord_oauth_url())
+async def discord_login(response: Response) -> RedirectResponse:
+    """Redirect the user to Discord's OAuth2 authorization page.
+
+    Generates a random ``state`` token, stores it in a short-lived httponly
+    cookie, and includes it in the authorization URL.  The callback validates
+    the round-trip to prevent login-CSRF attacks.
+    """
+    state = generate_state()
+    redirect = RedirectResponse(build_discord_oauth_url(state))
+    # Short-lived, httponly, samesite=lax — valid for 10 minutes.
+    redirect.set_cookie(
+        key="oauth_state",
+        value=state,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        max_age=600,
+    )
+    return redirect
 
 
 @router.get("/discord/callback")
-async def discord_callback(code: str, response: Response) -> RedirectResponse:
-    """Handle Discord's OAuth2 callback — exchange the code and set a session cookie."""
+async def discord_callback(
+    code: str,
+    state: str,
+    response: Response,
+    oauth_state: str | None = Cookie(default=None),
+) -> RedirectResponse:
+    """Handle Discord's OAuth2 callback — exchange the code and set a session cookie.
+
+    Validates the ``state`` parameter against the signed cookie set during
+    :func:`discord_login` to prevent login-CSRF.
+    """
+    if not oauth_state or state != oauth_state:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid OAuth state — possible CSRF attempt",
+        )
+
     token_data = await exchange_code(code)
     access_token = token_data["access_token"]
     user = await fetch_discord_user(access_token)
@@ -43,23 +76,25 @@ async def discord_callback(code: str, response: Response) -> RedirectResponse:
                 "id": g["id"],
                 "name": g["name"],
                 "icon": g.get("icon"),
-                "permissions": g.get("permissions", "0"),
             }
             for g in guilds
         ],
     }
     jwt_token = create_jwt(payload)
-    response = RedirectResponse(
+    redirect = RedirectResponse(
         url=f"{get_settings().frontend_url}/dashboard", status_code=302
     )
-    response.set_cookie(
+    # Clear the one-time state cookie.
+    redirect.delete_cookie("oauth_state")
+    redirect.set_cookie(
         key="session",
         value=jwt_token,
         httponly=True,
         samesite="lax",
+        secure=True,
         max_age=86400,
     )
-    return response
+    return redirect
 
 
 @router.get("/me", response_model=UserOut)
@@ -78,8 +113,11 @@ async def get_me(user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
 @router.post("/logout")
 async def logout(
     response: Response,
-    _user: dict[str, Any] = Depends(get_current_user),
+    user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, str]:
-    """Clear the session cookie."""
+    """Invalidate the session cookie and revoke the JWT."""
+    jti = user.get("jti")
+    if jti:
+        revoke_token(jti)
     response.delete_cookie("session")
     return {"status": "ok"}

@@ -91,6 +91,14 @@ Three levels of context cutoff control how far back Grug reads history:
 
 `None` at any level means "use the default rolling window."  When no explicit cutoff is set at any level, both `_get_effective_context_cutoff()` and `_get_dm_context_cutoff()` fall back to `now - 30 days` (controlled by `_DEFAULT_CONTEXT_LOOKBACK_DAYS` in `grug/bot/cogs/ai_chat.py`).  The effective cutoff is resolved there and passed to `GrugAgent.respond()` → `_load_history()`.
 
+### Guild admin authorization
+
+`is_guild_admin()` in `api/deps.py` grants admin access via two paths:
+1. **Grug super-admin** — env var `GRUG_SUPER_ADMIN_IDS` or DB `is_super_admin` flag.
+2. **Grug-admin role** — live Discord API check against `grug_admin_role_id` in `GuildConfig` (cached 5 min, bounded to 2048 entries via `_BoundedTTLCache`).
+
+**The Discord ADMINISTRATOR permission bit is NOT read from the JWT** for authorization decisions.  JWT guild data no longer includes `permissions` at all.  Discord server admins who are not Grug super-admins must be assigned the `grug-admin` role via guild config.  `_has_guild_admin_permission()` is kept as a no-op stub for backward compatibility only.
+
 ### ChannelConfig model
 
 `ChannelConfig` (table `channel_configs`) stores per-channel settings:

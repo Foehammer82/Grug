@@ -97,10 +97,16 @@ class TestSuperAdmin:
 
 class TestGuildAdminPermission:
     def test_admin_bit_set(self):
+        """Deprecated: _has_guild_admin_permission always returns False now.
+
+        The ``permissions`` field was removed from the JWT to prevent stale
+        permission escalation.  This function is kept for backward-compat but
+        always returns False regardless of the user payload.
+        """
         from api.deps import _has_guild_admin_permission
 
         user = _user(guilds=[_guild("999", permissions=0x8)])
-        assert _has_guild_admin_permission("999", user) is True
+        assert _has_guild_admin_permission("999", user) is False
 
     def test_admin_bit_not_set(self):
         from api.deps import _has_guild_admin_permission
@@ -109,11 +115,11 @@ class TestGuildAdminPermission:
         assert _has_guild_admin_permission("999", user) is False
 
     def test_admin_bit_combined_flags(self):
+        """Deprecated: always False regardless of permission bits."""
         from api.deps import _has_guild_admin_permission
 
-        # ADMINISTRATOR (0x8) combined with other bits
         user = _user(guilds=[_guild("999", permissions=0x8 | 0x10 | 0x20)])
-        assert _has_guild_admin_permission("999", user) is True
+        assert _has_guild_admin_permission("999", user) is False
 
     def test_wrong_guild(self):
         from api.deps import _has_guild_admin_permission
@@ -200,6 +206,12 @@ class TestIsGuildAdmin:
 
     @pytest.mark.asyncio
     async def test_discord_admin_perm_grants_access(self, monkeypatch):
+        """JWT Discord ADMINISTRATOR bit no longer grants guild admin access.
+
+        The ``permissions`` field was removed from the JWT to prevent stale
+        permission escalation.  Only Grug super-admins and users with the
+        grug-admin role have guild admin access.
+        """
         monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "")
         import grug.config.settings as s
 
@@ -207,11 +219,20 @@ class TestIsGuildAdmin:
         from api.deps import is_guild_admin
 
         user = _user("555", guilds=[_guild("999", permissions=0x8)])
-        # Patch _has_grug_admin_role to avoid network calls
-        with patch(
-            "api.deps._has_grug_admin_role", new_callable=AsyncMock, return_value=False
+        with (
+            patch(
+                "api.deps._has_grug_admin_role",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "api.deps.is_super_admin_full",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
-            assert await is_guild_admin("999", user) is True
+            # JWT ADMINISTRATOR bit alone no longer grants access
+            assert await is_guild_admin("999", user) is False
 
     @pytest.mark.asyncio
     async def test_grug_admin_role_grants_access(self, monkeypatch):
@@ -222,8 +243,17 @@ class TestIsGuildAdmin:
         from api.deps import is_guild_admin
 
         user = _user("555", guilds=[_guild("999", permissions=0)])
-        with patch(
-            "api.deps._has_grug_admin_role", new_callable=AsyncMock, return_value=True
+        with (
+            patch(
+                "api.deps._has_grug_admin_role",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "api.deps.is_super_admin_full",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             assert await is_guild_admin("999", user) is True
 
@@ -236,8 +266,17 @@ class TestIsGuildAdmin:
         from api.deps import is_guild_admin
 
         user = _user("555", guilds=[_guild("999", permissions=0)])
-        with patch(
-            "api.deps._has_grug_admin_role", new_callable=AsyncMock, return_value=False
+        with (
+            patch(
+                "api.deps._has_grug_admin_role",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "api.deps.is_super_admin_full",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             assert await is_guild_admin("999", user) is False
 
@@ -250,8 +289,17 @@ class TestIsGuildAdmin:
         from api.deps import assert_guild_admin
 
         user = _user("555", guilds=[_guild("999", permissions=0)])
-        with patch(
-            "api.deps._has_grug_admin_role", new_callable=AsyncMock, return_value=False
+        with (
+            patch(
+                "api.deps._has_grug_admin_role",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "api.deps.is_super_admin_full",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
         ):
             with pytest.raises(HTTPException) as exc_info:
                 await assert_guild_admin("999", user)
@@ -353,7 +401,9 @@ class TestSuperAdminIdsParsing:
         assert settings.grug_super_admin_ids == []
 
     def test_not_set_defaults_empty(self, monkeypatch):
-        monkeypatch.delenv("GRUG_SUPER_ADMIN_IDS", raising=False)
+        # Use setenv("") rather than delenv so the OS env var overrides any
+        # .env file value that may be present in the developer's local checkout.
+        monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "")
         import grug.config.settings as s
 
         s.get_settings.cache_clear()
