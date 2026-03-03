@@ -33,6 +33,7 @@ import PollingIndicator from '../components/PollingIndicator';
 import { TABLE_HEADER_SX } from '../types';
 import { cronToHuman } from '../utils';
 import type { DiscordChannel, GuildConfig, ScheduledTask } from '../types';
+import { useGuildContext } from '../hooks/useGuildContext';
 
 const EMPTY_FORM = {
   type: 'once' as 'once' | 'recurring',
@@ -48,6 +49,8 @@ export default function TasksPage() {
   useAuth();
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
+  const { timezone } = useGuildContext();
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { timeZone: timezone });
 
   const POLL_MS = 15_000;
 
@@ -207,7 +210,7 @@ export default function TasksPage() {
                   <TableCell>
                     {t.type === 'once' ? (
                       <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
-                        {t.fire_at ? new Date(t.fire_at).toLocaleString() : '—'}
+                        {t.fire_at ? fmtDate(t.fire_at) : '—'}
                       </Typography>
                     ) : (() => {
                       const human = cronToHuman(t.cron_expression);
@@ -240,13 +243,13 @@ export default function TasksPage() {
                       />
                     ) : (
                       <Typography variant="body2" color="text.secondary">
-                        {t.last_run ? new Date(t.last_run).toLocaleString() : '—'}
+                        {t.last_run ? fmtDate(t.last_run) : '—'}
                       </Typography>
                     )}
                   </TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap' }}>
                     <Typography variant="body2" color="text.secondary">
-                      {t.next_run ? new Date(t.next_run).toLocaleString() : '—'}
+                      {t.next_run ? fmtDate(t.next_run) : '—'}
                     </Typography>
                   </TableCell>
                   <TableCell>

@@ -15,6 +15,7 @@ import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import type { ScheduledTask } from '../types';
 import { cronToHuman } from '../utils';
+import { useGuildContext } from '../hooks/useGuildContext';
 
 export type { ScheduledTask } from '../types';
 
@@ -31,6 +32,8 @@ interface Props {
 export default function TaskDetailModal({ task, open, onClose }: Props) {
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
+  const { timezone } = useGuildContext();
+  const fmtDate = (iso: string) => new Date(iso).toLocaleString(undefined, { timeZone: timezone });
 
   const toggleMutation = useMutation({
     mutationFn: async (enabled: boolean) => {
@@ -109,7 +112,7 @@ export default function TaskDetailModal({ task, open, onClose }: Props) {
         {task.type === 'once' && (
           <TextField
             label="Fire at"
-            defaultValue={task.fire_at ? new Date(task.fire_at).toLocaleString() : '—'}
+            defaultValue={task.fire_at ? fmtDate(task.fire_at) : '—'}
             InputProps={{ readOnly: true }}
             fullWidth
             size="small"
@@ -131,14 +134,14 @@ export default function TaskDetailModal({ task, open, onClose }: Props) {
         <Box sx={{ display: 'flex', gap: 2 }}>
           <TextField
             label="Next run"
-            defaultValue={task.next_run ? new Date(task.next_run).toLocaleString() : '—'}
+            defaultValue={task.next_run ? fmtDate(task.next_run) : '—'}
             InputProps={{ readOnly: true }}
             fullWidth
             size="small"
           />
           <TextField
             label="Last run"
-            defaultValue={task.last_run ? new Date(task.last_run).toLocaleString() : '—'}
+            defaultValue={task.last_run ? fmtDate(task.last_run) : '—'}
             InputProps={{ readOnly: true }}
             fullWidth
             size="small"
@@ -146,7 +149,7 @@ export default function TaskDetailModal({ task, open, onClose }: Props) {
         </Box>
 
         <Typography variant="caption" color="text.secondary">
-          Created {new Date(task.created_at).toLocaleString()}
+          Created {fmtDate(task.created_at)}
         </Typography>
 
         {(toggleMutation.isError || deleteMutation.isError) && (

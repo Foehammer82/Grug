@@ -1,7 +1,10 @@
 import { Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useGuilds } from '../hooks/useGuilds';
+import client from '../api/client';
+import type { GuildConfig } from '../types';
 
 /** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
 const TABS = [
@@ -24,6 +27,16 @@ export default function GuildLayout() {
   const guild = guilds?.find((g) => g.id === guildId);
   const isAdmin = guild?.is_admin ?? false;
   const guildsLoaded = guilds !== undefined;
+
+  const { data: guildConfig } = useQuery<GuildConfig>({
+    queryKey: ['guild-config', guildId],
+    queryFn: async () => {
+      const res = await client.get<GuildConfig>(`/api/guilds/${guildId}/config`);
+      return res.data;
+    },
+    enabled: !!guildId,
+  });
+  const timezone = guildConfig?.timezone ?? 'UTC';
 
   // Filter tabs based on admin status
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
@@ -103,7 +116,7 @@ export default function GuildLayout() {
 
       {/* Page content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: 4 }}>
-        <Outlet context={{ isAdmin }} />
+        <Outlet context={{ isAdmin, timezone }} />
       </Box>
     </Box>
   );

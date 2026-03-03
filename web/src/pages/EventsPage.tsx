@@ -32,7 +32,7 @@ export default function EventsPage() {
   const { guildId } = useParams<{ guildId: string }>();
   const theme = useTheme();
   const calRef = useRef<FullCalendar>(null);
-  const { isAdmin } = useGuildContext();
+  const { isAdmin, timezone } = useGuildContext();
   const qc = useQueryClient();
 
   /* ---- visible date range (controlled by FullCalendar) ---- */
@@ -314,6 +314,7 @@ export default function EventsPage() {
             height="auto"
             dayMaxEvents={4}
             nowIndicator
+            timeZone={timezone}
             eventTimeFormat={{ hour: 'numeric', minute: '2-digit', meridiem: 'short' }}
           />
         </Box>
