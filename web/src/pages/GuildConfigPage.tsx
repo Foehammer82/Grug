@@ -208,7 +208,11 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
     enabled: !!guildId,
   });
 
-  const { data: channelConfigs } = useQuery<ChannelConfig[]>({
+  const {
+    data: channelConfigs,
+    isLoading: configsLoading,
+    isError: configsError,
+  } = useQuery<ChannelConfig[]>({
     queryKey: ['channelConfigs', guildId],
     queryFn: async () =>
       (await client.get<ChannelConfig[]>(`/api/guilds/${guildId}/channels/configs`)).data,
@@ -250,7 +254,13 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
         </Typography>
       )}
 
-      {channelsLoading ? (
+      {configsError && (
+        <Typography variant="caption" color="warning.main">
+          Could not load channel settings — displayed values may not reflect actual config.
+        </Typography>
+      )}
+
+      {channelsLoading || configsLoading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
           <CircularProgress size={20} />
         </Box>
@@ -258,7 +268,8 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
         <>
           <TextField
             size="small"
-            placeholder="Filter channels…"
+            label="Filter channels"
+            placeholder="e.g. general"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             sx={{ maxWidth: 320 }}
@@ -315,7 +326,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   patch: { always_respond: checked },
                                 })
                               }
-                              disabled={channelMutation.isPending}
+                              disabled={channelMutation.isPending || configsError}
                             />
                           </Tooltip>
                         </TableCell>
