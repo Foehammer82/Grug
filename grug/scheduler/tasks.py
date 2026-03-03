@@ -21,9 +21,7 @@ async def _send_dm_rest(user_id: int, content: str) -> None:
     settings = get_settings()
     bot_token = settings.discord_bot_token or settings.discord_token
     if not bot_token:
-        logger.error(
-            "No bot token configured; cannot send DM to user %d", user_id
-        )
+        logger.error("No bot token configured; cannot send DM to user %d", user_id)
         return
 
     headers = {"Authorization": f"Bot {bot_token}"}
@@ -118,9 +116,7 @@ async def execute_scheduled_task(task_id: int) -> None:
 
         bot = get_bot()
         if bot is None:
-            logger.warning(
-                "Bot not initialised; skipping guild task %d", task_id
-            )
+            logger.warning("Bot not initialised; skipping guild task %d", task_id)
             return
 
         channel = bot.get_channel(channel_id)
