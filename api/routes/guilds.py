@@ -209,6 +209,23 @@ async def get_guild_member(
 
 
 @router.get(
+    "/api/guilds/{guild_id}/channels/configs",
+    response_model=list[ChannelConfigOut],
+)
+async def list_channel_configs(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ChannelConfig]:
+    """Return all per-channel configs that exist for this guild."""
+    assert_guild_member(guild_id, user)
+    result = await db.execute(
+        select(ChannelConfig).where(ChannelConfig.guild_id == guild_id)
+    )
+    return result.scalars().all()
+
+
+@router.get(
     "/api/guilds/{guild_id}/channels/{channel_id}/config",
     response_model=ChannelConfigOut,
 )
