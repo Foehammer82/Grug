@@ -552,48 +552,11 @@ class BuiltinOverrideUpdate(BaseModel):
     enabled: bool
 
 
-class RuleSourceOut(BaseModel):
-    """A custom guild-configured rule source."""
-
-    id: int
-    guild_id: int
-    name: str
-    url: str
-    system: str | None
-    notes: str | None
-    enabled: bool
-    sort_order: int
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class RuleSourceCreate(BaseModel):
-    name: str
-    url: str
-    system: str | None = None
-    notes: str | None = None
-    enabled: bool = True
-
-
-class RuleSourceUpdate(BaseModel):
-    name: str | None = None
-    url: str | None = None
-    system: str | None = None
-    notes: str | None = None
-    enabled: bool | None = None
-    sort_order: int | None = None
-
-
 class RuleSourceTestRequest(BaseModel):
-    """Run a live test query against a single rule source."""
+    """Run a live test query against a built-in rule source."""
 
     query: str
-    # For built-in sources supply source_id; for custom sources supply name + url.
     source_id: str | None = None
-    source_name: str | None = None
-    source_url: str | None = None
 
 
 class RuleSourceTestResult(BaseModel):

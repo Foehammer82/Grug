@@ -103,32 +103,30 @@ The `/chat_here` slash command now reads/writes this table instead of an in-memo
 
 ## Domain Concepts — Rule Sources
 
-Grug can look up TTRPG rules on demand via the `lookup_ttrpg_rules` agent tool (`grug/agent/tools/rules_tools.py`).  The data model has two layers:
+Grug can look up TTRPG rules on demand via the `lookup_ttrpg_rules` agent tool (`grug/agent/tools/rules_tools.py`).  Only built-in sources are supported — there are no custom guild-configured sources.
 
 ### Built-in sources
-Defined as a static list in `grug/rules/sources.py`.  Three are built-in: `aon_pf2e` (Archives of Nethys — scrapes the search page), `srd_5e` (dnd5eapi.co JSON API), and `open5e` (Open5e JSON API).
+Defined as a static list in `grug/rules/sources.py`.  Two are built-in:
+
+- **`aon_pf2e`** — Archives of Nethys (PF2e).  Official Paizo-partnered SRD with near-complete PF2e coverage (all rulebooks, supplements, Adventure Paths, PFS scenarios).  Uses the undocumented Elasticsearch endpoint at `elasticsearch.aonprd.com` for genuine free-text relevance search.  Before searching, `_plan_aon_query` makes a fast claude-haiku call that produces an `_AONQueryPlan` (a curated `search_query` free of conversational preamble, plus optional `preferred_types` to boost in Elasticsearch scoring).  Returns 1 result for agent calls (`size=1` default); the admin test UI passes `size=5` explicitly.  Falls back to the raw query if the planner fails.  Fetch function: `_fetch_aon_pf2e`.
+- **`srd_5e`** — D&D 5e SRD via dnd5eapi.co.  Covers the 2014 SRD only (no non-SRD monsters, no 2024 revised content).  Two-phase search: (1) parallel `?name=<substring>` queries across spells, monsters, magic-items, equipment, conditions, and feats — tried with both the full query and individual non-stop-word tokens so "how does grappling work" still matches "Grappled"; (2) the 33 `rule-sections` index entries are fetched and keyword-scored client-side, with top matches fetched in full to cover mechanics (grapple, opportunity attack, bonus action) that have no named entity.  There is **no full-text search endpoint** on dnd5eapi.co — name-substring + rule-sections client filtering is the only available strategy.  Fetch functions: `_fetch_srd_5e`, `_format_srd_entry`, `_detect_srd_type`.
+
+  **LLM routing**: before searching, `_plan_srd_query` makes a fast claude-haiku call that produces a `_SRDQueryPlan` (which entity endpoints to search by name, which entities to fetch by direct slug, which rule-section keywords to score against).  This allows class/race/skill/trait lookups (e.g. `/api/2014/classes/wizard`) that have no `?name=` filter.  Falls back to word-tokenisation if the LLM call fails.  Entity types handled: Spell, Monster, Condition, Magic Item, Equipment, Feature, Background, Class, Race, Subclass, Skill, Trait, Rule Section, Rule.
+
+Open5e was removed: its v2 unified search returns zero results for all queries — it is broken and was replaced by the improved `srd_5e` implementation.
 
 Guild admins can disable any built-in per-server.  Overrides are stored in the `guild_builtin_overrides` table (`GuildBuiltinOverride` model) keyed by `source_id`.  No row = built-in is **enabled** (safe default).
 
-### Custom sources
-Stored in the `rule_sources` table (`RuleSource` model) with `guild_id`, `name`, `url`, `system` (nullable), `notes` (nullable), `enabled`, and `sort_order` (integer, default 0 — lower = higher priority within the custom group).  Custom sources **are not scraped** — Grug cites the URL so players look it up themselves.  A `system` of `None` means "all systems".
-
-### Source priority / ordering
-
-Built-in sources are **always consulted before custom sources** — they have implicit highest priority.  Within built-ins, order is fixed by `BUILTIN_RULE_SOURCES` list position.  Within custom sources, `sort_order ASC` (then `created_at ASC` as a tiebreaker) controls the order.  Guild admins reorder custom sources via up/down arrows in the web UI, which PATCHes the `sort_order` of the two swapped rows.  New custom sources are assigned `max(sort_order) + 10` so they land at the bottom, leaving gaps for future insertions.
 
 ### Web UI
 The Config page renders **Server Settings** and **Channel Settings** as stacked sections (no sub-tabs) — a `Typography h6` heading followed by each panel, separated by a `Divider`.
 
-Rule Sources is its own top-level tab in `GuildLayout` (`path: 'rule-sources'`, `adminOnly: true`), implemented in `web/src/pages/RuleSourcesPage.tsx`. It renders a single unified list: built-in sources always appear first (fixed order, "Built-in" chip, enabled `Switch`, no delete/reorder controls), followed by custom sources (up/down `IconButton` arrows to swap `sort_order`, enabled `Switch`, delete `IconButton`).
+Rule Sources is its own top-level tab in `GuildLayout` (`path: 'rule-sources'`, `adminOnly: true`), implemented in `web/src/pages/RuleSourcesPage.tsx`. It renders the list of built-in sources (fixed order, "Built-in" chip, enabled `Switch`, no delete/reorder controls).
 
 ### API
 - `GET  /api/guilds/{id}/rule-sources/builtins` — list builtins with effective enabled state
 - `PATCH /api/guilds/{id}/rule-sources/builtins/{source_id}` — toggle a builtin
-- `GET  /api/guilds/{id}/rule-sources` — list custom sources
-- `POST /api/guilds/{id}/rule-sources` — add a custom source
-- `PATCH /api/guilds/{id}/rule-sources/{source_id}` — update a custom source
-- `DELETE /api/guilds/{id}/rule-sources/{source_id}` — remove a custom source
+- `POST /api/guilds/{id}/rule-sources/test` — test a built-in source with a query (`source_id` required)
 
 ## Domain Concepts — Scheduled Tasks
 

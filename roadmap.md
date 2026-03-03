@@ -14,7 +14,3 @@
 ## Integrations
 
 - **Character Sheet ↔ Discord Bridge:** Post dice rolls to the session channel, let the DM apply effects from Discord, and let Grug reference live character data mid-conversation without players spelling out their modifiers.
-
-## Auth & Access Control
-
-- **Guest Invites — Non-Discord Users:** Admins can invite people without Discord to access parts of the web UI (at minimum, the events calendar). Needs a full auth design — magic-link email, username+password guest accounts, or a non-Discord OAuth provider. Scoped access per invite (e.g. read-only calendar, RSVP only).

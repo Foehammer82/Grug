@@ -2,8 +2,7 @@
 
 Each :class:`BuiltinRuleSource` describes a publicly-accessible API or
 website that Grug knows how to search.  Guild admins can disable any of these
-per-server via the web UI (stored in ``guild_builtin_overrides``).  They can
-also add their own custom sources via ``rule_sources``.
+per-server via the web UI (stored in ``guild_builtin_overrides``).
 """
 
 from dataclasses import dataclass
@@ -36,31 +35,27 @@ BUILTIN_RULE_SOURCES: list[BuiltinRuleSource] = [
         source_id="aon_pf2e",
         name="Archives of Nethys (PF2e)",
         description=(
-            "The official Pathfinder 2e rules compendium — spells, feats, "
-            "monsters, items, and conditions. Grug scrapes the search results."
+            "The official Paizo-partnered SRD for Pathfinder 2e — near-complete "
+            "coverage of all rulebooks, supplements, Adventure Paths, and "
+            "Pathfinder Society content, updated within weeks of release. "
+            "Backed by Elasticsearch for genuine free-text relevance search "
+            "across spells, feats, monsters, items, conditions, and rules text."
         ),
         system="pf2e",
         url="https://2e.aonprd.com",
     ),
     BuiltinRuleSource(
         source_id="srd_5e",
-        name="D&D 5e SRD API",
+        name="D&D 5e SRD (dnd5eapi.co)",
         description=(
-            "The official 5th-edition Systems Reference Document served as "
-            "JSON by dnd5eapi.co — spells, monsters, classes, and more."
+            "Community REST/GraphQL API covering the official D&D 5e 2014 "
+            "Systems Reference Document — spells, monsters, classes, equipment, "
+            "magic items, conditions, and features. "
+            "Note: SRD content only; non-SRD subclasses, most named monsters, "
+            "and the 2024 revised rulebooks are not included."
         ),
         system="dnd5e",
         url="https://www.dnd5eapi.co",
-    ),
-    BuiltinRuleSource(
-        source_id="open5e",
-        name="Open5e",
-        description=(
-            "Open5e aggregates 5e-compatible SRD content from multiple "
-            "publishers — spells, monsters, magic items, and conditions."
-        ),
-        system="dnd5e",
-        url="https://open5e.com",
     ),
 ]
 

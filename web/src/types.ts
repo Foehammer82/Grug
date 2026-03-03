@@ -211,19 +211,6 @@ export interface BuiltinRuleSource {
   enabled: boolean;
 }
 
-export interface RuleSource {
-  id: number;
-  guild_id: number;
-  name: string;
-  url: string;
-  system: string | null;
-  notes: string | null;
-  enabled: boolean;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
-}
-
 /* ── Datetime helpers ─────────────────────────────────────────────── */
 
 /** Convert ISO UTC datetime string to datetime-local input value (e.g. "2026-03-01T20:00"). */
