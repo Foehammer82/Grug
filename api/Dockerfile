@@ -27,6 +27,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --all-packages --no-dev --frozen --no-install-workspace
 
 # Copy the full source tree — the API imports from the grug package.
+COPY alembic/ alembic/
+COPY alembic.ini alembic.ini
 COPY grug/ grug/
 COPY api/ api/
 # Root pyproject.toml and uv.lock are not copied into this image but uv still
