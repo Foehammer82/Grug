@@ -339,6 +339,7 @@ class CharacterCreate(BaseModel):
 class CharacterUpdate(BaseModel):
     name: str | None = None
     system: str | None = None
+    campaign_id: int | None = None
 
 
 class CharacterOut(BaseModel):
@@ -348,6 +349,7 @@ class CharacterOut(BaseModel):
     name: str
     system: str
     structured_data: dict | None
+    pathbuilder_id: int | None = None
     file_path: str | None
     created_at: datetime
     updated_at: datetime
@@ -358,6 +360,12 @@ class CharacterOut(BaseModel):
     def serialize_owner_id(self, v: int) -> str:
         """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
         return str(v)
+
+
+class PathbuilderLinkRequest(BaseModel):
+    """Request body for linking a Pathbuilder 2e character by ID."""
+
+    pathbuilder_id: int
 
 
 class UserProfileOut(BaseModel):

@@ -5,8 +5,9 @@ import Divider from '@mui/material/Divider';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import grugNb from '../assets/grug_nb.png';
+import { getEnv } from '../env';
 
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8000';
+const API_URL = getEnv('VITE_API_URL') ?? 'http://localhost:8000';
 
 const DiscordIcon = () => (
   <svg width="22" height="22" viewBox="0 0 127.14 96.36" fill="currentColor" style={{ flexShrink: 0 }}>

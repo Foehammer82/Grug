@@ -238,6 +238,7 @@ export interface Character {
   name: string;
   system: string;
   structured_data: CharacterSheet | null;
+  pathbuilder_id: number | null;
   file_path: string | null;
   created_at: string;
   updated_at: string;

@@ -11,6 +11,14 @@ Open **`http://localhost:3000`** (or whatever host/port you've configured).
 !!! note "Running on a remote server?"
     If you deployed Grug on a VPS or home server rather than your local machine, replace `localhost` with your server's IP address or domain name.
 
+    You must also set `VITE_API_URL` in your `.env` file so the browser knows where to find the API:
+
+    ```dotenv
+    VITE_API_URL=https://api.yourdomain.com
+    ```
+
+    This variable is injected at container start — you do **not** need to rebuild the web image after changing it. Just restart the `web` container (`docker compose restart web`).
+
 ---
 
 ## Logging in

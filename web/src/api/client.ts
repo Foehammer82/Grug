@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { getEnv } from '../env';
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8000',
+  baseURL: getEnv('VITE_API_URL') ?? 'http://localhost:8000',
   withCredentials: true,
 });
 

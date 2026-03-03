@@ -5,6 +5,9 @@
     <link rel="icon" type="image/png" href="/favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Grug Dashboard</title>
+    <!-- Runtime environment — written by docker-entrypoint.sh at container start.
+         Falls back gracefully when the file is absent (local dev). -->
+    <script src="/env-config.js" onerror="window.__ENV__=window.__ENV__||{}"></script>
     <!-- Apply saved theme before React renders to prevent flash of wrong theme -->
     <script>
       (function () {

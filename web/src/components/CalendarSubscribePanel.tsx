@@ -30,6 +30,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
+import { getEnv } from '../env';
 import { useGuildContext } from '../hooks/useGuildContext';
 
 /* ------------------------------------------------------------------ */
@@ -38,7 +39,7 @@ import { useGuildContext } from '../hooks/useGuildContext';
 
 /** Return the base URL for the Grug API (same as the axios client uses). */
 function apiBase(): string {
-  return (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+  return getEnv('VITE_API_URL') ?? '';
 }
 
 /**

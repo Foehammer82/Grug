@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from grug.character.indexer import CharacterIndexer
 from grug.character.parser import CharacterSheetParser
+from grug.character.pathbuilder import PathbuilderError, fetch_pathbuilder_character
 from grug.config.settings import get_settings
 from grug.db.models import Campaign, Character, UserProfile
 from grug.db.session import get_session_factory
@@ -340,6 +341,139 @@ class CharactersCog(commands.Cog, name="Characters"):
         async with aiofiles.open(dest, "wb") as f:
             await f.write(file_bytes)
         return str(dest.relative_to(self._file_data_dir))
+
+    # ------------------------------------------------------------------
+    # Pathbuilder integration
+    # ------------------------------------------------------------------
+
+    @character.command(
+        name="pathbuilder",
+        description="Link a character from Pathbuilder 2e by ID.",
+    )
+    @app_commands.describe(
+        pathbuilder_id="Your Pathbuilder character ID (the number in the share URL).",
+    )
+    async def link_pathbuilder(
+        self, interaction: discord.Interaction, pathbuilder_id: int
+    ) -> None:
+        await interaction.response.defer()
+        thinking_msg = await interaction.followup.send(
+            "Grug fetching scroll from Pathbuilder... 📜"
+        )
+
+        try:
+            structured_data = await fetch_pathbuilder_character(pathbuilder_id)
+        except PathbuilderError as exc:
+            await thinking_msg.edit(content=f"Grug can't reach Pathbuilder: {exc}")
+            return
+
+        char_name = structured_data.get("name") or f"Pathbuilder #{pathbuilder_id}"
+        user_id = interaction.user.id
+
+        factory = get_session_factory()
+        async with factory() as session:
+            # Check if this Pathbuilder ID is already linked
+            existing = await session.execute(
+                select(Character).where(
+                    Character.owner_discord_user_id == user_id,
+                    Character.pathbuilder_id == pathbuilder_id,
+                )
+            )
+            character_row = existing.scalar_one_or_none()
+            if character_row is not None:
+                # Update existing
+                character_row.structured_data = structured_data
+                character_row.name = char_name
+                character_row.system = "pf2e"
+            else:
+                # Create new
+                character_row = Character(
+                    owner_discord_user_id=user_id,
+                    name=char_name,
+                    system="pf2e",
+                    structured_data=structured_data,
+                    pathbuilder_id=pathbuilder_id,
+                )
+                session.add(character_row)
+            await session.commit()
+            await session.refresh(character_row)
+            character_id = character_row.id
+
+        await _ensure_user_profile(user_id, default_character_id=character_id)
+
+        system_label = GAME_SYSTEM_LABELS.get("pf2e", "pf2e")
+        char_level = structured_data.get("level")
+        char_class = structured_data.get("class_and_subclass") or "?"
+        embed = discord.Embed(
+            title=f"📜 {char_name}",
+            description=f"Linked from Pathbuilder! (ID: {character_id})",
+            color=discord.Color.green(),
+        )
+        embed.add_field(name="System", value=system_label, inline=True)
+        embed.add_field(name="Class", value=char_class, inline=True)
+        if char_level:
+            embed.add_field(name="Level", value=str(char_level), inline=True)
+        embed.add_field(
+            name="Pathbuilder ID",
+            value=str(pathbuilder_id),
+            inline=True,
+        )
+        embed.set_footer(
+            text="Use /character sync to refresh from Pathbuilder anytime!"
+        )
+        await thinking_msg.edit(content=None, embed=embed)
+
+    @character.command(
+        name="sync",
+        description="Re-sync your active character from Pathbuilder.",
+    )
+    @app_commands.describe(
+        name="Character name (leave blank for your active character).",
+    )
+    async def sync_pathbuilder(
+        self, interaction: discord.Interaction, name: str | None = None
+    ) -> None:
+        character_row = await _resolve_character(interaction.user.id, name)
+        if character_row is None:
+            await interaction.response.send_message(
+                "No character found. Link one with `/character pathbuilder` first.",
+                ephemeral=True,
+            )
+            return
+        if not character_row.pathbuilder_id:
+            await interaction.response.send_message(
+                f"**{character_row.name}** isn't linked to Pathbuilder. "
+                "Use `/character pathbuilder <id>` to link one.",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+        try:
+            structured_data = await fetch_pathbuilder_character(
+                character_row.pathbuilder_id
+            )
+        except PathbuilderError as exc:
+            await interaction.followup.send(f"Sync failed: {exc}")
+            return
+
+        factory = get_session_factory()
+        async with factory() as session:
+            row = (
+                await session.execute(
+                    select(Character).where(Character.id == character_row.id)
+                )
+            ).scalar_one()
+            row.structured_data = structured_data
+            new_name = structured_data.get("name")
+            if new_name:
+                row.name = new_name
+            await session.commit()
+
+        char_name = structured_data.get("name") or character_row.name
+        await interaction.followup.send(
+            f"⚔️ **{char_name}** synced from Pathbuilder! Data is fresh. 🔄"
+        )
 
 
 # ------------------------------------------------------------------

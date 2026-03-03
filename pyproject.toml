@@ -1,10 +1,6 @@
-[build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "grug-bot"
-version = "0.1.0"
+version = "0.2.0"
 description = "Discord bot launcher for Grug"
 requires-python = ">=3.12"
 dependencies = [
@@ -13,6 +9,10 @@ dependencies = [
     "grug",
     "python-dateutil>=2.9.0.post0",
 ]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.uv.sources]
 grug = { workspace = true }

@@ -72,6 +72,22 @@ All Grug settings are read from environment variables at startup. The recommende
 
 ---
 
+## Web dashboard
+
+These variables affect the API and the React web UI.
+
+| Variable | Default | Description |
+|---|---|---|
+| `DISCORD_CLIENT_ID` | — | Discord OAuth2 application client ID. Required for web login. |
+| `DISCORD_CLIENT_SECRET` | — | Discord OAuth2 client secret. |
+| `DISCORD_REDIRECT_URI` | `http://localhost:8000/auth/discord/callback` | OAuth2 redirect URI — must match what is set in the Discord Developer Portal. |
+| `WEB_SECRET_KEY` | — | Secret key used to sign session cookies. **Use a long random string in production.** |
+| `WEB_CORS_ORIGINS` | `http://localhost:3000` | Comma-separated list of allowed CORS origins for the API. |
+| `FRONTEND_URL` | `http://localhost:3000` | URL the API redirects to after OAuth login. |
+| `VITE_API_URL` | `http://localhost:8000` | URL the **browser** uses to reach the API. Injected at container start — never baked into the JS bundle — so you can change it without rebuilding the image. Set this to your public API URL when hosting on a VPS or behind a domain (e.g. `https://api.yourdomain.com`). |
+
+---
+
 ## Example `.env` file
 
 ```dotenv title=".env"

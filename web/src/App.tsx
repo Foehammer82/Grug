@@ -13,6 +13,8 @@ import NotFoundPage from './pages/NotFoundPage';
 import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
+import CharactersPage from './pages/CharactersPage';
+import CharacterSheetPage from './pages/CharacterSheetPage';
 import TasksPage from './pages/TasksPage';
 
 
@@ -35,6 +37,8 @@ function App() {
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="glossary" element={<GlossaryPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
+          <Route path="characters" element={<CharactersPage />} />
+          <Route path="characters/:characterId" element={<CharacterSheetPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

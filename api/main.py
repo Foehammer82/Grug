@@ -16,6 +16,7 @@ from api.routes import (
     admin,
     auth,
     campaigns,
+    characters,
     documents,
     events,
     glossary,
@@ -71,5 +72,6 @@ app.include_router(personal.router, dependencies=_auth_required)
 app.include_router(documents.router, dependencies=_auth_required)
 app.include_router(glossary.router, dependencies=_auth_required)
 app.include_router(campaigns.router, dependencies=_auth_required)
+app.include_router(characters.router, dependencies=_auth_required)
 app.include_router(admin.router, dependencies=_auth_required)
 app.include_router(rule_sources.router, dependencies=_auth_required)

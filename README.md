@@ -83,7 +83,9 @@ All configuration is driven by environment variables (or a `.env` file). Key opt
 | `FLUSH_CHAT_HISTORY` | No | `false` | Archive all conversation history on startup |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 
-OAuth / Web dashboard variables (`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`, `WEB_SECRET_KEY`, `WEB_CORS_ORIGINS`, `FRONTEND_URL`) are documented in `.env.example`.
+OAuth / Web dashboard variables (`DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI`, `WEB_SECRET_KEY`, `WEB_CORS_ORIGINS`, `FRONTEND_URL`, `VITE_API_URL`) are documented in `.env.example`.
+
+> **Deploying on a VPS or behind a domain?** Set `VITE_API_URL` to your public API URL (e.g. `https://api.yourdomain.com`). Unlike other env vars, this one is injected at container start rather than baked into the JS bundle — so you never need to rebuild the web image to change it.
 
 ---
 

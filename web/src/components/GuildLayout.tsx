@@ -11,6 +11,7 @@ const TABS = [
   { label: 'Documents',    path: 'documents',    adminOnly: false },
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
   { label: 'Campaigns',    path: 'campaigns',    adminOnly: true },
+  { label: 'Characters',   path: 'characters',   adminOnly: false },
 ];
 
 export default function GuildLayout() {
