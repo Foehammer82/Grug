@@ -158,7 +158,20 @@ export interface Document {
   filename: string;
   description: string | null;
   chunk_count: number;
+  content_hash: string | null;
   created_at: string;
+}
+
+export interface DocumentChunk {
+  text: string;
+  filename: string;
+  chunk_index: number;
+  distance: number;
+}
+
+export interface DocumentSearchResult {
+  chunks: DocumentChunk[];
+  error: boolean;
 }
 
 /* ── Campaigns ───────────────────────────────────────────────────── */
@@ -178,7 +191,7 @@ export interface Campaign {
 
 export interface Character {
   id: number;
-  owner_discord_user_id: number;
+  owner_discord_user_id: string;
   campaign_id: number | null;
   name: string;
   system: string;

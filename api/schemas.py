@@ -213,6 +213,7 @@ class DocumentOut(BaseModel):
     chunk_count: int
     uploaded_by: int
     campaign_id: int | None
+    content_hash: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -220,6 +221,24 @@ class DocumentOut(BaseModel):
 
 class DocumentUpdate(BaseModel):
     description: str | None = None
+
+
+class DocumentSearchRequest(BaseModel):
+    query: str
+    k: int = 5
+    document_id: int | None = None
+
+
+class DocumentChunk(BaseModel):
+    text: str
+    filename: str
+    chunk_index: int
+    distance: float
+
+
+class DocumentSearchResult(BaseModel):
+    chunks: list[DocumentChunk]
+    error: bool = False
 
 
 class GlossaryTermOut(BaseModel):
@@ -311,6 +330,16 @@ class CampaignUpdate(BaseModel):
     channel_id: str | int | None = None
 
 
+class CharacterCreate(BaseModel):
+    name: str
+    system: str = "unknown"
+
+
+class CharacterUpdate(BaseModel):
+    name: str | None = None
+    system: str | None = None
+
+
 class CharacterOut(BaseModel):
     id: int
     owner_discord_user_id: int
@@ -323,6 +352,11 @@ class CharacterOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @field_serializer("owner_discord_user_id")
+    def serialize_owner_id(self, v: int) -> str:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v)
 
 
 class UserProfileOut(BaseModel):

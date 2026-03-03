@@ -2,14 +2,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
   Button,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
+  FormControl,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Stack,
   Table,
   TableBody,
@@ -20,11 +29,12 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import { TABLE_HEADER_SX } from '../types';
-import type { Document } from '../types';
+import type { Document, DocumentSearchResult } from '../types';
 
 const ALLOWED_EXT = ['.txt', '.md', '.rst', '.pdf'];
 
@@ -44,6 +54,11 @@ export default function DocumentsPage() {
   // Edit dialog state
   const [editDoc, setEditDoc] = useState<Document | null>(null);
   const [editDesc, setEditDesc] = useState('');
+
+  // RAG test panel state
+  const [testQuery, setTestQuery] = useState('');
+  const [testDocId, setTestDocId] = useState<number | ''>('');
+  const [testResult, setTestResult] = useState<DocumentSearchResult | null>(null);
 
   const { data: docs, isLoading } = useQuery<Document[]>({
     queryKey: ['documents', guildId],
@@ -67,6 +82,10 @@ export default function DocumentsPage() {
       qc.invalidateQueries({ queryKey: ['documents', guildId] });
       handleUploadClose();
     },
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setUploadError(detail ?? 'Upload failed. Please try again.');
+    },
   });
 
   const editMutation = useMutation({
@@ -84,6 +103,17 @@ export default function DocumentsPage() {
       await client.delete(`/api/guilds/${guildId}/documents/${id}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['documents', guildId] }),
+  });
+
+  const searchMutation = useMutation({
+    mutationFn: async ({ query, docId }: { query: string; docId: number | '' }) => {
+      const res = await client.post<DocumentSearchResult>(
+        `/api/guilds/${guildId}/documents/search`,
+        { query, k: 5, document_id: docId || null },
+      );
+      return res.data;
+    },
+    onSuccess: (data) => setTestResult(data),
   });
 
   function handleUploadClose() {
@@ -181,6 +211,109 @@ export default function DocumentsPage() {
             </TableBody>
           </Table>
         </TableContainer>
+      )}
+
+      {/* ── RAG Search Test (admin only) ── */}
+      {isAdmin && (
+        <Accordion variant="outlined" disableGutters>
+          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+            <Typography variant="subtitle2">Test RAG Search</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <Stack spacing={2}>
+              <Typography variant="body2" color="text.secondary">
+                Run a live semantic search against indexed documents to verify retrieval quality.
+                Lower distance scores mean a closer match.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="flex-start">
+                <TextField
+                  label="Search query"
+                  value={testQuery}
+                  onChange={(e) => { setTestQuery(e.target.value); setTestResult(null); }}
+                  size="small"
+                  fullWidth
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && testQuery.trim()) {
+                      searchMutation.mutate({ query: testQuery.trim(), docId: testDocId });
+                    }
+                  }}
+                />
+                <FormControl size="small" sx={{ minWidth: 200 }}>
+                  <InputLabel shrink>Filter by document</InputLabel>
+                  <Select
+                    value={testDocId}
+                    onChange={(e) => setTestDocId(e.target.value as number | '')}
+                    label="Filter by document"
+                    displayEmpty
+                    notched
+                  >
+                    <MenuItem value=""><em>All documents</em></MenuItem>
+                    {(docs ?? []).map((d) => (
+                      <MenuItem key={d.id} value={d.id}>{d.filename}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={!testQuery.trim() || searchMutation.isPending}
+                  onClick={() => searchMutation.mutate({ query: testQuery.trim(), docId: testDocId })}
+                  sx={{ whiteSpace: 'nowrap', mt: { xs: 0, sm: '4px' } }}
+                >
+                  {searchMutation.isPending
+                    ? <CircularProgress size={16} color="inherit" />
+                    : 'Search'}
+                </Button>
+              </Stack>
+
+              {testResult && (
+                <>
+                  <Divider />
+                  {testResult.error ? (
+                    <Typography color="error" variant="body2">
+                      Search failed — check server logs.
+                    </Typography>
+                  ) : testResult.chunks.length === 0 ? (
+                    <Typography color="text.secondary" variant="body2">
+                      No matching chunks found.
+                    </Typography>
+                  ) : (
+                    <Stack spacing={1.5}>
+                      {testResult.chunks.map((chunk, i) => (
+                        <Paper key={i} variant="outlined" sx={{ p: 1.5 }}>
+                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" sx={{ mb: 1 }}>
+                            <Typography variant="caption" fontWeight="bold">{chunk.filename}</Typography>
+                            <Chip label={`chunk ${chunk.chunk_index}`} size="small" variant="outlined" />
+                            <Chip
+                              label={`score ${chunk.distance}`}
+                              size="small"
+                              color={chunk.distance < 0.3 ? 'success' : chunk.distance < 0.6 ? 'warning' : 'default'}
+                            />
+                          </Stack>
+                          <Typography
+                            variant="body2"
+                            sx={{
+                              whiteSpace: 'pre-wrap',
+                              fontFamily: 'monospace',
+                              fontSize: '0.75rem',
+                              maxHeight: 200,
+                              overflow: 'auto',
+                              bgcolor: 'action.hover',
+                              borderRadius: 1,
+                              p: 1,
+                            }}
+                          >
+                            {chunk.text}
+                          </Typography>
+                        </Paper>
+                      ))}
+                    </Stack>
+                  )}
+                </>
+              )}
+            </Stack>
+          </AccordionDetails>
+        </Accordion>
       )}
 
       {/* ── Upload dialog ── */}

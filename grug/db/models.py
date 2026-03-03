@@ -216,6 +216,10 @@ class Document(Base):
     uploaded_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     # Optional campaign association; NULL means document is guild-wide.
     campaign_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    # SHA-256 hex digest of the raw file bytes; used to reject duplicate uploads.
+    content_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

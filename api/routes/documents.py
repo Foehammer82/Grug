@@ -1,5 +1,7 @@
 """Document routes — list, upload, edit, and delete indexed documents."""
 
+import hashlib
+import logging
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -15,7 +17,12 @@ from api.deps import (
     get_db,
     get_or_404,
 )
-from api.schemas import DocumentOut, DocumentUpdate
+from api.schemas import (
+    DocumentOut,
+    DocumentSearchRequest,
+    DocumentSearchResult,
+    DocumentUpdate,
+)
 from grug.db.models import Document
 from grug.rag.indexer import DocumentIndexer
 
@@ -24,6 +31,7 @@ router = APIRouter(tags=["documents"])
 _ALLOWED_EXTENSIONS = {".txt", ".md", ".rst", ".pdf"}
 _MAX_SIZE_MB = 10
 _indexer = DocumentIndexer()
+logger = logging.getLogger(__name__)
 
 
 @router.get("/api/guilds/{guild_id}/documents", response_model=list[DocumentOut])
@@ -71,6 +79,21 @@ async def upload_document(
             detail=f"File exceeds {_MAX_SIZE_MB} MB limit.",
         )
 
+    content_hash = hashlib.sha256(contents).hexdigest()
+
+    # Reject if this guild already has a document with identical content.
+    existing = await db.execute(
+        select(Document).where(
+            Document.guild_id == guild_id,
+            Document.content_hash == content_hash,
+        )
+    )
+    if existing.scalars().first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A document with identical content has already been uploaded to this server.",
+        )
+
     # Strip any directory components from the filename to prevent path traversal.
     safe_filename = Path(file.filename or "upload").name or "upload"
 
@@ -84,6 +107,7 @@ async def upload_document(
         chunk_count=0,
         uploaded_by=uploader_id,
         campaign_id=None,
+        content_hash=content_hash,
     )
     db.add(doc)
     await db.commit()
@@ -150,3 +174,46 @@ async def delete_document(
     await _indexer.delete_document(guild_id, doc_id)
     await db.delete(doc)
     await db.commit()
+
+
+@router.post(
+    "/api/guilds/{guild_id}/documents/search",
+    response_model=DocumentSearchResult,
+)
+async def search_documents(
+    guild_id: int,
+    body: DocumentSearchRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> DocumentSearchResult:
+    """Run a live RAG search against the guild's indexed documents.
+
+    Returns the top-k matching chunks with similarity scores so admins can
+    verify that a document has been indexed correctly and is retrievable.
+    """
+    assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+
+    from api.schemas import DocumentChunk
+    from grug.rag.retriever import DocumentRetriever
+
+    try:
+        retriever = DocumentRetriever()
+        raw = await retriever.search(
+            guild_id,
+            body.query,
+            k=body.k,
+            document_id=body.document_id,
+        )
+        chunks = [
+            DocumentChunk(
+                text=c["text"],
+                filename=c["filename"],
+                chunk_index=c["chunk_index"],
+                distance=round(float(c.get("distance", 0.0)), 4),
+            )
+            for c in raw
+        ]
+        return DocumentSearchResult(chunks=chunks)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Document search failed: %s", exc)
+        return DocumentSearchResult(chunks=[], error=True)

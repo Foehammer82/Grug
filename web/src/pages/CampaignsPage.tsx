@@ -8,10 +8,7 @@ import {
   Chip,
   CircularProgress,
   Collapse,
-  IconButton,
-  List,
-  ListItem,
-  ListItemText,
+  Divider,
   Paper,
   Stack,
   Table,
@@ -21,11 +18,11 @@ import {
   TableHead,
   TableRow,
   TextField,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import PersonIcon from '@mui/icons-material/Person';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
@@ -44,15 +41,32 @@ const SYSTEM_OPTIONS = [
   'unknown',
 ];
 
-// ── Characters sub-row ────────────────────────────────────────────────────
+// ── Characters panel ──────────────────────────────────────────────────────
 
-interface CharactersRowProps {
+interface CharactersPanelProps {
   guildId: string;
   campaignId: number;
   open: boolean;
+  isAdmin: boolean;
+  colSpan: number;
 }
 
-function CharactersRow({ guildId, campaignId, open }: CharactersRowProps) {
+function CharactersPanel({ guildId, campaignId, open, isAdmin, colSpan }: CharactersPanelProps) {
+  const qc = useQueryClient();
+
+  // Add form
+  const [showAdd, setShowAdd] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addSystem, setAddSystem] = useState('');
+
+  // Inline edit
+  const [editCharId, setEditCharId] = useState<number | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSystem, setEditSystem] = useState('');
+
+  // Delete confirm
+  const [deleteCharId, setDeleteCharId] = useState<number | null>(null);
+
   const { data: characters = [], isLoading } = useQuery<Character[]>({
     queryKey: ['campaign-characters', guildId, campaignId],
     queryFn: async () => {
@@ -64,13 +78,118 @@ function CharactersRow({ guildId, campaignId, open }: CharactersRowProps) {
     enabled: open && !!guildId,
   });
 
+  const invalidate = () =>
+    qc.invalidateQueries({ queryKey: ['campaign-characters', guildId, campaignId] });
+
+  const createMutation = useMutation({
+    mutationFn: () =>
+      client.post(`/api/guilds/${guildId}/campaigns/${campaignId}/characters`, {
+        name: addName,
+        system: addSystem || 'unknown',
+      }),
+    onSuccess: () => {
+      invalidate();
+      setAddName('');
+      setAddSystem('');
+      setShowAdd(false);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      client.patch(
+        `/api/guilds/${guildId}/campaigns/${campaignId}/characters/${editCharId}`,
+        { name: editName, system: editSystem }
+      ),
+    onSuccess: () => {
+      invalidate();
+      setEditCharId(null);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) =>
+      client.delete(`/api/guilds/${guildId}/campaigns/${campaignId}/characters/${id}`),
+    onSuccess: () => {
+      invalidate();
+      setDeleteCharId(null);
+    },
+  });
+
+  function startEdit(ch: Character) {
+    setEditCharId(ch.id);
+    setEditName(ch.name);
+    setEditSystem(ch.system);
+    setDeleteCharId(null);
+  }
+
   if (!open) return null;
 
   return (
     <TableRow>
-      <TableCell colSpan={6} sx={{ py: 0, bgcolor: 'action.hover' }}>
+      <TableCell colSpan={colSpan} sx={{ py: 0, bgcolor: 'action.hover', borderBottom: 0 }}>
         <Collapse in={open} unmountOnExit>
           <Box sx={{ py: 2, px: 3 }}>
+            {/* Header row */}
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5}>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <PersonIcon fontSize="small" color="action" />
+                <Typography variant="subtitle2" fontWeight={600}>
+                  Characters
+                </Typography>
+              </Stack>
+              {isAdmin && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => { setShowAdd((v) => !v); setEditCharId(null); }}
+                >
+                  {showAdd ? 'Cancel' : '+ Add Character'}
+                </Button>
+              )}
+            </Stack>
+
+            {/* Add form */}
+            <Collapse in={showAdd} unmountOnExit>
+              <Paper
+                variant="outlined"
+                component="form"
+                sx={{ p: 2, mb: 2 }}
+                onSubmit={(e: React.FormEvent) => { e.preventDefault(); createMutation.mutate(); }}
+              >
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                  <TextField
+                    label="Name"
+                    size="small"
+                    required
+                    value={addName}
+                    onChange={(e) => setAddName(e.target.value)}
+                    sx={{ minWidth: 180 }}
+                  />
+                  <Autocomplete
+                    size="small"
+                    freeSolo
+                    options={SYSTEM_OPTIONS}
+                    value={addSystem}
+                    onInputChange={(_, v) => setAddSystem(v)}
+                    sx={{ minWidth: 160 }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="System" placeholder="e.g. pf2e" />
+                    )}
+                  />
+                  <Button
+                    type="submit"
+                    variant="contained"
+                    size="small"
+                    disabled={createMutation.isPending}
+                  >
+                    Add
+                  </Button>
+                </Stack>
+              </Paper>
+            </Collapse>
+
+            {/* Character list */}
             {isLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
                 <CircularProgress size={20} />
@@ -78,20 +197,98 @@ function CharactersRow({ guildId, campaignId, open }: CharactersRowProps) {
             ) : characters.length === 0 ? (
               <Typography variant="body2" color="text.secondary">
                 No characters linked to this campaign yet.
+                {isAdmin && ' Use "+ Add Character" to create one.'}
               </Typography>
             ) : (
-              <List dense disablePadding>
+              <Stack divider={<Divider />} spacing={0}>
                 {characters.map((ch) => (
-                  <ListItem key={ch.id} disablePadding sx={{ py: 0.25 }}>
-                    <ListItemText
-                      primary={ch.name}
-                      secondary={ch.system !== 'unknown' ? ch.system : undefined}
-                      primaryTypographyProps={{ variant: 'body2' }}
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                    />
-                  </ListItem>
+                  <Box
+                    key={ch.id}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      py: 0.75,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    {editCharId === ch.id ? (
+                      <>
+                        <TextField
+                          size="small"
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          sx={{ minWidth: 160 }}
+                        />
+                        <Autocomplete
+                          size="small"
+                          freeSolo
+                          options={SYSTEM_OPTIONS}
+                          value={editSystem}
+                          onInputChange={(_, v) => setEditSystem(v)}
+                          sx={{ minWidth: 140 }}
+                          renderInput={(params) => <TextField {...params} label="System" />}
+                        />
+                        <Button
+                          size="small"
+                          variant="contained"
+                          disabled={updateMutation.isPending}
+                          onClick={() => updateMutation.mutate()}
+                        >
+                          Save
+                        </Button>
+                        <Button size="small" onClick={() => setEditCharId(null)}>
+                          Cancel
+                        </Button>
+                      </>
+                    ) : deleteCharId === ch.id ? (
+                      <>
+                        <Typography variant="body2" sx={{ flex: 1 }}>
+                          <strong>{ch.name}</strong>
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          Delete?
+                        </Typography>
+                        <Button
+                          size="small"
+                          color="error"
+                          variant="contained"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => deleteMutation.mutate(ch.id)}
+                        >
+                          Yes
+                        </Button>
+                        <Button size="small" onClick={() => setDeleteCharId(null)}>
+                          No
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
+                          {ch.name}
+                        </Typography>
+                        {ch.system && ch.system !== 'unknown' && (
+                          <Chip label={ch.system} size="small" variant="outlined" />
+                        )}
+                        {isAdmin && (
+                          <Stack direction="row" spacing={0.5}>
+                            <Button size="small" onClick={() => startEdit(ch)}>
+                              Edit
+                            </Button>
+                            <Button
+                              size="small"
+                              color="error"
+                              onClick={() => { setDeleteCharId(ch.id); setEditCharId(null); }}
+                            >
+                              Delete
+                            </Button>
+                          </Stack>
+                        )}
+                      </>
+                    )}
+                  </Box>
                 ))}
-              </List>
+              </Stack>
             )}
           </Box>
         </Collapse>
@@ -324,210 +521,218 @@ export default function CampaignsPage() {
       {campaigns.length === 0 ? (
         <Typography color="text.secondary">No campaigns yet.</Typography>
       ) : (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ width: 40 }} />
-                <TableCell sx={TABLE_HEADER_SX}>Name</TableCell>
-                <TableCell sx={TABLE_HEADER_SX}>System</TableCell>
-                <TableCell sx={TABLE_HEADER_SX}>Channel</TableCell>
-                <TableCell sx={TABLE_HEADER_SX}>Status</TableCell>
-                {isAdmin && <TableCell sx={TABLE_HEADER_SX} align="right">Actions</TableCell>}
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {campaigns.map((c) => (
-                <>
-                  {/* Main data row */}
-                  <TableRow
-                    key={`row-${c.id}`}
-                    sx={{ '& > td': { verticalAlign: 'middle' } }}
-                  >
-                    {/* Expand characters toggle */}
-                    <TableCell sx={{ py: 0 }}>
-                      <Tooltip
-                        title={expandedId === c.id ? 'Hide characters' : 'Show characters'}
-                        placement="right"
-                      >
-                        <IconButton
-                          size="small"
-                          onClick={() => setExpandedId((v) => (v === c.id ? null : c.id))}
-                        >
-                          {expandedId === c.id ? (
-                            <ExpandLessIcon fontSize="small" />
-                          ) : (
-                            <ExpandMoreIcon fontSize="small" />
-                          )}
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-
-                    {/* Name cell — inline edit */}
-                    <TableCell>
-                      {editId === c.id ? (
-                        <TextField
-                          size="small"
-                          value={editName}
-                          onChange={(e) => setEditName(e.target.value)}
-                          sx={{ minWidth: 150 }}
-                        />
-                      ) : (
-                        <Typography variant="body2" fontWeight={600}>
-                          {c.name}
-                        </Typography>
-                      )}
-                    </TableCell>
-
-                    {/* System cell — inline edit */}
-                    <TableCell>
-                      {editId === c.id ? (
-                        <Autocomplete
-                          size="small"
-                          freeSolo
-                          options={SYSTEM_OPTIONS}
-                          value={editSystem}
-                          onInputChange={(_, v) => setEditSystem(v)}
-                          sx={{ minWidth: 150 }}
-                          renderInput={(params) => (
-                            <TextField {...params} label="System" />
-                          )}
-                        />
-                      ) : (
-                        <Typography variant="body2">{c.system}</Typography>
-                      )}
-                    </TableCell>
-
-                    {/* Channel cell — inline edit */}
-                    <TableCell>
-                      {editId === c.id ? (
-                        <Autocomplete
-                          size="small"
-                          options={channels}
-                          loading={channelsLoading}
-                          value={editChannel}
-                          onChange={(_, ch) => setEditChannel(ch)}
-                          getOptionLabel={(ch) => `#${ch.name}`}
-                          isOptionEqualToValue={(a, b) => a.id === b.id}
-                          filterOptions={(opts, { inputValue }) => {
-                            const q = inputValue.toLowerCase();
-                            return opts.filter(
-                              (ch) =>
-                                ch.name.toLowerCase().includes(q) || ch.id.includes(q)
-                            );
-                          }}
-                          renderOption={(props, ch) => (
-                            <Box component="li" {...props} key={ch.id}>
-                              <span>#{ch.name}</span>
-                              <Typography
-                                component="span"
-                                variant="caption"
-                                color="text.disabled"
-                                sx={{ ml: 1 }}
-                              >
-                                {ch.id}
-                              </Typography>
-                            </Box>
-                          )}
-                          sx={{ minWidth: 180 }}
-                          renderInput={(params) => (
-                            <TextField {...params} label="Channel" />
-                          )}
-                        />
-                      ) : (
-                        <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
-                          {channelName(c.channel_id)}
-                        </Typography>
-                      )}
-                    </TableCell>
-
-                    {/* Status cell — active toggle when editing */}
-                    <TableCell>
-                      {editId === c.id ? (
-                        <Chip
-                          label={editActive ? 'Active' : 'Inactive'}
-                          size="small"
-                          color={editActive ? 'success' : 'default'}
-                          onClick={() => setEditActive((v) => !v)}
-                          sx={{ cursor: 'pointer' }}
-                        />
-                      ) : (
-                        <Chip
-                          label={c.is_active ? 'Active' : 'Inactive'}
-                          size="small"
-                          color={c.is_active ? 'success' : 'default'}
-                        />
-                      )}
-                    </TableCell>
-
-                    {/* Actions */}
-                    {isAdmin && (
-                      <TableCell align="right" sx={{ whiteSpace: 'nowrap', py: 0.5 }}>
+        <>
+          <Typography variant="caption" color="text.secondary">
+            Click a row to view and manage its characters.
+          </Typography>
+          <TableContainer component={Paper} variant="outlined">
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell sx={TABLE_HEADER_SX}>Name</TableCell>
+                  <TableCell sx={TABLE_HEADER_SX}>System</TableCell>
+                  <TableCell sx={TABLE_HEADER_SX}>Channel</TableCell>
+                  <TableCell sx={TABLE_HEADER_SX}>Status</TableCell>
+                  {isAdmin && <TableCell sx={TABLE_HEADER_SX} align="right">Actions</TableCell>}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {campaigns.map((c) => (
+                  <>
+                    {/* Main data row — clicking it toggles the characters panel */}
+                    <TableRow
+                      key={`row-${c.id}`}
+                      hover={editId !== c.id}
+                      onClick={() => {
+                        if (editId !== c.id && deleteId !== c.id) {
+                          setExpandedId((v) => (v === c.id ? null : c.id));
+                        }
+                      }}
+                      sx={{
+                        cursor: editId === c.id || deleteId === c.id ? 'default' : 'pointer',
+                        '& > td': { verticalAlign: 'middle' },
+                        ...(expandedId === c.id && {
+                          bgcolor: 'action.selected',
+                        }),
+                      }}
+                    >
+                      {/* Name cell — shows expand chevron inline */}
+                      <TableCell>
                         {editId === c.id ? (
-                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                            <Button
-                              size="small"
-                              variant="contained"
-                              disabled={updateMutation.isPending}
-                              onClick={() => updateMutation.mutate()}
-                            >
-                              Save
-                            </Button>
-                            <Button size="small" onClick={cancelEdit}>
-                              Cancel
-                            </Button>
-                          </Stack>
-                        ) : deleteId === c.id ? (
-                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                            <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-                              Delete?
-                            </Typography>
-                            <Button
-                              size="small"
-                              color="error"
-                              variant="contained"
-                              disabled={deleteMutation.isPending}
-                              onClick={() => deleteMutation.mutate(c.id)}
-                            >
-                              Yes
-                            </Button>
-                            <Button size="small" onClick={() => setDeleteId(null)}>
-                              No
-                            </Button>
-                          </Stack>
+                          <TextField
+                            size="small"
+                            value={editName}
+                            onChange={(e) => setEditName(e.target.value)}
+                            sx={{ minWidth: 150 }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
                         ) : (
-                          <Stack direction="row" spacing={1} justifyContent="flex-end">
-                            <Button
-                              size="small"
-                              onClick={() => startEdit(c)}
-                            >
-                              Edit
-                            </Button>
-                            <Button
-                              size="small"
-                              color="error"
-                              onClick={() => setDeleteId(c.id)}
-                            >
-                              Delete
-                            </Button>
+                          <Stack direction="row" alignItems="center" spacing={0.5}>
+                            {expandedId === c.id ? (
+                              <ExpandLessIcon fontSize="small" sx={{ color: 'text.secondary', flexShrink: 0 }} />
+                            ) : (
+                              <ExpandMoreIcon fontSize="small" sx={{ color: 'text.disabled', flexShrink: 0 }} />
+                            )}
+                            <Typography variant="body2" fontWeight={600}>
+                              {c.name}
+                            </Typography>
                           </Stack>
                         )}
                       </TableCell>
-                    )}
-                  </TableRow>
 
-                  {/* Characters sub-row */}
-                  <CharactersRow
-                    key={`chars-${c.id}`}
-                    guildId={guildId!}
-                    campaignId={c.id}
-                    open={expandedId === c.id}
-                  />
-                </>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                      {/* System cell — inline edit */}
+                      <TableCell>
+                        {editId === c.id ? (
+                          <Autocomplete
+                            size="small"
+                            freeSolo
+                            options={SYSTEM_OPTIONS}
+                            value={editSystem}
+                            onInputChange={(_, v) => setEditSystem(v)}
+                            sx={{ minWidth: 150 }}
+                            renderInput={(params) => (
+                              <TextField {...params} label="System" onClick={(e) => e.stopPropagation()} />
+                            )}
+                          />
+                        ) : (
+                          <Typography variant="body2">{c.system}</Typography>
+                        )}
+                      </TableCell>
+
+                      {/* Channel cell — inline edit */}
+                      <TableCell>
+                        {editId === c.id ? (
+                          <Autocomplete
+                            size="small"
+                            options={channels}
+                            loading={channelsLoading}
+                            value={editChannel}
+                            onChange={(_, ch) => setEditChannel(ch)}
+                            getOptionLabel={(ch) => `#${ch.name}`}
+                            isOptionEqualToValue={(a, b) => a.id === b.id}
+                            filterOptions={(opts, { inputValue }) => {
+                              const q = inputValue.toLowerCase();
+                              return opts.filter(
+                                (ch) =>
+                                  ch.name.toLowerCase().includes(q) || ch.id.includes(q)
+                              );
+                            }}
+                            renderOption={(props, ch) => (
+                              <Box component="li" {...props} key={ch.id}>
+                                <span>#{ch.name}</span>
+                                <Typography
+                                  component="span"
+                                  variant="caption"
+                                  color="text.disabled"
+                                  sx={{ ml: 1 }}
+                                >
+                                  {ch.id}
+                                </Typography>
+                              </Box>
+                            )}
+                            sx={{ minWidth: 180 }}
+                            renderInput={(params) => (
+                              <TextField {...params} label="Channel" onClick={(e) => e.stopPropagation()} />
+                            )}
+                          />
+                        ) : (
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                            {channelName(c.channel_id)}
+                          </Typography>
+                        )}
+                      </TableCell>
+
+                      {/* Status cell — active toggle when editing */}
+                      <TableCell>
+                        {editId === c.id ? (
+                          <Chip
+                            label={editActive ? 'Active' : 'Inactive'}
+                            size="small"
+                            color={editActive ? 'success' : 'default'}
+                            onClick={(e) => { e.stopPropagation(); setEditActive((v) => !v); }}
+                            sx={{ cursor: 'pointer' }}
+                          />
+                        ) : (
+                          <Chip
+                            label={c.is_active ? 'Active' : 'Inactive'}
+                            size="small"
+                            color={c.is_active ? 'success' : 'default'}
+                          />
+                        )}
+                      </TableCell>
+
+                      {/* Actions */}
+                      {isAdmin && (
+                        <TableCell
+                          align="right"
+                          sx={{ whiteSpace: 'nowrap', py: 0.5 }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {editId === c.id ? (
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Button
+                                size="small"
+                                variant="contained"
+                                disabled={updateMutation.isPending}
+                                onClick={() => updateMutation.mutate()}
+                              >
+                                Save
+                              </Button>
+                              <Button size="small" onClick={cancelEdit}>
+                                Cancel
+                              </Button>
+                            </Stack>
+                          ) : deleteId === c.id ? (
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
+                                Delete?
+                              </Typography>
+                              <Button
+                                size="small"
+                                color="error"
+                                variant="contained"
+                                disabled={deleteMutation.isPending}
+                                onClick={() => deleteMutation.mutate(c.id)}
+                              >
+                                Yes
+                              </Button>
+                              <Button size="small" onClick={() => setDeleteId(null)}>
+                                No
+                              </Button>
+                            </Stack>
+                          ) : (
+                            <Stack direction="row" spacing={1} justifyContent="flex-end">
+                              <Button size="small" onClick={() => startEdit(c)}>
+                                Edit
+                              </Button>
+                              <Button
+                                size="small"
+                                color="error"
+                                onClick={() => setDeleteId(c.id)}
+                              >
+                                Delete
+                              </Button>
+                            </Stack>
+                          )}
+                        </TableCell>
+                      )}
+                    </TableRow>
+
+                    {/* Characters panel */}
+                    <CharactersPanel
+                      key={`chars-${c.id}`}
+                      guildId={guildId!}
+                      campaignId={c.id}
+                      open={expandedId === c.id}
+                      isAdmin={isAdmin}
+                      colSpan={isAdmin ? 5 : 4}
+                    />
+                  </>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </>
       )}
     </Stack>
   );
