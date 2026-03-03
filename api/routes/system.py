@@ -4,6 +4,7 @@ import logging
 
 import httpx
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from api.schemas import BotInfoOut, DefaultsOut
 from grug.config.settings import get_settings
@@ -11,6 +12,12 @@ from grug.config.settings import get_settings
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["system"])
+
+
+@router.get("/health", include_in_schema=False)
+async def health() -> JSONResponse:
+    """Liveness probe — returns 200 OK when the API process is up."""
+    return JSONResponse({"status": "ok"})
 
 
 @router.get("/api/defaults", response_model=DefaultsOut)
