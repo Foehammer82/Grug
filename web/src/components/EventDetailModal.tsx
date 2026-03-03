@@ -379,7 +379,7 @@ export default function EventDetailModal({ event, open, onClose }: Props) {
               value={rsvpNote}
               onChange={(e) => setRsvpNote(e.target.value)}
               fullWidth
-              helperText={myRsvp ? `Your current RSVP: ${RSVP_LABELS[myRsvp.status]}${myRsvp.note ? ` — "${myRsvp.note}"` : ''}` : 'No RSVP yet'}
+              helperText={myRsvpHelperText(myRsvp)}
             />
 
             {myRsvp && (
@@ -534,4 +534,11 @@ function toLocalInput(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Produce the helper text for the RSVP note field based on the current RSVP. */
+function myRsvpHelperText(rsvp: EventRSVP | null): string {
+  if (!rsvp) return 'No RSVP yet';
+  const label = RSVP_LABELS[rsvp.status as RSVPStatus];
+  return rsvp.note ? `Your current RSVP: ${label} — "${rsvp.note}"` : `Your current RSVP: ${label}`;
 }
