@@ -74,6 +74,13 @@ def _ability_mod(score: int) -> int:
     return (score - 10) // 2
 
 
+def _first_str(val: Any) -> str | None:
+    """Return the first element if val is a list, or val itself if a string."""
+    if isinstance(val, list):
+        return val[0] if val else None
+    return val if isinstance(val, str) else None
+
+
 async def search_monsters_5e(query: str, limit: int = 10) -> list[MonsterResult]:
     """Search D&D 5e SRD monsters by name substring."""
 
@@ -234,6 +241,7 @@ async def search_monsters_pf2e(query: str, limit: int = 10) -> list[MonsterResul
             level = src.get("level")
             cr_str = f"Level {level}" if level is not None else None
 
+            # AON may return size/creature_type as a list; normalise to a plain string
             results.append(
                 MonsterResult(
                     name=name,
@@ -243,8 +251,8 @@ async def search_monsters_pf2e(query: str, limit: int = 10) -> list[MonsterResul
                     ac=ac,
                     initiative_modifier=init_mod,
                     cr=cr_str,
-                    size=src.get("size"),
-                    type=src.get("creature_type"),
+                    size=_first_str(src.get("size")),
+                    type=_first_str(src.get("creature_type")),
                     save_modifiers=saves if saves else None,
                 )
             )
