@@ -171,27 +171,51 @@ export default function EventsPage() {
       });
     }
 
-    // Scheduled tasks (show those with a computable next time)
+    // Scheduled tasks — each enabled task gets one calendar entry per
+    // occurrence within the visible window.  Recurring tasks use the
+    // pre-computed ``upcoming_runs`` list; one-off tasks use ``next_run`` /
+    // ``fire_at``.
     for (const t of tasks ?? []) {
       if (!t.enabled) continue;
-      const when = t.next_run ?? t.fire_at;
-      if (!when) continue;
-      // Only include if within visible range
-      if (range) {
-        const d = new Date(when);
-        if (d < new Date(range.start) || d > new Date(range.end)) continue;
-      }
-      items.push({
-        id: `task-${t.id}`,
-        title: `📋 ${t.name ?? t.prompt.slice(0, 40)}`,
-        start: when,
+
+      const title = `📋 ${t.name ?? t.prompt.slice(0, 40)}`;
+      const sharedProps = {
         allDay: false,
         color: theme.palette.success.main,
         classNames: ['fc-event-task'],
         extendedProps: { type: 'task' as const, data: t },
-        // Tasks are not draggable
         editable: false,
-      });
+      };
+
+      if (t.type === 'recurring' && t.upcoming_runs.length > 0) {
+        // Add one calendar entry per upcoming occurrence within the visible range.
+        for (const isoRun of t.upcoming_runs) {
+          if (range) {
+            const d = new Date(isoRun);
+            if (d < new Date(range.start) || d > new Date(range.end)) continue;
+          }
+          items.push({
+            id: `task-${t.id}-${isoRun}`,
+            title,
+            start: isoRun,
+            ...sharedProps,
+          });
+        }
+      } else {
+        // One-off task (or recurring without pre-computed runs): show the single next time.
+        const when = t.next_run ?? t.fire_at;
+        if (!when) continue;
+        if (range) {
+          const d = new Date(when);
+          if (d < new Date(range.start) || d > new Date(range.end)) continue;
+        }
+        items.push({
+          id: `task-${t.id}`,
+          title,
+          start: when,
+          ...sharedProps,
+        });
+      }
     }
 
     return items;
