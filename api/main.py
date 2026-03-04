@@ -40,9 +40,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Run DB migrations and start the in-process scheduler for personal (DM) task execution."""
     from grug.db.session import init_db
     from grug.scheduler.manager import start_scheduler, stop_scheduler
+    from grug.scheduler.sync import schedule_hourly_llm_usage_rollup
 
     await init_db()
     start_scheduler()
+    schedule_hourly_llm_usage_rollup()
     try:
         yield
     finally:
