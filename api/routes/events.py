@@ -128,6 +128,7 @@ async def list_events(
                 "rrule": e.rrule,
                 "location": e.location,
                 "channel_id": e.channel_id,
+                "campaign_id": e.campaign_id,
                 "created_by": e.created_by,
                 "created_at": e.created_at,
                 "updated_at": e.updated_at,
@@ -161,11 +162,18 @@ async def create_event(
         rrule=body.rrule,
         location=body.location,
         channel_id=channel_id,
+        campaign_id=body.campaign_id,
         created_by=user_id,
     )
     db.add(event)
     await db.commit()
     await db.refresh(event)
+
+    # Auto-create reminders for the new event.
+    from grug.event_reminders import create_event_reminders
+
+    await create_event_reminders(event.id, guild_id, channel_id or 0)
+
     return event
 
 
@@ -199,6 +207,13 @@ async def update_event(
 
     await db.commit()
     await db.refresh(event)
+
+    # Refresh reminders if the start time changed.
+    if "start_time" in body.model_fields_set:
+        from grug.event_reminders import refresh_event_reminders
+
+        await refresh_event_reminders(event.id)
+
     return event
 
 
@@ -219,6 +234,12 @@ async def delete_event(
         CalendarEvent.guild_id == guild_id,
         detail="Event not found",
     )
+
+    # Clean up any linked reminder tasks before deleting the event.
+    from grug.event_reminders import delete_event_reminders
+
+    await delete_event_reminders(event_id)
+
     await db.delete(event)
     await db.commit()
 

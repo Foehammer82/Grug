@@ -104,10 +104,13 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
         """Get information about this channel's campaign.
 
         Returns the campaign name, game system, active status, the Game Master
-        (if assigned), and a roster of characters (name, level, class, ancestry).
+        (if assigned), a roster of characters (name, level, class, ancestry),
+        and the next upcoming session event (if any).
         Use when a player asks about the campaign, the party, the GM, or who is playing.
         """
-        from grug.db.models import Campaign, Character
+        from datetime import datetime, timezone
+
+        from grug.db.models import CalendarEvent, Campaign, Character
         from grug.db.session import get_session_factory
 
         campaign_id = ctx.deps.campaign_id
@@ -137,10 +140,25 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
                 .all()
             )
 
+            # Next upcoming session event for this campaign.
+            now = datetime.now(timezone.utc)
+            next_event = (
+                await session.execute(
+                    select(CalendarEvent)
+                    .where(
+                        CalendarEvent.campaign_id == campaign_id,
+                        CalendarEvent.start_time >= now,
+                    )
+                    .order_by(CalendarEvent.start_time)
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+
         lines = [
             f"Campaign: {campaign.name}",
             f"System: {campaign.system}",
             f"Status: {'active' if campaign.is_active else 'inactive'}",
+            f"Schedule mode: {campaign.schedule_mode}",
         ]
         if campaign.gm_discord_user_id:
             lines.append(f"Game Master: <@{campaign.gm_discord_user_id}>")
@@ -166,6 +184,18 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
             if c.owner_discord_user_id:
                 owner = f" (player <@{c.owner_discord_user_id}>)"
             lines.append(f"  - {c.name}: {detail}{owner}")
+
+        # Append next session info if available.
+        if next_event:
+            lines += [
+                "",
+                f"📅 Next session: **{next_event.title}** — "
+                f"{next_event.start_time.strftime('%A, %B %d at %H:%M UTC')}",
+            ]
+            if next_event.location:
+                lines.append(f"  Location: {next_event.location}")
+        else:
+            lines += ["", "No upcoming session scheduled."]
 
         return "\n".join(lines)
 

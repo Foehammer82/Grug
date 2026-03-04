@@ -89,6 +89,7 @@ class CalendarEventOut(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: int | None
+    campaign_id: int | None = None
     created_by: int
     created_at: datetime
     updated_at: datetime | None = None
@@ -119,6 +120,7 @@ class CalendarEventCreate(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: str | int | None = None
+    campaign_id: int | None = None
 
 
 class CalendarEventUpdate(BaseModel):
@@ -129,6 +131,7 @@ class CalendarEventUpdate(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: str | int | None = None
+    campaign_id: int | None = None
 
 
 class ScheduledTaskOut(BaseModel):
@@ -144,6 +147,7 @@ class ScheduledTaskOut(BaseModel):
     enabled: bool
     last_run: datetime | None
     source: str
+    event_id: int | None = None
     created_by: int
     created_at: datetime
 
@@ -314,6 +318,7 @@ class CampaignOut(BaseModel):
     system: str
     is_active: bool
     gm_discord_user_id: int | None = None
+    schedule_mode: str = "fixed"
     # Banking
     banking_enabled: bool = False
     player_banking_enabled: bool = False
@@ -342,6 +347,7 @@ class CampaignCreate(BaseModel):
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     channel_id: str | int
     gm_discord_user_id: str | int | None = None
+    schedule_mode: str = "fixed"
     banking_enabled: bool = False
     player_banking_enabled: bool = False
 
@@ -352,6 +358,7 @@ class CampaignUpdate(BaseModel):
     is_active: bool | None = None
     channel_id: str | int | None = None
     gm_discord_user_id: str | int | None = None
+    schedule_mode: str | None = None
     banking_enabled: bool | None = None
     player_banking_enabled: bool | None = None
 

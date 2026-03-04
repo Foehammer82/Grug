@@ -169,6 +169,13 @@ class Campaign(Base):
     party_gold: Mapped[float] = mapped_column(
         Numeric(precision=12, scale=4), default=0.0, server_default="0", nullable=False
     )
+    # ── Scheduling ───────────────────────────────────────────────────────
+    # How this campaign's sessions are scheduled:
+    #   'fixed'  — GM picks a recurring day/time (default)
+    #   'poll'   — an availability poll decides each session date
+    schedule_mode: Mapped[str] = mapped_column(
+        String(16), default="fixed", server_default="fixed", nullable=False
+    )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
     gold_transactions: Mapped[list["GoldTransaction"]] = relationship(
@@ -176,6 +183,10 @@ class Campaign(Base):
     )
     session_notes: Mapped[list["SessionNote"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["CalendarEvent"]] = relationship(
+        back_populates="campaign",
+        foreign_keys="CalendarEvent.campaign_id",
     )
 
 
@@ -391,6 +402,13 @@ class CalendarEvent(Base):
     # Human-readable location (voice channel name, address, etc.)
     location: Mapped[str | None] = mapped_column(String(256), nullable=True)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Optional link to a campaign — session events are scoped to a campaign.
+    campaign_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -402,6 +420,7 @@ class CalendarEvent(Base):
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
+    campaign: Mapped["Campaign | None"] = relationship(back_populates="events")
     rsvps: Mapped[list["EventRSVP"]] = relationship(
         back_populates="event", cascade="all, delete-orphan"
     )
@@ -649,12 +668,21 @@ class ScheduledTask(Base):
     last_run: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Optional link to a calendar event — auto-created reminders reference
+    # the event they belong to so they can be refreshed or cleaned up.
+    event_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="scheduled_tasks")
+    event: Mapped["CalendarEvent | None"] = relationship()
 
 
 class ConversationMessage(Base):

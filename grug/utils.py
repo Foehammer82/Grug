@@ -169,6 +169,7 @@ def expand_event_occurrences(
         "rrule": event.rrule,
         "location": event.location,
         "channel_id": event.channel_id,
+        "campaign_id": event.campaign_id,
         "created_by": event.created_by,
         "created_at": event.created_at,
         "updated_at": event.updated_at,

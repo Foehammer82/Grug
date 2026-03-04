@@ -140,9 +140,24 @@ async def execute_scheduled_task(task_id: int) -> None:
         )
         task = result.scalar_one_or_none()
         if task:
+            linked_event_id = task.event_id
             if task_type == "once":
                 # One-shot tasks are deleted after firing to keep history clean.
                 await session.delete(task)
             else:
                 task.last_run = now
             await session.commit()
+
+            # If this was an event-linked reminder, refresh reminders for
+            # the next occurrence of the recurring event.
+            if linked_event_id and task_type == "once":
+                try:
+                    from grug.event_reminders import refresh_event_reminders
+
+                    await refresh_event_reminders(linked_event_id)
+                except Exception:
+                    logger.exception(
+                        "Failed to refresh reminders for event %d after task %d fired",
+                        linked_event_id,
+                        task_id,
+                    )

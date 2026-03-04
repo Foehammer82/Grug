@@ -141,6 +141,7 @@ async def create_campaign(
         gm_discord_user_id=int(body.gm_discord_user_id)
         if body.gm_discord_user_id
         else None,
+        schedule_mode=body.schedule_mode,
         banking_enabled=body.banking_enabled,
         player_banking_enabled=body.player_banking_enabled,
         created_by=int(user["id"]),
@@ -195,6 +196,8 @@ async def update_campaign(
         campaign.banking_enabled = body.banking_enabled  # type: ignore[assignment]
     if "player_banking_enabled" in body.model_fields_set:
         campaign.player_banking_enabled = body.player_banking_enabled  # type: ignore[assignment]
+    if "schedule_mode" in body.model_fields_set:
+        campaign.schedule_mode = body.schedule_mode  # type: ignore[assignment]
     await db.commit()
     await db.refresh(campaign)
     return campaign
