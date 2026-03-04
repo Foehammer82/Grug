@@ -9,6 +9,7 @@ import logging
 from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -16,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import assert_super_admin, get_current_user, get_db
+from grug.config.settings import get_settings
 from grug.db.models import LLMUsageDailyAggregate, LLMUsageRecord
 from grug.llm_usage import MODEL_PRICES, compute_estimated_cost
 
@@ -410,7 +412,15 @@ async def get_usage_points(
             if cost is not None:
                 hourly[key]["cost_parts"].append(cost)
 
-        # Fill all 25 hour slots (23h ago → now) so the chart is always complete
+        # Fill all 24 hour slots (23h ago → now) so the chart is always complete.
+        # Labels use the server's configured default timezone so times are not
+        # confusingly shown as UTC to the admin.
+        settings = get_settings()
+        try:
+            display_tz = ZoneInfo(settings.default_timezone)
+        except (ZoneInfoNotFoundError, Exception):
+            display_tz = timezone.utc  # type: ignore[assignment]
+
         points_out: list[ChartPointOut] = []
         for i in range(23, -1, -1):
             slot = (now_utc - timedelta(hours=i)).replace(
@@ -426,9 +436,10 @@ async def get_usage_points(
                     "cost_parts": [],
                 },
             )
+            local_slot = slot.astimezone(display_tz)
             points_out.append(
                 ChartPointOut(
-                    label=slot.strftime("%H:%M"),
+                    label=local_slot.strftime("%H:%M"),
                     request_count=d["request_count"],
                     input_tokens=d["input_tokens"],
                     output_tokens=d["output_tokens"],

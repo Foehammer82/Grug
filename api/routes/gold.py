@@ -2,8 +2,10 @@
 
 All endpoints require ``campaign.banking_enabled = True``.
 GM and guild admins can always adjust any balance.
-Players can adjust their own wallet and the party pool when
-``campaign.player_banking_enabled = True``.
+Players can always spend (negative-adjust) their own wallet and transfer
+between their wallet and the party pool.
+``campaign.player_banking_enabled = True`` is required only for players to
+add gold to their own wallet directly (i.e. positive self-adjustment).
 """
 
 import logging
@@ -129,7 +131,7 @@ async def adjust_party_gold(
 
     Pass a positive ``amount`` to credit and negative to debit.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     campaign = await get_or_404(
         db,
         Campaign,
@@ -169,7 +171,7 @@ async def adjust_character_gold(
 
     Pass a positive ``amount`` to credit and negative to debit.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     campaign = await get_or_404(
         db,
         Campaign,
@@ -186,9 +188,23 @@ async def adjust_character_gold(
         Character.campaign_id == campaign_id,
         detail="Character not found in this campaign",
     )
-    await _assert_can_manage_gold(
-        campaign, user, guild_id, character.owner_discord_user_id
-    )
+
+    # Admins / GMs: unrestricted.
+    # Players: may always spend (negative amount) their own gold.
+    #          Positive self-adjustments (adding gold from nowhere) require player_banking_enabled.
+    admin = await is_guild_admin(guild_id, user)
+    if not admin and not _is_campaign_gm(campaign, user):
+        user_id = int(user.get("id", 0))
+        if character.owner_discord_user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only adjust your own character's gold.",
+            )
+        if body.amount > 0 and not campaign.player_banking_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Player banking is not enabled — you cannot add gold to your wallet directly.",
+            )
 
     character.gold = float(character.gold) + body.amount  # type: ignore[assignment]
     await _record_transaction(
@@ -225,7 +241,7 @@ async def transfer_gold(
     - Player deposits to party  → ``from_character_id=<id>, to_character_id=null``
     - GM gives from party pool  → ``from_character_id=null, to_character_id=<id>``
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     if (body.from_character_id is None) == (body.to_character_id is None):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -249,8 +265,7 @@ async def transfer_gold(
     )
     _require_banking(campaign)
 
-    # Determine who owns the source character (for permission check).
-    source_owner: int | None = None
+    # Determine the source and destination characters.
     source_char: Character | None = None
     dest_char: Character | None = None
 
@@ -262,7 +277,6 @@ async def transfer_gold(
             Character.campaign_id == campaign_id,
             detail="Source character not found in this campaign",
         )
-        source_owner = source_char.owner_discord_user_id
 
     if body.to_character_id is not None:
         dest_char = await get_or_404(
@@ -273,7 +287,21 @@ async def transfer_gold(
             detail="Destination character not found in this campaign",
         )
 
-    await _assert_can_manage_gold(campaign, user, guild_id, source_owner)
+    # Admins / GMs: unrestricted.
+    # Players: may freely move their own gold to/from the party pool.
+    admin = await is_guild_admin(guild_id, user)
+    if not admin and not _is_campaign_gm(campaign, user):
+        user_id = int(user.get("id", 0))
+        if source_char is not None and source_char.owner_discord_user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only transfer from your own character's wallet.",
+            )
+        if dest_char is not None and dest_char.owner_discord_user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only transfer gold to your own character.",
+            )
 
     # Apply the transfer atomically.
     if source_char is not None:
@@ -332,22 +360,17 @@ async def get_gold_ledger(
 ) -> list[GoldTransaction]:
     """Return the most recent gold transactions for this campaign.
 
-    Only accessible to guild admins and the campaign GM.
+    Accessible to all campaign members — players can see the full ledger so
+    all deposits, withdrawals, and transfers are transparent.
     """
-    assert_guild_member(guild_id, user)
-    campaign = await get_or_404(
+    await assert_guild_member(guild_id, user)
+    await get_or_404(
         db,
         Campaign,
         Campaign.id == campaign_id,
         Campaign.guild_id == guild_id,
         detail="Campaign not found",
     )
-    admin = await is_guild_admin(guild_id, user)
-    if not admin and not _is_campaign_gm(campaign, user):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the GM or an admin can view the transaction ledger.",
-        )
 
     result = await db.execute(
         select(GoldTransaction)

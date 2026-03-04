@@ -58,16 +58,43 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["encounters"])
 
 
-def _serialize(enc: Encounter) -> EncounterOut:
-    """Build an EncounterOut with combatants sorted by initiative."""
+def _serialize(enc: Encounter, *, is_gm: bool = True) -> EncounterOut:
+    """Build an EncounterOut with combatants sorted by initiative.
+
+    When *is_gm* is False hidden combatants are stripped so players never see
+    NPCs the GM hasn't revealed yet, and *current_turn_index* is recalculated
+    to match the filtered list.
+    """
     order = sorted_combatants(enc)
+    current_turn_index = enc.current_turn_index
+    if not is_gm:
+        # Determine which combatant currently holds the turn (by stable ID).
+        current_id: int | None = None
+        if (
+            enc.status == "active"
+            and order
+            and 0 <= enc.current_turn_index < len(order)
+        ):
+            current_id = order[enc.current_turn_index].id
+        # Strip hidden combatants from the player view.
+        order = [c for c in order if not c.is_hidden]
+        # Recalculate the turn index in the now-filtered list.
+        if current_id is not None:
+            current_turn_index = next(
+                (i for i, c in enumerate(order) if c.id == current_id),
+                # If the current combatant is hidden, point past the end so
+                # no row is highlighted until a visible combatant's turn.
+                len(order),
+            )
+        else:
+            current_turn_index = 0
     return EncounterOut(
         id=enc.id,
         campaign_id=enc.campaign_id,
         guild_id=enc.guild_id,
         name=enc.name,
         status=enc.status,
-        current_turn_index=enc.current_turn_index,
+        current_turn_index=current_turn_index,
         round_number=enc.round_number,
         channel_id=enc.channel_id,
         created_by=enc.created_by,
@@ -168,12 +195,15 @@ async def get_active_encounter_route(
     db: AsyncSession = Depends(get_db),
 ) -> EncounterOut | None:
     await assert_guild_member(guild_id, user)
-    await _get_campaign(db, guild_id, campaign_id)
+    campaign = await _get_campaign(db, guild_id, campaign_id)
+    user_id = int(user["id"])
+    admin = await is_guild_admin(guild_id, user)
+    viewer_is_gm = admin or campaign.gm_discord_user_id == user_id
 
     enc = await get_active_encounter(db, campaign_id)
     if enc is None:
         return None
-    return _serialize(enc)
+    return _serialize(enc, is_gm=viewer_is_gm)
 
 
 @router.get(
@@ -187,7 +217,10 @@ async def list_encounters(
     db: AsyncSession = Depends(get_db),
 ) -> list[EncounterOut]:
     await assert_guild_member(guild_id, user)
-    await _get_campaign(db, guild_id, campaign_id)
+    campaign = await _get_campaign(db, guild_id, campaign_id)
+    user_id = int(user["id"])
+    admin = await is_guild_admin(guild_id, user)
+    viewer_is_gm = admin or campaign.gm_discord_user_id == user_id
 
     result = await db.execute(
         select(Encounter)
@@ -199,7 +232,7 @@ async def list_encounters(
         .order_by(desc(Encounter.created_at))
         .limit(20)
     )
-    return [_serialize(e) for e in result.scalars().all()]
+    return [_serialize(e, is_gm=viewer_is_gm) for e in result.scalars().all()]
 
 
 # ── Encounter renaming ──────────────────────────────────────────────────
@@ -265,8 +298,10 @@ async def rename_combatant_route(
     combatant = next((c for c in enc.combatants if c.id == combatant_id), None)
     if combatant is None:
         raise HTTPException(status_code=404, detail="Combatant not found")
-    if body.name is not None:
+    if "name" in body.model_fields_set and body.name is not None:
         combatant.name = body.name  # type: ignore[assignment]
+    if "is_hidden" in body.model_fields_set and body.is_hidden is not None:
+        combatant.is_hidden = body.is_hidden  # type: ignore[assignment]
     await db.commit()
     enc = await _get_encounter_or_404(db, encounter_id)
     return _serialize(enc)
@@ -300,6 +335,7 @@ async def add_combatant_route(
         name=body.name,
         initiative_modifier=body.initiative_modifier,
         is_enemy=body.is_enemy,
+        is_hidden=body.is_hidden,
         character_id=body.character_id,
         max_hp=body.max_hp,
         armor_class=body.armor_class,

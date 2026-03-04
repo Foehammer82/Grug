@@ -283,7 +283,9 @@ export default function CharacterTable({
                     const isAdminOrGm = isGm;
                     const isOwner = ch.owner_discord_user_id === currentUserId;
                     const canSee = isAdminOrGm || isOwner;
-                    const canManage = isAdminOrGm || (isOwner && playerBankingEnabled);
+                    // Players can always spend / transfer their own gold;
+                    // player_banking_enabled only gates positive self-adjustments (backend-enforced).
+                    const canManage = isAdminOrGm || isOwner;
                     return (
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {canSee ? (

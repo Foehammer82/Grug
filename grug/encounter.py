@@ -118,6 +118,7 @@ async def add_combatant(
     name: str,
     initiative_modifier: int = 0,
     is_enemy: bool = False,
+    is_hidden: bool = False,
     character_id: int | None = None,
     max_hp: int | None = None,
     armor_class: int | None = None,
@@ -130,6 +131,7 @@ async def add_combatant(
         name=name,
         initiative_modifier=initiative_modifier,
         is_enemy=is_enemy,
+        is_hidden=is_hidden,
         character_id=character_id,
         max_hp=max_hp,
         current_hp=current_hp,
@@ -204,12 +206,13 @@ async def set_initiative_roll(
     db: AsyncSession,
     encounter_id: int,
     combatant_id: int,
-    roll_value: int,
+    roll_value: int | None,
 ) -> Combatant:
-    """Manually set the initiative roll for a combatant.
+    """Manually set (or clear) the initiative roll for a combatant.
 
     Used when players roll physical dice and want to enter the result,
-    or when the GM needs to override a value.
+    or when the GM needs to override a value.  Pass ``None`` to clear
+    a previously entered manual roll so Grug will auto-roll on start.
     """
     result = await db.execute(
         select(Combatant).where(
@@ -221,7 +224,7 @@ async def set_initiative_roll(
     if combatant is None:
         raise EncounterError("Combatant not found")
 
-    combatant.initiative_roll = roll_value
+    combatant.initiative_roll = roll_value  # None clears the roll
     await db.flush()
     return combatant
 

@@ -118,7 +118,7 @@ function fmtAxisLabel(label: string, preset: Preset): string {
 }
 
 function fmtTooltipTitle(label: string, preset: Preset): string {
-  if (preset === '1d') return `${label} UTC`;
+  if (preset === '1d') return label;  // label is already in server's configured timezone
   if (preset === '1y') return `Week of ${label}`;
   const d = new Date(label + 'T12:00:00Z');
   return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });

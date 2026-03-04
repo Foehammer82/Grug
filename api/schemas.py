@@ -909,6 +909,7 @@ class CombatantOut(BaseModel):
     initiative_roll: int | None = None
     initiative_modifier: int = 0
     is_enemy: bool = False
+    is_hidden: bool = False
     sort_order: int = 0
     is_active: bool = True
     # HP / AC (standard+ depth)
@@ -965,6 +966,7 @@ class CombatantCreate(BaseModel):
     name: str
     initiative_modifier: int = 0
     is_enemy: bool = False
+    is_hidden: bool = False
     character_id: int | None = None
     max_hp: int | None = None
     armor_class: int | None = None
@@ -973,12 +975,16 @@ class CombatantCreate(BaseModel):
 
 class CombatantUpdate(BaseModel):
     name: str | None = None
+    is_hidden: bool | None = None
 
 
 class SetInitiativeBody(BaseModel):
-    """Body for manually setting a combatant's initiative roll value."""
+    """Body for manually setting a combatant's initiative roll value.
 
-    initiative_roll: int
+    Pass ``null`` / ``None`` to clear a previously entered manual roll.
+    """
+
+    initiative_roll: int | None = None
 
 
 class CombatLogEntryOut(BaseModel):

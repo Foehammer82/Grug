@@ -7,8 +7,11 @@ structured data instead of formatted text.
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
@@ -16,6 +19,38 @@ logger = logging.getLogger(__name__)
 
 BASE_5E = "https://www.dnd5eapi.co"
 BASE_AON = "https://elasticsearch.aonprd.com"
+
+# ---------------------------------------------------------------------------
+# In-memory TTL cache for monster search results
+# ---------------------------------------------------------------------------
+
+_CACHE_TTL = 300  # 5 minutes
+_monster_cache: dict[str, tuple[list[Any], float]] = {}  # key → (results, expires_at)
+
+
+def _cache_key(query: str, system: str | None, limit: int) -> str:
+    return f"{query.lower().strip()}|{system}|{limit}"
+
+
+def _cache_get(key: str) -> list[Any] | None:
+    entry = _monster_cache.get(key)
+    if entry is None:
+        return None
+    results, expires_at = entry
+    if time.monotonic() > expires_at:
+        del _monster_cache[key]
+        return None
+    return results
+
+
+def _cache_set(key: str, results: list[Any]) -> None:
+    # Evict expired entries to prevent unbounded growth (keep at most 200 entries)
+    if len(_monster_cache) >= 200:
+        now = time.monotonic()
+        expired = [k for k, (_, exp) in _monster_cache.items() if now > exp]
+        for k in expired:
+            del _monster_cache[k]
+    _monster_cache[key] = (results, time.monotonic() + _CACHE_TTL)
 
 
 @dataclass
@@ -41,7 +76,6 @@ def _ability_mod(score: int) -> int:
 
 async def search_monsters_5e(query: str, limit: int = 10) -> list[MonsterResult]:
     """Search D&D 5e SRD monsters by name substring."""
-    results: list[MonsterResult] = []
 
     async with httpx.AsyncClient(timeout=10) as http:
         # Search by name substring
@@ -59,15 +93,15 @@ async def search_monsters_5e(query: str, limit: int = 10) -> list[MonsterResult]
             logger.exception("5e monster search failed for %r", query)
             return []
 
-        # Fetch full details for each match
-        for entry in entries:
+        # Fetch full details for all matches in parallel
+        async def _fetch_detail(entry: dict) -> MonsterResult | None:
             url = entry.get("url", "")
             if not url:
-                continue
+                return None
             try:
                 detail_resp = await http.get(f"{BASE_5E}{url}")
                 if detail_resp.status_code != 200:
-                    continue
+                    return None
                 d = detail_resp.json()
 
                 # Parse AC
@@ -102,24 +136,24 @@ async def search_monsters_5e(query: str, limit: int = 10) -> list[MonsterResult]
                         ability = prof_name.split(":")[-1].strip()[:3].upper()
                         saves[ability] = int(val)
 
-                results.append(
-                    MonsterResult(
-                        name=d.get("name", entry.get("name", "Unknown")),
-                        source="srd_5e",
-                        system="dnd5e",
-                        hp=hp,
-                        ac=ac,
-                        initiative_modifier=init_mod,
-                        cr=str(d.get("challenge_rating", "")),
-                        size=d.get("size", ""),
-                        type=d.get("type", ""),
-                        save_modifiers=saves if saves else None,
-                    )
+                return MonsterResult(
+                    name=d.get("name", entry.get("name", "Unknown")),
+                    source="srd_5e",
+                    system="dnd5e",
+                    hp=hp,
+                    ac=ac,
+                    initiative_modifier=init_mod,
+                    cr=str(d.get("challenge_rating", "")),
+                    size=d.get("size", ""),
+                    type=d.get("type", ""),
+                    save_modifiers=saves if saves else None,
                 )
             except Exception:
                 logger.exception("5e monster detail fetch failed for %s", url)
+                return None
 
-    return results
+        detail_results = await asyncio.gather(*[_fetch_detail(e) for e in entries])
+        return [r for r in detail_results if r is not None]
 
 
 async def search_monsters_pf2e(query: str, limit: int = 10) -> list[MonsterResult]:
@@ -231,6 +265,11 @@ async def search_monsters(
     Returns:
         List of MonsterResult sorted by relevance.
     """
+    key = _cache_key(query, system, limit)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
     results: list[MonsterResult] = []
 
     if system is None or system == "dnd5e":
@@ -239,4 +278,5 @@ async def search_monsters(
     if system is None or system == "pf2e":
         results.extend(await search_monsters_pf2e(query, limit=limit))
 
+    _cache_set(key, results)
     return results

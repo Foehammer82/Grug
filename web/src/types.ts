@@ -433,6 +433,7 @@ export interface Combatant {
   initiative_roll: number | null;
   initiative_modifier: number;
   is_enemy: boolean;
+  is_hidden: boolean;
   sort_order: number;
   is_active: boolean;
   // HP / AC (standard+ depth)

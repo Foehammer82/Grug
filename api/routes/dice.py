@@ -1,10 +1,11 @@
 """Dice rolling routes — roll dice and view roll history within a campaign."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, desc, or_
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from sqlalchemy import delete, select, desc, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (
@@ -20,6 +21,56 @@ from grug.dice import DiceError, RollType, format_roll, roll
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["dice"])
+
+# ---------------------------------------------------------------------------
+# Retention policy
+# ---------------------------------------------------------------------------
+
+_RETENTION_HOURS = 24
+_RETENTION_MIN_ROLLS = 5  # always keep at least this many per player per campaign
+
+
+async def _cleanup_old_rolls(db: AsyncSession, campaign_id: int) -> None:
+    """Enforce the dice roll retention policy for a campaign.
+
+    For each (campaign, roller) pair: keep all rolls from the past 24 hours
+    PLUS the most recent ``_RETENTION_MIN_ROLLS`` rolls regardless of age.
+    Older rolls beyond the minimum are deleted.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=_RETENTION_HOURS)
+
+    # Identify all distinct rollers in this campaign
+    roller_rows = await db.execute(
+        select(DiceRoll.roller_discord_user_id)
+        .where(DiceRoll.campaign_id == campaign_id)
+        .distinct()
+    )
+    roller_ids = [r[0] for r in roller_rows.all()]
+
+    for roller_id in roller_ids:
+        # Find the IDs of the most recent N rolls for this roller
+        recent_rows = await db.execute(
+            select(DiceRoll.id)
+            .where(
+                DiceRoll.campaign_id == campaign_id,
+                DiceRoll.roller_discord_user_id == roller_id,
+            )
+            .order_by(desc(DiceRoll.created_at))
+            .limit(_RETENTION_MIN_ROLLS)
+        )
+        keep_ids = {r[0] for r in recent_rows.all()}
+
+        # Delete rolls older than cutoff that are NOT in the keep set
+        await db.execute(
+            delete(DiceRoll).where(
+                DiceRoll.campaign_id == campaign_id,
+                DiceRoll.roller_discord_user_id == roller_id,
+                DiceRoll.created_at < cutoff,
+                DiceRoll.id.not_in(keep_ids),
+            )
+        )
+
+    await db.commit()
 
 
 def _serialize_roll(db_roll: DiceRoll, formatted: str = "") -> DiceRollOut:
@@ -50,6 +101,7 @@ async def roll_dice(
     guild_id: int,
     campaign_id: int,
     body: DiceRollRequest,
+    background_tasks: BackgroundTasks,
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DiceRollOut:
@@ -117,6 +169,7 @@ async def roll_dice(
     await db.refresh(db_roll)
 
     formatted = format_roll(result)
+    background_tasks.add_task(_cleanup_old_rolls, db, campaign_id)
     return _serialize_roll(db_roll, formatted)
 
 
@@ -128,6 +181,7 @@ async def record_manual_roll(
     guild_id: int,
     campaign_id: int,
     body: ManualDiceRecordRequest,
+    background_tasks: BackgroundTasks,
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> DiceRollOut:
@@ -175,6 +229,7 @@ async def record_manual_roll(
     await db.commit()
     await db.refresh(db_roll)
 
+    background_tasks.add_task(_cleanup_old_rolls, db, campaign_id)
     return _serialize_roll(db_roll, f"{body.expression} = {body.total} (manual)")
 
 

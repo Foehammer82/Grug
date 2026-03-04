@@ -20,10 +20,12 @@ import {
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
 import type { Character, CombatTrackerDepth, Combatant, Encounter, MonsterSearchResult, SavingThrowResult } from '../../types';
@@ -121,6 +123,17 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
     onSuccess: invalidate,
   });
 
+  const toggleHiddenMutation = useMutation({
+    mutationFn: async ({ id, is_hidden }: { id: number; is_hidden: boolean }) => {
+      if (!encounter) return;
+      await client.patch(
+        `/api/guilds/${guildId}/campaigns/${campaignId}/encounters/${encounter.id}/combatants/${id}`,
+        { is_hidden },
+      );
+    },
+    onSuccess: invalidate,
+  });
+
   // --- Campaign characters (for player self-join) ---
   const { data: campaignCharacters = [] } = useQuery<Character[]>({
     queryKey: ['campaign-characters', guildId, campaignId],
@@ -144,6 +157,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
   const [combatantEnemy, setCombatantEnemy] = useState(false);
   const [combatantHp, setCombatantHp] = useState('');
   const [combatantAc, setCombatantAc] = useState('');
+  const [combatantHidden, setCombatantHidden] = useState(false);
 
   // --- Monster search (GM) ---
   const [monsterQuery, setMonsterQuery] = useState('');
@@ -175,6 +189,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
       name: string;
       initiative_modifier: number;
       is_enemy: boolean;
+      is_hidden?: boolean;
       character_id?: number;
       max_hp?: number;
       armor_class?: number;
@@ -188,6 +203,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
         name: combatantName.trim() || autoName,
         initiative_modifier: combatantMod ? parseInt(combatantMod, 10) : 0,
         is_enemy: combatantEnemy,
+        is_hidden: combatantHidden,
         ...(combatantHp ? { max_hp: parseInt(combatantHp, 10) } : {}),
         ...(combatantAc ? { armor_class: parseInt(combatantAc, 10) } : {}),
       };
@@ -203,6 +219,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
       setCombatantEnemy(false);
       setCombatantHp('');
       setCombatantAc('');
+      setCombatantHidden(false);
     },
   });
 
@@ -311,7 +328,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
 
   // --- Set initiative roll (manual) ---
   const setInitiativeMutation = useMutation({
-    mutationFn: async (args: { combatantId: number; roll: number }) => {
+    mutationFn: async (args: { combatantId: number; roll: number | null }) => {
       if (!encounter) return;
       await client.patch(
         `/api/guilds/${guildId}/campaigns/${campaignId}/encounters/${encounter.id}/combatants/${args.combatantId}/initiative`,
@@ -425,7 +442,11 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
   }
 
   // ── Active encounter view ───────────────────────────────────────
-  const activeCombatants = encounter.combatants.filter((c) => c.is_active);
+  const activeCombatants = encounter.combatants.filter(
+    // Server already strips hidden combatants from the player response;
+    // this client-side filter is a defence-in-depth guard.
+    (c) => c.is_active && (isGm || !c.is_hidden),
+  );
   const isPreparing = encounter.status === 'preparing';
   const isActive = encounter.status === 'active';
 
@@ -569,6 +590,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
               }
               canEditName={canManage}
               onRename={(name) => renameCombatantMutation.mutate({ id: c.id, name })}
+              onToggleHidden={() => toggleHiddenMutation.mutate({ id: c.id, is_hidden: !c.is_hidden })}
               onSetInitiative={(roll) =>
                 setInitiativeMutation.mutate({ combatantId: c.id, roll })
               }
@@ -676,6 +698,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
                 setCombatantHp(val.hp != null ? String(val.hp) : '');
                 setCombatantAc(val.ac != null ? String(val.ac) : '');
                 setCombatantEnemy(true);
+                setCombatantHidden(true);
                 setMonsterQuery('');
               }
             }}
@@ -784,6 +807,16 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
                 sx={{ cursor: 'pointer', height: 28 }}
               />
             </Tooltip>
+            <Tooltip title={combatantHidden ? 'Hidden from players — click to make visible' : 'Visible to players — click to hide from players'}>
+              <Chip
+                label={combatantHidden ? '🙈 Hidden' : '👁 Visible'}
+                size="small"
+                variant={combatantHidden ? 'filled' : 'outlined'}
+                color={combatantHidden ? 'warning' : 'default'}
+                onClick={() => setCombatantHidden(!combatantHidden)}
+                sx={{ cursor: 'pointer', height: 28 }}
+              />
+            </Tooltip>
             <Button
               variant="outlined"
               size="small"
@@ -823,7 +856,7 @@ export default function InitiativePanel({ guildId, campaignId, isGm, depth, curr
               <Divider sx={{ my: 1.5 }} />
               <Typography variant="body2" color="text.secondary">
                 ✅ {myCharacters.length === 1 ? 'Your character is' : 'All your characters are'} in the encounter.
-                Click the roll value (or "—") to enter a manual roll from physical dice — otherwise Grug rolls for you.
+                Hit <strong>Set roll</strong> next to your name to enter a manual roll from physical dice — or leave it and Grug rolls for you.
               </Typography>
             </>
           );
@@ -1159,6 +1192,7 @@ function CombatantRow({
   canEditRoll,
   canEditName,
   onRename,
+  onToggleHidden,
   onSetInitiative,
   onRemove,
   onDamage,
@@ -1176,7 +1210,8 @@ function CombatantRow({
   canEditRoll: boolean;
   canEditName: boolean;
   onRename: (name: string) => void;
-  onSetInitiative: (roll: number) => void;
+  onToggleHidden: () => void;
+  onSetInitiative: (roll: number | null) => void;
   onRemove: () => void;
   onDamage: () => void;
   onHeal: () => void;
@@ -1205,6 +1240,7 @@ function CombatantRow({
         borderColor: isCurrentTurn ? 'primary.main' : 'transparent',
         '&:hover': { bgcolor: 'action.hover' },
         transition: 'all 0.15s',
+        opacity: c.is_hidden ? 0.55 : 1,
       }}
     >
       {/* Main row */}
@@ -1221,7 +1257,7 @@ function CombatantRow({
           ▶
         </Typography>
 
-        {/* Initiative roll — click to edit when allowed */}
+        {/* Initiative roll — click to edit when allowed; leave blank to clear */}
         {editingRoll ? (
           <TextField
             size="small"
@@ -1230,25 +1266,53 @@ function CombatantRow({
             value={rollInput}
             onChange={(e) => setRollInput(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && rollInput) {
-                onSetInitiative(parseInt(rollInput, 10));
+              if (e.key === 'Enter') {
+                if (rollInput.trim()) {
+                  onSetInitiative(parseInt(rollInput, 10));
+                } else if (c.initiative_roll != null) {
+                  // Empty input with a prior roll → clear it
+                  onSetInitiative(null);
+                }
                 setEditingRoll(false);
               } else if (e.key === 'Escape') {
                 setEditingRoll(false);
               }
             }}
             onBlur={() => {
-              if (rollInput) {
+              if (rollInput.trim()) {
                 onSetInitiative(parseInt(rollInput, 10));
+              } else if (c.initiative_roll != null) {
+                // Cleared — let Grug auto-roll
+                onSetInitiative(null);
               }
               setEditingRoll(false);
             }}
             sx={{ width: 48 }}
+            placeholder="—"
             slotProps={{ htmlInput: { sx: { py: 0.25, px: 0.5, textAlign: 'right', fontSize: '0.875rem' } } }}
           />
+        ) : canEditRoll && c.initiative_roll == null ? (
+          <Tooltip title="Click to enter your initiative roll from physical dice — or leave it for Grug to roll" placement="top">
+            <Chip
+              label="Set roll"
+              icon={<EditIcon sx={{ fontSize: '0.85rem !important' }} />}
+              size="small"
+              variant="outlined"
+              color="primary"
+              onClick={() => {
+                setRollInput('');
+                setEditingRoll(true);
+              }}
+              sx={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.75rem' }}
+            />
+          </Tooltip>
         ) : (
           <Tooltip
-            title={canEditRoll ? 'Click to set initiative roll (for physical dice)' : ''}
+            title={
+              canEditRoll
+                ? 'Click to change roll. Clear the field to let Grug auto-roll.'
+                : ''
+            }
             placement="top"
           >
             <Typography
@@ -1385,6 +1449,15 @@ function CombatantRow({
         {/* GM actions menu */}
         {canManage && (
           <>
+            <Tooltip title={c.is_hidden ? 'Hidden from players — click to reveal' : 'Click to hide from players'} placement="top">
+              <IconButton
+                size="small"
+                onClick={onToggleHidden}
+                sx={{ opacity: c.is_hidden ? 1 : 0.25, '&:hover': { opacity: 1 }, color: c.is_hidden ? 'warning.main' : 'inherit' }}
+              >
+                <VisibilityOffIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Tooltip>
             <IconButton
               size="small"
               onClick={(e) => setMenuAnchor(e.currentTarget)}

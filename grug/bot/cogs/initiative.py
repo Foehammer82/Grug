@@ -35,9 +35,25 @@ from grug.encounter import (
 logger = logging.getLogger(__name__)
 
 
-def _initiative_embed(enc: Encounter) -> discord.Embed:
-    """Build a rich embed showing the current initiative order."""
-    order = sorted_combatants(enc)
+def _initiative_embed(enc: Encounter, *, show_hidden: bool = False) -> discord.Embed:
+    """Build a rich embed showing the current initiative order.
+
+    When *show_hidden* is False (the default for public channel messages),
+    combatants marked ``is_hidden`` are omitted so players never see them.
+    The current-turn marker is resolved by combatant ID so it stays correct
+    after hidden entries are filtered out.
+    """
+    full_order = sorted_combatants(enc)
+    # Resolve the current combatant's stable ID from the unfiltered list.
+    current_id: int | None = None
+    if (
+        enc.status == "active"
+        and full_order
+        and 0 <= enc.current_turn_index < len(full_order)
+    ):
+        current_id = full_order[enc.current_turn_index].id
+
+    order = full_order if show_hidden else [c for c in full_order if not c.is_hidden]
     status_color = {
         "preparing": 0xFFA500,  # orange
         "active": 0x58A6FF,  # blue
@@ -61,12 +77,12 @@ def _initiative_embed(enc: Encounter) -> discord.Embed:
         return embed
 
     lines: list[str] = []
-    for idx, c in enumerate(order):
-        marker = (
-            "▶ " if idx == enc.current_turn_index and enc.status == "active" else "   "
-        )
+    for c in order:
+        is_current = enc.status == "active" and c.id == current_id
+        marker = "▶ " if is_current else "   "
         roll_str = str(c.initiative_roll) if c.initiative_roll is not None else "—"
         enemy_tag = " 👹" if c.is_enemy else ""
+        hidden_tag = " 🔒" if show_hidden and c.is_hidden else ""
 
         # HP badge
         hp_str = ""
@@ -94,8 +110,8 @@ def _initiative_embed(enc: Encounter) -> discord.Embed:
                 f_ = "●" * c.death_save_failures + "○" * (3 - c.death_save_failures)
                 death_str = f" 💀S:{s} F:{f_}"
 
-        line = f"{marker}`{roll_str:>3}`  {c.name}{enemy_tag}{hp_str}{cond_str}{conc_str}{death_str}"
-        if idx == enc.current_turn_index and enc.status == "active":
+        line = f"{marker}`{roll_str:>3}`  {c.name}{enemy_tag}{hidden_tag}{hp_str}{cond_str}{conc_str}{death_str}"
+        if is_current:
             line = f"**{line}**"
         lines.append(line)
 

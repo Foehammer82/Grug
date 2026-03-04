@@ -1037,6 +1037,10 @@ class Combatant(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+    # When True, only the GM can see this combatant — hidden from players
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     # ── HP / AC (standard+ depth) ────────────────────────────────────────
     max_hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
     current_hp: Mapped[int | None] = mapped_column(Integer, nullable=True)

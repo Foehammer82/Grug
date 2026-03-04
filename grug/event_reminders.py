@@ -313,7 +313,9 @@ async def maybe_create_schedule_poll(event_id: int) -> int | None:
             event_id=event_id,
             title=f"When should we play next? ({event.title})",
             options=options,
-            closes_at=base - timedelta(weeks=1) - timedelta(days=2),  # close 2 days before earliest option
+            closes_at=base
+            - timedelta(weeks=1)
+            - timedelta(days=2),  # close 2 days before earliest option
             created_by=0,  # system sentinel
         )
         session.add(poll)
