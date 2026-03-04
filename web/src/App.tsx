@@ -9,9 +9,11 @@ import EventsPage from './pages/EventsPage';
 import GlossaryPage from './pages/GlossaryPage';
 import GuildConfigPage from './pages/GuildConfigPage';
 import LoginPage from './pages/LoginPage';
+import NotesPage from './pages/NotesPage';
 import PersonalLayout from './components/PersonalLayout';
 import NotFoundPage from './pages/NotFoundPage';
 import PersonalConfigPage from './pages/PersonalConfigPage';
+import PersonalNotesPage from './pages/PersonalNotesPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
@@ -40,6 +42,7 @@ function App() {
           <Route index element={<Navigate to="config" replace />} />
           <Route path="config" element={<PersonalConfigPage />} />
           <Route path="tasks" element={<PersonalTasksPage />} />
+          <Route path="notes" element={<PersonalNotesPage />} />
         </Route>
         <Route path="/guilds/:guildId" element={<GuildLayout />}>
           <Route path="config" element={<GuildConfigPage />} />
@@ -47,6 +50,7 @@ function App() {
           <Route path="tasks" element={<TasksPage />} />
           <Route path="documents" element={<DocumentsPage />} />
           <Route path="glossary" element={<GlossaryPage />} />
+          <Route path="notes" element={<NotesPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
           <Route path="characters/:characterId" element={<CharacterSheetPage />} />
         </Route>
