@@ -1,5 +1,5 @@
 site_name: Grug
-site_description: Self-hosted AI companion for TTRPGs — user documentation
+site_description: Self-hosted AI companion for TTRPGs — overview and quickstart
 site_author: Grug Contributors
 docs_dir: docs
 site_dir: site
@@ -23,17 +23,10 @@ theme:
     text: Roboto
     code: Roboto Mono
   features:
-    - navigation.tabs
-    - navigation.tabs.sticky
-    - navigation.sections
-    - navigation.expand
-    - navigation.path
     - navigation.top
     - search.highlight
     - search.suggest
     - content.code.copy
-    - content.code.annotate
-    - toc.integrate
   icon:
     repo: fontawesome/brands/github
 
@@ -46,36 +39,6 @@ markdown_extensions:
   - pymdownx.superfences
   - pymdownx.highlight:
       anchor_linenums: true
-  - pymdownx.inlinehilite
-  - pymdownx.tabbed:
-      alternate_style: true
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - tables
-  - attr_list
   - toc:
       permalink: true
-
-nav:
-  - Home: index.md
-  - Getting Started:
-    - Installation: getting-started/installation.md
-    - Configuration: getting-started/configuration.md
-  - Discord Bot:
-    - AI Chat: discord/ai-chat.md
-    - Glossary: discord/glossary.md
-    - Documents: discord/documents.md
-    - Admin Commands: discord/admin.md
-  - Web UI:
-    - Overview: web-ui/overview.md
-    - Guild Configuration: web-ui/guild-config.md
-    - Events: web-ui/events.md
-    - Scheduled Tasks: web-ui/tasks.md
-    - Documents: web-ui/documents.md
-    - Glossary: web-ui/glossary.md
-  - Guides:
-    - MCP Tool Extensions: guides/mcp-tools.md
-    - Character Sheets: guides/character-sheets.md
-  - FAQ & Troubleshooting: faq.md
-  - Changelog: changelog.md
