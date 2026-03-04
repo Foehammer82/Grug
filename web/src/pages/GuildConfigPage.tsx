@@ -299,7 +299,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               <TableHead>
                 <TableRow>
                   <TableCell>Channel</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 200 }}>
+                  <TableCell sx={{ whiteSpace: 'nowrap', width: '55%', minWidth: 320 }}>
                     Auto Respond
                   </TableCell>
                 </TableRow>
@@ -325,29 +325,47 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                         <TableCell>
                           <Typography variant="body2">#{ch.name}</Typography>
                         </TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, maxWidth: 300 }}>
-                            <Tooltip
-                              title={
-                                autoRespond
-                                  ? 'Grug considers responding to every message here'
-                                  : 'Grug only replies to @mentions'
-                              }
-                            >
-                              <Switch
-                                size="small"
-                                checked={autoRespond}
-                                onChange={(_, checked) =>
-                                  channelMutation.mutate({
-                                    channelId: ch.id,
-                                    patch: { auto_respond: checked },
-                                  })
+                        <TableCell sx={{ py: 1 }}>
+                          <Stack spacing={0}>
+                            {/* Toggle row */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Tooltip
+                                title={
+                                  autoRespond
+                                    ? 'Grug considers responding to every message here'
+                                    : 'Grug only replies to @mentions'
                                 }
-                                disabled={channelMutation.isPending || configsError}
-                              />
-                            </Tooltip>
-                            {autoRespond ? (
-                              <Box sx={{ flex: 1, pt: 2, pb: 0.5 }}>
+                              >
+                                <Switch
+                                  size="small"
+                                  checked={autoRespond}
+                                  onChange={(_, checked) =>
+                                    channelMutation.mutate({
+                                      channelId: ch.id,
+                                      patch: { auto_respond: checked },
+                                    })
+                                  }
+                                  disabled={channelMutation.isPending || configsError}
+                                />
+                              </Tooltip>
+                              <Typography variant="caption" color="text.secondary">
+                                {autoRespond ? 'On' : 'Off'}
+                              </Typography>
+                            </Box>
+                            {/* Slider row — only when on */}
+                            {autoRespond && (
+                              <Box
+                                sx={{
+                                  // Indent to align with switch thumb centre;
+                                  // extra right pad so "Selectively" isn't clipped.
+                                  pl: '4px',
+                                  pr: '8px',
+                                  width: 320,
+                                  // Push slider track up, leave room below for labels.
+                                  mt: 0.5,
+                                  mb: 1.5,
+                                }}
+                              >
                                 <Slider
                                   size="small"
                                   min={0}
@@ -377,12 +395,8 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   disabled={channelMutation.isPending || configsError}
                                 />
                               </Box>
-                            ) : (
-                              <Typography variant="caption" color="text.secondary">
-                                Off
-                              </Typography>
                             )}
-                          </Box>
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     );
