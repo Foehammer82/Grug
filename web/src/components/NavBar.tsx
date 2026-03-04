@@ -190,6 +190,8 @@ export default function NavBar() {
       {/* Impersonation banner */}
       {user?.impersonating && (
         <Box
+          role="status"
+          aria-label={`Impersonating ${user.username}`}
           sx={{
             bgcolor: 'warning.main',
             color: 'warning.contrastText',

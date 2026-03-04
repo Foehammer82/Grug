@@ -406,7 +406,7 @@ async def start_impersonation(
         )
 
     # Cannot impersonate yourself
-    admin_id = str(user.get("sub", user.get("id", "")))
+    admin_id = user["sub"]
     if admin_id == discord_user_id:
         raise HTTPException(status_code=400, detail="Cannot impersonate yourself")
 
@@ -421,9 +421,10 @@ async def start_impersonation(
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Discord user not found")
     if resp.status_code != 200:
+        body = resp.text[:200] if resp.text else ""
         raise HTTPException(
             status_code=502,
-            detail=f"Discord API returned {resp.status_code}",
+            detail=f"Discord API returned {resp.status_code}: {body}",
         )
 
     target = resp.json()
