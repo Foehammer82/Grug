@@ -854,16 +854,20 @@ def register_rules_tools(agent: Agent[GrugDeps, str]) -> None:
             override_rows = result.scalars().all()
             overrides: dict[str, bool] = {r.source_id: r.enabled for r in override_rows}
 
-            # Load guild default system as fallback when caller didn't specify
+            # Load guild default system as fallback when caller didn't specify;
+            # prefer the pre-loaded value from deps to avoid a second DB query.
             if system is None:
-                result = await session.execute(
-                    select(GuildConfig.default_ttrpg_system).where(
-                        GuildConfig.guild_id == ctx.deps.guild_id
+                if ctx.deps.default_ttrpg_system:
+                    system = ctx.deps.default_ttrpg_system
+                else:
+                    result = await session.execute(
+                        select(GuildConfig.default_ttrpg_system).where(
+                            GuildConfig.guild_id == ctx.deps.guild_id
+                        )
                     )
-                )
-                row = result.scalar_one_or_none()
-                if row:
-                    system = row
+                    row = result.scalar_one_or_none()
+                    if row:
+                        system = row
 
         sections: list[str] = []
 

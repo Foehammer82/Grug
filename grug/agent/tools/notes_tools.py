@@ -66,8 +66,9 @@ def register_notes_tools(agent: Agent[GrugDeps, str]) -> None:
         else:
             notes_text = f"Grug notes:\n\n{note.content}"
 
-        # Always remind Grug who is currently speaking so notes can be
-        # cross-referenced with the right person.
+        # Remind Grug who is currently speaking in guild sessions so notes can
+        # be cross-referenced with the right person.  Not included in DMs since
+        # the user_id is already implicit from the DM session scope.
         if not ctx.deps.is_dm_session:
             notes_text += (
                 f"\n\n[Current speaker: user_id={ctx.deps.user_id}, "
@@ -93,12 +94,15 @@ def register_notes_tools(agent: Agent[GrugDeps, str]) -> None:
         Never write "you", "they", or a display name when referring to a
         specific person in server-scoped notes.  Always tag them with their
         stable Discord identity using the format:
-            [user:{user_id} @{username}]
-        The current speaker's user_id and username are always included at the
-        bottom of the ``read_notes`` output — use those values.  This ensures
-        notes remain meaningful after the conversation ends.
+            [user:{user_id}]
+        The current speaker's user_id is always included at the bottom of the
+        ``read_notes`` output for guild sessions — use that value.  This
+        ensures notes remain meaningful after the conversation ends while
+        avoiding unstable usernames/display names.  The raw tag is for
+        internal disambiguation only and must not be echoed back verbatim in
+        user-facing responses.
         Example: Instead of "you like coffee ice cream", write
-        "[user:123456789 @foehammer] likes coffee ice cream".
+        "[user:123456789] likes coffee ice cream".
         """
         from grug.db.models import GrugNote
         from grug.db.session import get_session_factory

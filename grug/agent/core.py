@@ -29,6 +29,11 @@ from grug.rag.history_archiver import ConversationArchiver
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of characters fetched per campaign when building the
+# campaign_context prompt fragment — prevents large rosters from inflating
+# token usage on every respond() call.
+_MAX_CAMPAIGN_CHARS = 10
+
 
 # ------------------------------------------------------------------
 # Dependencies
@@ -478,24 +483,9 @@ class GrugAgent:
             # notes appear before the actual conversation history.
             history = history[:2] + notes_messages + history[2:]
 
-        # Pre-load the guild's default TTRPG system so the agent can act on
-        # it immediately without asking the user which game they play.
+        # Default TTRPG system is determined lazily by tools (e.g. rule
+        # lookup) when needed, to avoid an extra DB query on every message.
         default_ttrpg_system: str | None = None
-        try:
-            from grug.db.models import GuildConfig as _GuildConfig
-            from grug.db.session import get_session_factory as _get_session_factory
-            from sqlalchemy import select as _select
-
-            _factory = _get_session_factory()
-            async with _factory() as _session:
-                _result = await _session.execute(
-                    _select(_GuildConfig.default_ttrpg_system).where(
-                        _GuildConfig.guild_id == guild_id
-                    )
-                )
-                default_ttrpg_system = _result.scalar_one_or_none()
-        except Exception:
-            logger.warning("Failed to load default_ttrpg_system for guild %d", guild_id)
 
         # Pre-load campaign details so the agent knows what campaign and
         # characters are active in this channel without needing a tool call.
@@ -516,9 +506,9 @@ class GrugAgent:
                         _chars = (
                             (
                                 await _session2.execute(
-                                    select(_Character).where(
-                                        _Character.campaign_id == campaign_id
-                                    )
+                                    select(_Character)
+                                    .where(_Character.campaign_id == campaign_id)
+                                    .limit(_MAX_CAMPAIGN_CHARS)
                                 )
                             )
                             .scalars()
@@ -550,7 +540,9 @@ class GrugAgent:
                         )
             except Exception:
                 logger.warning(
-                    "Failed to load campaign context for campaign %d", campaign_id
+                    "Failed to load campaign context for campaign %d",
+                    campaign_id,
+                    exc_info=True,
                 )
 
         deps = GrugDeps(

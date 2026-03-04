@@ -184,12 +184,12 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // 10 equally-spaced slider positions (indices 0–9) mapping to threshold values.
-// Index 0 → 0 ("Always"), index 9 → 0.8 ("Selectively"); middle positions are
+// Index 0 → 0 ("Always"), index 9 → 1.0 ("Selectively"); middle positions are
 // unlabelled ticks.
 const THRESHOLD_STEPS: { value: number; label: string }[] = Array.from(
   { length: 10 },
   (_, i) => ({
-    value: Math.round((i * (0.8 / 9)) * 1000) / 1000,
+    value: Math.round((i * (1.0 / 9)) * 1000) / 1000,
     label: i === 0 ? 'Always' : i === 9 ? 'Selectively' : '',
   }),
 );
