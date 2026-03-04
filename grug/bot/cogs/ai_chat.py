@@ -169,15 +169,11 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
             channel_cfg.auto_respond_threshold if channel_cfg else 0.0
         )
 
-        # Channel is enabled — log the message so Grug stays context-aware.
-        await self._agent.save_passive_message(
-            guild_id=message.guild.id,
-            channel_id=message.channel.id,
-            content=message.clean_content,
-            author_id=message.author.id,
-            author_name=message.author.display_name,
-        )
-
+        # Determine whether Grug should respond BEFORE saving anything.
+        # This avoids saving the message as passive (background chatter)
+        # and then having respond() save it again as non-passive — which
+        # created duplicates AND made the LLM see @mentions as "background
+        # channel chat" that the system prompt told it to ignore.
         should_respond = mentioned
         if not should_respond and auto_respond:
             if auto_respond_threshold == 0.0:
@@ -200,14 +196,11 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                                 ConversationMessage.archived.is_(False),
                             )
                             .order_by(ConversationMessage.created_at.desc())
-                            .limit(6)
+                            .limit(5)
                         )
                         _rows = list(reversed(_result.scalars().all()))
-                        # Drop the last row — it's the message we just passively saved.
-                        context_rows = _rows[:-1] if _rows else []
                         recent_context = [
-                            f"{r.author_name or 'Grug'}: {r.content}"
-                            for r in context_rows
+                            f"{r.author_name or 'Grug'}: {r.content}" for r in _rows
                         ]
                 except Exception:
                     logger.exception(
@@ -229,6 +222,16 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                 )
 
         if not should_respond:
+            # Save as passive only when NOT responding — Grug overheard but
+            # won't reply.  When Grug IS responding, respond() saves the
+            # message as non-passive, so we must not save it here too.
+            await self._agent.save_passive_message(
+                guild_id=message.guild.id,
+                channel_id=message.channel.id,
+                content=message.clean_content,
+                author_id=message.author.id,
+                author_name=message.author.display_name,
+            )
             return
 
         content = message.clean_content
