@@ -183,14 +183,18 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
 // Sub-panel: Channel Settings
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Equally-spaced slider positions → real threshold values sent to the API.
-const THRESHOLD_STEPS: { value: number; label: string }[] = [
-  { value: 0, label: 'Always' },
-  { value: 0.1, label: 'Often' },
-  { value: 0.5, label: 'Sometimes' },
-  { value: 0.8, label: 'Selectively' },
-];
-/** Convert a real threshold to the nearest slider index (0–3). */
+// 10 equally-spaced slider positions (indices 0–9) mapping to threshold values.
+// Index 0 → 0 ("Always"), index 9 → 0.8 ("Selectively"); middle positions are
+// unlabelled ticks.
+const THRESHOLD_STEPS: { value: number; label: string }[] = Array.from(
+  { length: 10 },
+  (_, i) => ({
+    value: Math.round((i * (0.8 / 9)) * 1000) / 1000,
+    label: i === 0 ? 'Always' : i === 9 ? 'Selectively' : '',
+  }),
+);
+
+/** Convert a real threshold to the nearest slider index (0–9). */
 function thresholdToIndex(t: number): number {
   let best = 0;
   let bestDist = Infinity;
@@ -322,49 +326,32 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                           <Typography variant="body2">#{ch.name}</Typography>
                         </TableCell>
                         <TableCell>
-                          <Stack spacing={0.5}>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              <Tooltip
-                                title={
-                                  autoRespond
-                                    ? 'Grug considers responding to every message here'
-                                    : 'Grug only replies to @mentions'
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, maxWidth: 300 }}>
+                            <Tooltip
+                              title={
+                                autoRespond
+                                  ? 'Grug considers responding to every message here'
+                                  : 'Grug only replies to @mentions'
+                              }
+                            >
+                              <Switch
+                                size="small"
+                                checked={autoRespond}
+                                onChange={(_, checked) =>
+                                  channelMutation.mutate({
+                                    channelId: ch.id,
+                                    patch: { auto_respond: checked },
+                                  })
                                 }
-                              >
-                                <Switch
-                                  size="small"
-                                  checked={autoRespond}
-                                  onChange={(_, checked) =>
-                                    channelMutation.mutate({
-                                      channelId: ch.id,
-                                      patch: { auto_respond: checked },
-                                    })
-                                  }
-                                  disabled={channelMutation.isPending || configsError}
-                                />
-                              </Tooltip>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ minWidth: 28 }}
-                              >
-                                {autoRespond ? 'On' : 'Off'}
-                              </Typography>
-                            </Box>
-                            {autoRespond && (
-                              <Box
-                                sx={{
-                                  pl: 0.5,
-                                  pr: 1,
-                                  pt: 1,
-                                  pb: 1,
-                                  maxWidth: 380,
-                                }}
-                              >
+                                disabled={channelMutation.isPending || configsError}
+                              />
+                            </Tooltip>
+                            {autoRespond ? (
+                              <Box sx={{ flex: 1, pt: 2, pb: 0.5 }}>
                                 <Slider
                                   size="small"
                                   min={0}
-                                  max={3}
+                                  max={9}
                                   step={1}
                                   value={sliderIndex}
                                   marks={THRESHOLD_STEPS.map((s, i) => ({ value: i, label: s.label }))}
@@ -388,11 +375,14 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                     });
                                   }}
                                   disabled={channelMutation.isPending || configsError}
-                                  sx={{ flex: 1, mt: 2, mb: 2 }}
                                 />
                               </Box>
+                            ) : (
+                              <Typography variant="caption" color="text.secondary">
+                                Off
+                              </Typography>
                             )}
-                          </Stack>
+                          </Box>
                         </TableCell>
                       </TableRow>
                     );
