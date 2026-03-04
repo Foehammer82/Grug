@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  Alert,
   Autocomplete,
   Box,
   Button,
@@ -11,6 +12,7 @@ import {
   DialogTitle,
   FormLabel,
   IconButton,
+  Link,
   Stack,
   Tab,
   Tabs,
@@ -19,6 +21,7 @@ import {
   Typography,
 } from '@mui/material';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import client from '../../api/client';
@@ -85,6 +88,7 @@ export default function CharacterDialog({
   const [owner, setOwner] = useState<GuildMember | string>(UNASSIGNED_MEMBER);
   const [file, setFile] = useState<File | null>(null);
   const [pathbuilderId, setPathbuilderId] = useState('');
+  const [pbIdCopied, setPbIdCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -173,6 +177,12 @@ export default function CharacterDialog({
     mutationFn: async () => {
       const payload: Record<string, unknown> = { name, system: campaignSystem };
       if (isAdmin) Object.assign(payload, resolveOwnerPayload(owner));
+
+      // When importing from Pathbuilder the name will be overwritten by the
+      // link step, so use a placeholder if the user left the field blank.
+      if (!payload.name && pathbuilderId.trim()) {
+        payload.name = 'Importing from Pathbuilder…';
+      }
 
       const res = await client.post<Character>(
         `/api/guilds/${guildId}/campaigns/${campaignId}/characters`,
@@ -359,10 +369,11 @@ export default function CharacterDialog({
               label="Name"
               size="small"
               fullWidth
-              required
+              required={!pathbuilderId.trim()}
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={!canEdit}
+              placeholder={pathbuilderId.trim() ? 'Will be imported from Pathbuilder' : undefined}
             />
 
             {isAdmin && (
@@ -430,10 +441,52 @@ export default function CharacterDialog({
                         if (fileRef.current) fileRef.current.value = '';
                       }
                     }}
-                    placeholder="Pathbuilder export URL number"
+                    placeholder="e.g. 123456"
                     helperText="Filling one clears the other"
-                    slotProps={{ htmlInput: { min: 1 } }}
+                    slotProps={{
+                      htmlInput: { min: 1 },
+                      input: pathbuilderId.trim()
+                        ? {
+                            endAdornment: (
+                              <Tooltip title={pbIdCopied ? 'Copied!' : 'Copy ID'} placement="top">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(pathbuilderId.trim()).then(() => {
+                                      setPbIdCopied(true);
+                                      setTimeout(() => setPbIdCopied(false), 1500);
+                                    });
+                                  }}
+                                  edge="end"
+                                >
+                                  <ContentCopyIcon fontSize="inherit" />
+                                </IconButton>
+                              </Tooltip>
+                            ),
+                          }
+                        : undefined,
+                    }}
                   />
+                  <Alert
+                    severity="info"
+                    sx={{ fontSize: '0.72rem', py: 0.25, '& .MuiAlert-message': { py: 0.5 } }}
+                  >
+                    <strong>How to import from Pathbuilder 2e:</strong>
+                    <ol style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+                      <li>
+                        Build your character at{' '}
+                        <Link href="https://pathbuilder2e.com" target="_blank" rel="noreferrer">
+                          pathbuilder2e.com
+                        </Link>
+                      </li>
+                      <li>Open the burger menu (☰) → <strong>Export JSON</strong></li>
+                      <li>Copy the ID number from the export page and paste it above</li>
+                      <li>
+                        Or ask Grug in Discord:{' '}
+                        <em>&ldquo;create my character from Pathbuilder ID 123456&rdquo;</em>
+                      </li>
+                    </ol>
+                  </Alert>
                 </Stack>
               </Box>
             )}
@@ -608,7 +661,7 @@ export default function CharacterDialog({
           <Button
             size="small"
             variant="contained"
-            disabled={isPending || !name.trim()}
+            disabled={isPending || (!name.trim() && !pathbuilderId.trim())}
             onClick={() => {
               if (isCreate) createMutation.mutate();
               else updateMutation.mutate();

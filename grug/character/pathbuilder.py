@@ -177,6 +177,12 @@ def _normalise_build(build: dict[str, Any], pathbuilder_id: int) -> PF2eCharacte
     attacks: list[PF2eAttack] = []
     for w in weapons_raw:
         if isinstance(w, dict):
+            # Pathbuilder may send striking rune as '' when unset — coerce to int.
+            striking_raw = w.get("str", 0)
+            try:
+                striking_val = int(striking_raw) if striking_raw != "" else 0
+            except (TypeError, ValueError):
+                striking_val = 0
             attacks.append(
                 PF2eAttack(
                     name=w.get("display") or w.get("name"),
@@ -185,7 +191,7 @@ def _normalise_build(build: dict[str, Any], pathbuilder_id: int) -> PF2eCharacte
                     damage_type=w.get("damageType"),
                     runes=w.get("runes") or [],
                     pot=w.get("pot", 0),
-                    striking=w.get("str", 0),
+                    striking=striking_val,
                 )
             )
 
@@ -247,6 +253,24 @@ def _normalise_build(build: dict[str, Any], pathbuilder_id: int) -> PF2eCharacte
         [str(lang) for lang in languages_raw] if isinstance(languages_raw, list) else []
     )
 
+    # Size — Pathbuilder sends an integer (0=Tiny,1=Small,2=Medium,3=Large,
+    # 4=Huge,5=Gargantuan).  The schema field is str|None so map it here.
+    _PF2E_SIZE_NAMES: dict[int, str] = {
+        0: "Tiny",
+        1: "Small",
+        2: "Medium",
+        3: "Large",
+        4: "Huge",
+        5: "Gargantuan",
+    }
+    size_raw = build.get("size")
+    if isinstance(size_raw, int):
+        size_str_val: str | None = _PF2E_SIZE_NAMES.get(size_raw, str(size_raw))
+    elif isinstance(size_raw, str):
+        size_str_val = size_raw or None
+    else:
+        size_str_val = None
+
     return PF2eCharacterSheet(
         system="pf2e",
         name=build.get("name"),
@@ -259,7 +283,7 @@ def _normalise_build(build: dict[str, Any], pathbuilder_id: int) -> PF2eCharacte
         background=build.get("background"),
         alignment=build.get("alignment"),
         deity=build.get("deity"),
-        size=build.get("size"),
+        size=size_str_val,
         key_ability=build.get("keyability"),
         age=str(build.get("age")) if build.get("age") else None,
         gender=build.get("gender"),

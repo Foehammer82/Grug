@@ -21,11 +21,51 @@ import {
   Typography,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import client from '../../api/client';
 import GuildMemberCell from './GuildMemberCell';
 import CharacterDialog from './CharacterDialog';
 import GoldManageDialog from './GoldManageDialog';
 import type { Campaign, Character } from '../../types';
+
+// ── CopyablePathbuilderChip ────────────────────────────────────────────────
+
+function CopyablePathbuilderChip({ pathbuilderId }: { pathbuilderId: number }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(String(pathbuilderId)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <Tooltip
+      title={
+        copied
+          ? 'Copied!'
+          : (
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+              <span>ID: {pathbuilderId}</span>
+              <ContentCopyIcon sx={{ fontSize: 12 }} />
+            </Stack>
+          )
+      }
+      placement="top"
+    >
+      <Chip
+        label="Pathbuilder"
+        size="small"
+        color={copied ? 'success' : 'secondary'}
+        variant="outlined"
+        onClick={handleCopy}
+        sx={{ height: 20, fontSize: '0.65rem', cursor: 'pointer' }}
+      />
+    </Tooltip>
+  );
+}
 
 interface CharacterTableProps {
   guildId: string;
@@ -230,9 +270,7 @@ export default function CharacterTable({
                   </TableCell>
                   <TableCell>
                     {ch.pathbuilder_id != null ? (
-                      <Tooltip title={`Pathbuilder ID: ${ch.pathbuilder_id}`}>
-                        <Chip label="Pathbuilder" size="small" color="secondary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                      </Tooltip>
+                      <CopyablePathbuilderChip pathbuilderId={ch.pathbuilder_id} />
                     ) : ch.file_path ? (
                       <Chip label="Sheet" size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
                     ) : null}

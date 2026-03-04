@@ -276,3 +276,111 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
                 f"{hp_str}{ac_str}\n"
                 f"(Full details are only available to the character's owner, GM, or an admin.)"
             )
+
+    @agent.tool
+    async def create_character_from_pathbuilder(
+        ctx: RunContext[GrugDeps],
+        pathbuilder_id: int,
+    ) -> str:
+        """Create a campaign character by importing from Pathbuilder 2e.
+
+        When a user shares their Pathbuilder ID (the number from the Export JSON
+        page URL), fetch their character and add it to the current campaign,
+        owned by the requesting user.
+
+        Use when someone says things like:
+        - "my pathbuilder ID is 123456"
+        - "create my character from pathbuilder 123456"
+        - "import pathbuilder 123456"
+
+        Only works when this channel has a linked campaign.  If the server-side
+        fetch is blocked by Cloudflare, instruct the user to use the web UI
+        instead (open their campaign, add character, enter the Pathbuilder ID).
+        """
+        from datetime import datetime, timezone
+
+        from grug.character.pathbuilder import (
+            PathbuilderError,
+            fetch_pathbuilder_character,
+        )
+        from grug.character.indexer import CharacterIndexer
+        from grug.db.models import Campaign, Character
+        from grug.db.session import get_session_factory
+
+        campaign_id = ctx.deps.campaign_id
+        if campaign_id is None:
+            return (
+                "There's no campaign linked to this channel, so I can't add a character here. "
+                "An admin needs to link a campaign first."
+            )
+
+        user_id = ctx.deps.user_id
+
+        try:
+            structured_data = await fetch_pathbuilder_character(pathbuilder_id)
+        except PathbuilderError as exc:
+            return (
+                f"I couldn't fetch your character from Pathbuilder: {exc}\n\n"
+                "Pathbuilder's site sometimes blocks automated requests. "
+                "Try importing via the **web dashboard** instead: open your campaign, "
+                "add a character, and enter your Pathbuilder ID in the Character Sheet section."
+            )
+
+        char_name = structured_data.get("name") or f"Pathbuilder #{pathbuilder_id}"
+
+        db_factory = get_session_factory()
+        async with db_factory() as session:
+            campaign = (
+                await session.execute(
+                    select(Campaign).where(
+                        Campaign.id == campaign_id,
+                        Campaign.guild_id == ctx.deps.guild_id,
+                    )
+                )
+            ).scalar_one_or_none()
+            if campaign is None:
+                return "Campaign not found."
+
+            character = Character(
+                owner_discord_user_id=user_id,
+                campaign_id=campaign_id,
+                name=char_name,
+                system="pf2e",
+                structured_data=structured_data,
+                pathbuilder_id=pathbuilder_id,
+                pathbuilder_synced_at=datetime.now(timezone.utc),
+            )
+            session.add(character)
+            await session.commit()
+            await session.refresh(character)
+            character_id = character.id
+
+        # Index for RAG search
+        try:
+            raw_text = structured_data.get("name", "")  # minimal index text
+            indexer = CharacterIndexer()
+            await indexer.index_character(character_id, raw_text)
+        except Exception:
+            logger.debug(
+                "Failed to index character %d after Pathbuilder import", character_id
+            )
+
+        level = structured_data.get("level")
+        class_name = structured_data.get("class_and_subclass")
+        ancestry = structured_data.get("race_or_ancestry")
+        details = [
+            x
+            for x in [
+                f"Level {level}" if level else None,
+                class_name,
+                ancestry,
+            ]
+            if x
+        ]
+        summary = " · ".join(details) if details else ""
+
+        return (
+            f"Done! **{char_name}** has been added to the campaign."
+            + (f"\n{summary}" if summary else "")
+            + "\nYou can view and manage your character sheet in the web dashboard."
+        )
