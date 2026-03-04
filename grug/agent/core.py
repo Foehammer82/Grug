@@ -99,7 +99,8 @@ def _build_agent() -> Agent[GrugDeps, str]:
             default_system_line = (
                 f"This server default game system: {default_system}. "
                 "Grug know this. Grug use this for all rule lookups unless "
-                "friend ask about different game."
+                "friend ask about different game. "
+                "NEVER ask friend which system they playing. Grug already know."
             )
         else:
             default_system_line = ""
@@ -483,8 +484,10 @@ class GrugAgent:
             # notes appear before the actual conversation history.
             history = history[:2] + notes_messages + history[2:]
 
-        # Default TTRPG system is determined lazily by tools (e.g. rule
-        # lookup) when needed, to avoid an extra DB query on every message.
+        # Resolve the default TTRPG system so the system prompt can tell
+        # Grug which game is being played.  Priority:
+        #   1. Campaign system (channel-specific)
+        #   2. Guild-level default_ttrpg_system (server-wide fallback)
         default_ttrpg_system: str | None = None
 
         # Pre-load campaign details so the agent knows what campaign and
@@ -503,6 +506,11 @@ class GrugAgent:
                         )
                     ).scalar_one_or_none()
                     if _campaign is not None:
+                        # Use the campaign's system as the default for this
+                        # channel — this is the most specific signal.
+                        if _campaign.system:
+                            default_ttrpg_system = _campaign.system
+
                         _chars = (
                             (
                                 await _session2.execute(
@@ -542,6 +550,29 @@ class GrugAgent:
                 logger.warning(
                     "Failed to load campaign context for campaign %d",
                     campaign_id,
+                    exc_info=True,
+                )
+
+        # Fall back to the guild-level default system when no campaign
+        # provided the system (no campaign linked, or campaign has no system).
+        if default_ttrpg_system is None and not is_dm_session:
+            try:
+                from grug.db.models import GuildConfig as _GuildConfig
+
+                _factory3 = get_session_factory()
+                async with _factory3() as _session3:
+                    _result3 = await _session3.execute(
+                        select(_GuildConfig.default_ttrpg_system).where(
+                            _GuildConfig.guild_id == guild_id
+                        )
+                    )
+                    _guild_system = _result3.scalar_one_or_none()
+                    if _guild_system:
+                        default_ttrpg_system = _guild_system
+            except Exception:
+                logger.warning(
+                    "Failed to load guild default TTRPG system for guild %d",
+                    guild_id,
                     exc_info=True,
                 )
 
