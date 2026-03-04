@@ -304,3 +304,104 @@ def schedule_daily_pathbuilder_sync() -> None:
         misfire_grace_time=300,
     )
     logger.info("Daily Pathbuilder sync scheduled at 03:00 UTC (job id: %s).", job_id)
+
+
+async def hourly_llm_usage_rollup() -> None:
+    """Re-aggregate raw LLM usage records into the daily aggregate table.
+
+    Runs every hour to ensure :class:`~grug.db.models.LLMUsageDailyAggregate`
+    stays current and consistent.  The job deletes existing aggregate rows for
+    the last two calendar days (UTC) and rebuilds them from the raw
+    :class:`~grug.db.models.LLMUsageRecord` table.
+
+    Using DELETE + INSERT avoids the PostgreSQL NULL-uniqueness quirk where
+    ``NULL != NULL`` in UNIQUE constraints, which would cause per-call upserts
+    to insert duplicate rows for background tasks that carry no ``guild_id`` or
+    ``user_id``.
+
+    Errors are caught and logged so a transient DB failure never crashes the
+    scheduler loop.
+    """
+    from sqlalchemy import cast, delete, func, select
+    from sqlalchemy.types import Date
+
+    from grug.db.models import LLMUsageDailyAggregate, LLMUsageRecord
+
+    now = datetime.now(timezone.utc)
+    # Refresh yesterday and today (two calendar days).  Using yesterday as the
+    # lower bound means the WHERE clause ``date >= since_date`` covers both days,
+    # handling timezone edge-cases that fall near midnight UTC.
+    since_date = (now - timedelta(days=1)).date()
+    since_dt = datetime(since_date.year, since_date.month, since_date.day, tzinfo=timezone.utc)
+
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            # Remove stale aggregates for the refresh window.
+            await session.execute(
+                delete(LLMUsageDailyAggregate).where(
+                    LLMUsageDailyAggregate.date >= since_date
+                )
+            )
+
+            # Re-aggregate from raw records.
+            date_col = cast(LLMUsageRecord.created_at, Date)
+            result = await session.execute(
+                select(
+                    date_col.label("date"),
+                    LLMUsageRecord.guild_id,
+                    LLMUsageRecord.user_id,
+                    LLMUsageRecord.model,
+                    LLMUsageRecord.call_type,
+                    func.count().label("request_count"),
+                    func.sum(LLMUsageRecord.input_tokens).label("input_tokens"),
+                    func.sum(LLMUsageRecord.output_tokens).label("output_tokens"),
+                )
+                .where(LLMUsageRecord.created_at >= since_dt)
+                .group_by(
+                    date_col,
+                    LLMUsageRecord.guild_id,
+                    LLMUsageRecord.user_id,
+                    LLMUsageRecord.model,
+                    LLMUsageRecord.call_type,
+                )
+            )
+            rows = result.all()
+
+            for row in rows:
+                session.add(
+                    LLMUsageDailyAggregate(
+                        date=row.date,
+                        guild_id=row.guild_id,
+                        user_id=row.user_id,
+                        model=row.model,
+                        call_type=row.call_type,
+                        request_count=int(row.request_count),
+                        input_tokens=int(row.input_tokens),
+                        output_tokens=int(row.output_tokens),
+                    )
+                )
+
+            await session.commit()
+            logger.info(
+                "LLM usage hourly rollup complete: %d aggregate row(s) refreshed.",
+                len(rows),
+            )
+    except Exception:
+        logger.exception("LLM usage hourly rollup failed")
+
+
+def schedule_hourly_llm_usage_rollup() -> None:
+    """Register an hourly APScheduler job to roll up LLM usage into daily aggregates."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = get_scheduler()
+    job_id = "llm_usage_hourly_rollup"
+    scheduler.add_job(
+        hourly_llm_usage_rollup,
+        trigger=CronTrigger(minute=0, timezone="UTC"),  # fires at the top of every hour
+        id=job_id,
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("LLM usage hourly rollup scheduled at :00 each hour (job id: %s).", job_id)

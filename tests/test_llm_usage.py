@@ -1,7 +1,8 @@
 """Tests for grug.llm_usage — price table, cost computation, and usage recording."""
 
 import pytest
-from unittest.mock import patch
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from grug.llm_usage import (
     CallType,
@@ -63,6 +64,7 @@ def test_call_type_string_values():
     assert str(CallType.HISTORY_ARCHIVE) == "history_archive"
     assert str(CallType.CHARACTER_PARSE) == "character_parse"
     assert str(CallType.CRON_PARSE) == "cron_parse"
+    assert str(CallType.SESSION_NOTE_SYNTHESIS) == "session_note_synthesis"
 
 
 # ---------------------------------------------------------------------------
@@ -121,3 +123,84 @@ async def test_record_llm_usage_swallows_db_errors(mock_db_session, caplog):
         )
 
     assert "Failed to record LLM usage" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# hourly_llm_usage_rollup
+# ---------------------------------------------------------------------------
+
+
+async def test_hourly_llm_usage_rollup_refreshes_aggregates(mock_db_session):
+    """hourly_llm_usage_rollup should delete recent aggregates and re-insert from raw records."""
+    from grug.scheduler.sync import hourly_llm_usage_rollup
+
+    mock_factory, mock_session = mock_db_session
+
+    # Simulate the SELECT returning two rows to re-aggregate (including a NULL-scoped row)
+    row1 = MagicMock()
+    row1.date = datetime(2026, 1, 1).date()
+    row1.guild_id = 111
+    row1.user_id = 222
+    row1.model = "claude-haiku-4-5"
+    row1.call_type = "chat"
+    row1.request_count = 5
+    row1.input_tokens = 10_000
+    row1.output_tokens = 5_000
+
+    row2 = MagicMock()
+    row2.date = datetime(2026, 1, 1).date()
+    row2.guild_id = None
+    row2.user_id = None
+    row2.model = "claude-haiku-4-5"
+    row2.call_type = "session_note_synthesis"
+    row2.request_count = 2
+    row2.input_tokens = 3_000
+    row2.output_tokens = 1_500
+
+    mock_result = MagicMock()
+    mock_result.all.return_value = [row1, row2]
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    with patch("grug.scheduler.sync.get_session_factory", return_value=mock_factory):
+        await hourly_llm_usage_rollup()
+
+    # DELETE + SELECT both executed
+    assert mock_session.execute.call_count == 2
+    # Two LLMUsageDailyAggregate objects added (one per aggregated row)
+    assert mock_session.add.call_count == 2
+    mock_session.commit.assert_called_once()
+
+
+async def test_hourly_llm_usage_rollup_swallows_errors(caplog):
+    """hourly_llm_usage_rollup must not raise on DB failure."""
+    from grug.scheduler.sync import hourly_llm_usage_rollup
+
+    mock_session = AsyncMock()
+    mock_session.execute.side_effect = RuntimeError("DB is down")
+    mock_factory = MagicMock()
+    mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+
+    with patch("grug.scheduler.sync.get_session_factory", return_value=mock_factory):
+        await hourly_llm_usage_rollup()  # must not raise
+
+    assert "LLM usage hourly rollup failed" in caplog.text
+
+
+async def test_hourly_llm_usage_rollup_no_records(mock_db_session):
+    """hourly_llm_usage_rollup handles the case where there are no raw records to aggregate."""
+    from grug.scheduler.sync import hourly_llm_usage_rollup
+
+    mock_factory, mock_session = mock_db_session
+
+    mock_result = MagicMock()
+    mock_result.all.return_value = []
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    with patch("grug.scheduler.sync.get_session_factory", return_value=mock_factory):
+        await hourly_llm_usage_rollup()
+
+    # DELETE + SELECT both executed, no add() calls, commit still called
+    assert mock_session.execute.call_count == 2
+    mock_session.add.assert_not_called()
+    mock_session.commit.assert_called_once()
