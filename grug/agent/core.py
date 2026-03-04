@@ -47,6 +47,8 @@ class GrugDeps:
     active_character_id: int | None = None
     is_dm_session: bool = False
     default_ttrpg_system: str | None = None
+    # Pre-loaded campaign summary injected into the system prompt.
+    campaign_context: str | None = None
 
 
 # ------------------------------------------------------------------
@@ -83,9 +85,17 @@ def _build_agent() -> Agent[GrugDeps, str]:
             )
         else:
             default_system_line = ""
+        campaign_ctx = ctx.deps.campaign_context
+        if campaign_ctx:
+            campaign_context_line = (
+                f"\nCAMPAIGN CONTEXT (this channel):\n{campaign_ctx}\n"
+            )
+        else:
+            campaign_context_line = ""
         return SYSTEM_PROMPT.format(
             now=datetime.now(timezone.utc).isoformat(),
             default_ttrpg_system_line=default_system_line,
+            campaign_context_line=campaign_context_line,
         )
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
@@ -468,6 +478,62 @@ class GrugAgent:
         except Exception:
             logger.warning("Failed to load default_ttrpg_system for guild %d", guild_id)
 
+        # Pre-load campaign details so the agent knows what campaign and
+        # characters are active in this channel without needing a tool call.
+        campaign_context: str | None = None
+        if campaign_id is not None:
+            try:
+                from grug.db.models import Campaign as _Campaign
+                from grug.db.models import Character as _Character
+
+                _factory2 = get_session_factory()
+                async with _factory2() as _session2:
+                    _campaign = (
+                        await _session2.execute(
+                            select(_Campaign).where(_Campaign.id == campaign_id)
+                        )
+                    ).scalar_one_or_none()
+                    if _campaign is not None:
+                        _chars = (
+                            (
+                                await _session2.execute(
+                                    select(_Character).where(
+                                        _Character.campaign_id == campaign_id
+                                    )
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                        char_lines: list[str] = []
+                        for _c in _chars:
+                            _sd = _c.structured_data or {}
+                            _level = _sd.get("level", "?")
+                            _ancestry = _sd.get("ancestry") or _sd.get("race") or ""
+                            _cls = _sd.get("class") or _sd.get("classes") or ""
+                            if isinstance(_cls, list):
+                                _cls = "/".join(str(x) for x in _cls)
+                            _detail = f"Lvl {_level}"
+                            if _cls:
+                                _detail += f" {_cls}"
+                            if _ancestry:
+                                _detail += f" {_ancestry}"
+                            char_lines.append(f"  - {_c.name} ({_detail})")
+                        _chars_text = (
+                            "\n".join(char_lines) if char_lines else "  (none yet)"
+                        )
+                        _status = "active" if _campaign.is_active else "inactive"
+                        campaign_context = (
+                            f"Campaign name: {_campaign.name}\n"
+                            f"Game system: {_campaign.system}\n"
+                            f"Status: {_status}\n"
+                            f"Characters:\n{_chars_text}"
+                        )
+            except Exception:
+                logger.warning(
+                    "Failed to load campaign context for campaign %d", campaign_id
+                )
+
         deps = GrugDeps(
             guild_id=guild_id,
             channel_id=channel_id,
@@ -477,6 +543,7 @@ class GrugAgent:
             active_character_id=active_character_id,
             is_dm_session=is_dm_session,
             default_ttrpg_system=default_ttrpg_system,
+            campaign_context=campaign_context,
         )
 
         try:

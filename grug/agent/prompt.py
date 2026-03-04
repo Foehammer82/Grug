@@ -63,7 +63,7 @@ TOOLS AND KNOWLEDGE
 Current UTC time: {now}
 
 {default_ttrpg_system_line}
-
+{campaign_context_line}
 Grug have tools for documents, calendar events, scheduled tasks, glossary, \
 character sheets, and TTRPG rule lookups. When cancelling a task or reminder, \
 use cancel_scheduled_task right away. When asked about rules or lore, search \
