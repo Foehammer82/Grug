@@ -64,8 +64,20 @@ def _compute_fire_times(
     Returns a list of ``(fire_at_utc, human_label)`` tuples.
     """
     results: list[tuple[datetime, str]] = []
-    hour, minute = (int(p) for p in reminder_time_str.split(":"))
-    reminder_time = time(hour, minute)
+    try:
+        parts = reminder_time_str.split(":")
+        hour, minute = int(parts[0]), int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError("out of range")
+        reminder_time = time(hour, minute)
+    except (ValueError, IndexError):
+        logger.warning(
+            "Invalid reminder_time %r; falling back to default %s",
+            reminder_time_str,
+            _DEFAULT_REMINDER_TIME,
+        )
+        h, m = (int(p) for p in _DEFAULT_REMINDER_TIME.split(":"))
+        reminder_time = time(h, m)
 
     for days_before in sorted(set(reminder_days), reverse=True):
         event_local_date = event_start.astimezone(tz).date()
@@ -192,7 +204,14 @@ async def refresh_event_reminders(event_id: int) -> list[int]:
             return []
 
         guild_id = event.guild_id
-        channel_id = event.channel_id or 0
+        channel_id = event.channel_id
+
+    if channel_id is None:
+        logger.info(
+            "refresh_event_reminders: event %d has no channel configured; skipping reminder creation",
+            event_id,
+        )
+        return []
 
     return await create_event_reminders(event_id, guild_id, channel_id)
 
@@ -294,7 +313,7 @@ async def maybe_create_schedule_poll(event_id: int) -> int | None:
             event_id=event_id,
             title=f"When should we play next? ({event.title})",
             options=options,
-            closes_at=base - timedelta(days=2),  # close voting 2 days before earliest
+            closes_at=base - timedelta(weeks=1) - timedelta(days=2),  # close 2 days before earliest option
             created_by=0,  # system sentinel
         )
         session.add(poll)

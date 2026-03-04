@@ -379,7 +379,7 @@ async def get_channel_config(
     db: AsyncSession = Depends(get_db),
 ) -> ChannelConfig:
     """Return the per-channel config, creating a default row if none exists."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(ChannelConfig).where(
             ChannelConfig.channel_id == channel_id,
@@ -410,7 +410,7 @@ async def update_channel_config(
     db: AsyncSession = Depends(get_db),
 ) -> ChannelConfig:
     """Update per-channel config fields (always_respond)."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
         select(ChannelConfig).where(
@@ -468,7 +468,7 @@ async def get_calendar_token(
     """
     import secrets
 
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     cfg = await get_or_404(
         db,
         GuildConfig,
@@ -495,7 +495,7 @@ async def regenerate_calendar_token(
     """
     import secrets
 
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     cfg = await get_or_404(
         db,
