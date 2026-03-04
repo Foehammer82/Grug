@@ -93,6 +93,9 @@ class CalendarEventOut(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: int | None
+    reminder_days: list[int] | None = None
+    reminder_time: str | None = None
+    poll_advance_days: int | None = None
     campaign_id: int | None = None
     created_by: int
     created_at: datetime
@@ -124,6 +127,9 @@ class CalendarEventCreate(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: str | int | None = None
+    reminder_days: list[int] | None = None
+    reminder_time: str | None = None
+    poll_advance_days: int | None = None
     campaign_id: int | None = None
 
 
@@ -135,6 +141,9 @@ class CalendarEventUpdate(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: str | int | None = None
+    reminder_days: list[int] | None = None
+    reminder_time: str | None = None
+    poll_advance_days: int | None = None
     campaign_id: int | None = None
 
 

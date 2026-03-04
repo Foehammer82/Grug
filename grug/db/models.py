@@ -402,6 +402,19 @@ class CalendarEvent(Base):
     # Human-readable location (voice channel name, address, etc.)
     location: Mapped[str | None] = mapped_column(String(256), nullable=True)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Reminder configuration — which days before the event to send reminders.
+    # Stored as a JSON list of integers, e.g. [7, 1] = 7 days + 1 day before.
+    reminder_days: Mapped[list[int] | None] = mapped_column(
+        JSON, nullable=True, default=lambda: [1]
+    )
+    # Time-of-day for reminders in guild timezone, HH:MM format.
+    reminder_time: Mapped[str | None] = mapped_column(
+        String(8), nullable=True, default="18:00"
+    )
+    # How many days in advance to open an availability poll (poll mode only).
+    poll_advance_days: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=7
+    )
     # Optional link to a campaign — session events are scoped to a campaign.
     campaign_id: Mapped[int | None] = mapped_column(
         Integer,

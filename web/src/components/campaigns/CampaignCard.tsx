@@ -278,9 +278,12 @@ export default function CampaignCard({
             guildId={c.guild_id}
             campaignId={c.id}
             campaignName={c.name}
+            scheduleMode={c.schedule_mode ?? 'fixed'}
             isAdmin={isAdmin}
             currentUserId={currentUserId}
             timezone={timezone}
+            channels={channels}
+            campaignChannelId={c.channel_id ?? null}
           />
         )}
       </Box>

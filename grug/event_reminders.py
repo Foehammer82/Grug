@@ -1,10 +1,13 @@
 """Event reminder lifecycle helpers.
 
 Auto-creates and manages ScheduledTask "reminder" rows linked to a
-CalendarEvent via ``event_id``.  By default, two reminders are created:
+CalendarEvent via ``event_id``.  Reminders are configured per-event via:
 
-  - **24 h before** the event start time
-  - **1 h before** the event start time
+  - ``reminder_days`` — list of integers (days before event), e.g. [7, 1]
+  - ``reminder_time`` — HH:MM string in the guild's configured timezone
+
+If no configuration is stored on the event, defaults to a single reminder
+1 day before at 18:00 guild time.
 
 All reminder tasks share ``source='system'`` so they are distinguishable
 from user-created tasks.
@@ -14,7 +17,7 @@ Public API
 - ``create_event_reminders(event_id, guild_id, channel_id)`` — idempotent;
   safe to call on create *or* update.
 - ``refresh_event_reminders(event_id)`` — re-computes fire times from the
-  event's current ``start_time``.  Existing reminder tasks are deleted and
+  event's current config.  Existing reminder tasks are deleted and
   re-created.
 - ``delete_event_reminders(event_id)`` — removes all reminder tasks (and
   their APScheduler jobs) for the given event.
@@ -23,21 +26,57 @@ Public API
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
+
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from grug.db.models import AvailabilityPoll, CalendarEvent, Campaign, ScheduledTask
+from grug.db.models import (
+    AvailabilityPoll,
+    CalendarEvent,
+    Campaign,
+    GuildConfig,
+    ScheduledTask,
+)
 from grug.db.session import get_session_factory
 from grug.scheduler.manager import add_date_job, remove_job
 
 logger = logging.getLogger(__name__)
 
-# (offset before event, human label)
-_REMINDER_OFFSETS: list[tuple[timedelta, str]] = [
-    (timedelta(hours=24), "24 h"),
-    (timedelta(hours=1), "1 h"),
-]
+# Defaults when the event has no explicit config
+_DEFAULT_REMINDER_DAYS: list[int] = [1]
+_DEFAULT_REMINDER_TIME: str = "18:00"
+
+
+def _compute_fire_times(
+    event_start: datetime,
+    reminder_days: list[int],
+    reminder_time_str: str,
+    tz: ZoneInfo,
+) -> list[tuple[datetime, str]]:
+    """Compute UTC fire times for each reminder day.
+
+    For each *d* in *reminder_days*, the reminder fires at
+    ``reminder_time_str`` (guild timezone) on the date that is *d* days
+    before the event start.
+
+    Returns a list of ``(fire_at_utc, human_label)`` tuples.
+    """
+    results: list[tuple[datetime, str]] = []
+    hour, minute = (int(p) for p in reminder_time_str.split(":"))
+    reminder_time = time(hour, minute)
+
+    for days_before in sorted(set(reminder_days), reverse=True):
+        event_local_date = event_start.astimezone(tz).date()
+        reminder_date = event_local_date - timedelta(days=days_before)
+        local_dt = datetime.combine(reminder_date, reminder_time, tzinfo=tz)
+        fire_at_utc = local_dt.astimezone(timezone.utc)
+
+        label = f"{days_before} day{'s' if days_before != 1 else ''}"
+        results.append((fire_at_utc, label))
+
+    return results
 
 
 async def create_event_reminders(
@@ -48,7 +87,7 @@ async def create_event_reminders(
     """Create reminder ScheduledTask rows for *event_id*.
 
     This is **idempotent** — it first deletes any existing reminders for
-    this event, then creates fresh ones based on the event's start time.
+    this event, then creates fresh ones based on the event's reminder config.
 
     Returns the IDs of the created tasks.
     """
@@ -65,20 +104,34 @@ async def create_event_reminders(
             logger.warning("create_event_reminders: event %d not found", event_id)
             return []
 
+        # Load guild timezone
+        guild = (
+            await session.execute(
+                select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+            )
+        ).scalar_one_or_none()
+        tz = ZoneInfo(guild.timezone if guild and guild.timezone else "UTC")
+
+        reminder_days = event.reminder_days or _DEFAULT_REMINDER_DAYS
+        reminder_time_str = event.reminder_time or _DEFAULT_REMINDER_TIME
+
         # Purge stale reminders first.
         await _delete_reminders_in_session(session, event_id)
 
         now = datetime.now(timezone.utc)
         created_ids: list[int] = []
 
-        for offset, label in _REMINDER_OFFSETS:
-            fire_at = event.start_time - offset
+        fire_times = _compute_fire_times(
+            event.start_time, reminder_days, reminder_time_str, tz
+        )
+
+        for fire_at, label in fire_times:
             # Skip reminders that would fire in the past.
             if fire_at <= now:
                 continue
 
             prompt = (
-                f"Reminder: **{event.title}** starts in {label}!  "
+                f"Reminder: **{event.title}** is in {label}!  "
                 f"Send a friendly reminder about the upcoming event."
             )
             task = ScheduledTask(

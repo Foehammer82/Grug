@@ -20,9 +20,6 @@ import {
   Stack,
   Switch,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant';
@@ -62,14 +59,8 @@ export default function CampaignsPage() {
   // Create banking state
   const [newPlayerBankingEnabled, setNewPlayerBankingEnabled] = useState(false);
 
-  // Create schedule mode
-  const [newScheduleMode, setNewScheduleMode] = useState<'fixed' | 'poll'>('fixed');
-
   // Edit banking state
   const [editPlayerBankingEnabled, setEditPlayerBankingEnabled] = useState(false);
-
-  // Edit schedule mode
-  const [editScheduleMode, setEditScheduleMode] = useState<'fixed' | 'poll'>('fixed');
 
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -122,7 +113,6 @@ export default function CampaignsPage() {
         gm_discord_user_id: newGmMember?.discord_user_id ?? null,
         banking_enabled: true,
         player_banking_enabled: newPlayerBankingEnabled,
-        schedule_mode: newScheduleMode,
       });
     },
     onSuccess: () => {
@@ -132,7 +122,6 @@ export default function CampaignsPage() {
       setNewChannel(null);
       setNewGmMember(null);
       setNewPlayerBankingEnabled(false);
-      setNewScheduleMode('fixed');
       setShowForm(false);
     },
   });
@@ -147,7 +136,6 @@ export default function CampaignsPage() {
         gm_discord_user_id: editGmMember?.discord_user_id ?? null,
         banking_enabled: true,
         player_banking_enabled: editPlayerBankingEnabled,
-        schedule_mode: editScheduleMode,
       });
     },
     onSuccess: () => {
@@ -196,7 +184,6 @@ export default function CampaignsPage() {
     setEditActive(c.is_active);
     setEditGmMember(guildMembers.find((m) => m.discord_user_id === c.gm_discord_user_id) ?? null);
     setEditPlayerBankingEnabled(c.player_banking_enabled);
-    setEditScheduleMode(c.schedule_mode ?? 'fixed');
   }
 
   function cancelEdit() {
@@ -207,7 +194,6 @@ export default function CampaignsPage() {
     setEditActive(true);
     setEditGmMember(null);
     setEditPlayerBankingEnabled(false);
-    setEditScheduleMode('fixed');
   }
 
   const activeCampaigns = campaigns.filter((c) => !c.deleted_at);
@@ -349,29 +335,6 @@ export default function CampaignsPage() {
                   }
                 />
               </Stack>
-            </Box>
-            {/* Scheduling */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Scheduling
-              </Typography>
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={newScheduleMode}
-                onChange={(_, v) => { if (v) setNewScheduleMode(v); }}
-              >
-                <ToggleButton value="fixed">
-                  <Tooltip title="Sessions happen on a fixed recurring schedule">
-                    <span>Fixed schedule</span>
-                  </Tooltip>
-                </ToggleButton>
-                <ToggleButton value="poll">
-                  <Tooltip title="Poll players for availability before each session">
-                    <span>Poll players</span>
-                  </Tooltip>
-                </ToggleButton>
-              </ToggleButtonGroup>
             </Box>
             <Box>
               <Button
@@ -591,29 +554,6 @@ export default function CampaignsPage() {
                   }
                 />
               </Stack>
-            </Box>
-            {/* Scheduling */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Scheduling
-              </Typography>
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={editScheduleMode}
-                onChange={(_, v) => { if (v) setEditScheduleMode(v); }}
-              >
-                <ToggleButton value="fixed">
-                  <Tooltip title="Sessions happen on a fixed recurring schedule">
-                    <span>Fixed schedule</span>
-                  </Tooltip>
-                </ToggleButton>
-                <ToggleButton value="poll">
-                  <Tooltip title="Poll players for availability before each session">
-                    <span>Poll players</span>
-                  </Tooltip>
-                </ToggleButton>
-              </ToggleButtonGroup>
             </Box>
           </Stack>
         </DialogContent>

@@ -164,6 +164,9 @@ async def create_event(
         rrule=body.rrule,
         location=body.location,
         channel_id=channel_id,
+        reminder_days=body.reminder_days,
+        reminder_time=body.reminder_time,
+        poll_advance_days=body.poll_advance_days,
         campaign_id=body.campaign_id,
         created_by=user_id,
     )
@@ -210,8 +213,9 @@ async def update_event(
     await db.commit()
     await db.refresh(event)
 
-    # Refresh reminders if the start time changed.
-    if "start_time" in body.model_fields_set:
+    # Refresh reminders if timing or reminder config changed.
+    _reminder_fields = {"start_time", "reminder_days", "reminder_time"}
+    if body.model_fields_set & _reminder_fields:
         from grug.event_reminders import refresh_event_reminders
 
         await refresh_event_reminders(event.id)

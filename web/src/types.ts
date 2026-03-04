@@ -47,6 +47,9 @@ export interface CalendarEvent {
   all_day: boolean;
   rrule: string | null;
   channel_id: string | null;
+  reminder_days: number[] | null;
+  reminder_time: string | null;
+  poll_advance_days: number | null;
   campaign_id: number | null;
   occurrence_start?: string;
   occurrence_end?: string;

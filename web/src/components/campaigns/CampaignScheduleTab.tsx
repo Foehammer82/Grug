@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  Autocomplete,
   Avatar,
   Box,
   Button,
@@ -9,36 +10,45 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  FormControlLabel,
-  FormLabel,
-  Radio,
-  RadioGroup,
+  Divider,
+  IconButton,
   Skeleton,
   Stack,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Tooltip,
   Typography,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import EventIcon from '@mui/icons-material/Event';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import CancelIcon from '@mui/icons-material/Cancel';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
 import RRuleBuilder from '../RRuleBuilder';
-import type { CalendarEvent, EventRSVP, GuildMember, RSVPStatus } from '../../types';
+import type { CalendarEvent, DiscordChannel, EventRSVP, GuildMember, RSVPStatus } from '../../types';
+
+/* ──────────────────────────────────────────────────────────────────── */
 
 interface CampaignScheduleTabProps {
   guildId: string;
   campaignId: number;
   campaignName: string;
+  /** From Campaign.schedule_mode — passed so the dialog can toggle it. */
+  scheduleMode: 'fixed' | 'poll';
   isAdmin: boolean;
   currentUserId: string;
   timezone: string;
+  channels: DiscordChannel[];
+  campaignChannelId: string | null;
 }
 
 const RSVP_CONFIG: Record<RSVPStatus, { label: string; color: 'success' | 'warning' | 'error'; icon: typeof CheckCircleIcon }> = {
@@ -70,6 +80,16 @@ function MemberBadge({ guildId, userId }: { guildId: string; userId: string }) {
   );
 }
 
+/**
+ * A unique cache key for a specific occurrence.
+ * Recurring events all share the same `event.id`, so we include
+ * `occurrence_start` to prevent RSVP state from bleeding between
+ * different occurrences of the same series.
+ */
+function occurrenceKey(event: CalendarEvent) {
+  return event.occurrence_start ?? event.start_time;
+}
+
 /** A single event card showing date, details, and RSVP controls. */
 function SessionEventCard({
   event,
@@ -84,9 +104,11 @@ function SessionEventCard({
 }) {
   const qc = useQueryClient();
 
-  // Fetch RSVPs for this event
+  // Per-occurrence cache key so RSVPs don't bleed between occurrences
+  const rsvpKey = ['event-rsvps', guildId, event.id, occurrenceKey(event)];
+
   const { data: rsvps, isLoading: rsvpsLoading } = useQuery<EventRSVP[]>({
-    queryKey: ['event-rsvps', guildId, event.id],
+    queryKey: rsvpKey,
     queryFn: async () => (await client.get<EventRSVP[]>(`/api/guilds/${guildId}/events/${event.id}/rsvps`)).data,
     staleTime: 30_000,
   });
@@ -96,7 +118,7 @@ function SessionEventCard({
       await client.put(`/api/guilds/${guildId}/events/${event.id}/rsvp`, { status });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['event-rsvps', guildId, event.id] });
+      qc.invalidateQueries({ queryKey: rsvpKey });
     },
   });
 
@@ -105,7 +127,7 @@ function SessionEventCard({
       await client.delete(`/api/guilds/${guildId}/events/${event.id}/rsvp`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['event-rsvps', guildId, event.id] });
+      qc.invalidateQueries({ queryKey: rsvpKey });
     },
   });
 
@@ -114,8 +136,8 @@ function SessionEventCard({
   const maybe = rsvps?.filter((r) => r.status === 'maybe') ?? [];
   const declined = rsvps?.filter((r) => r.status === 'declined') ?? [];
 
-  // Format the event date nicely
-  const startDate = new Date(event.start_time);
+  // Use occurrence_start when available (recurring expansions) so the correct date shows
+  const startDate = new Date(event.occurrence_start ?? event.start_time);
   const dateStr = startDate.toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'short',
@@ -264,62 +286,156 @@ function SessionEventCard({
   );
 }
 
+/** Form state shared by create and edit dialog. */
+interface ScheduleForm {
+  scheduleMode: 'fixed' | 'poll';
+  type: 'once' | 'recurring';
+  date: string;
+  time: string;
+  location: string;
+  description: string;
+  rrule: string;
+  channelId: string | null;
+  reminderTime: string;
+  reminderDays: number[];
+  pollAdvanceDays: number;
+}
+
+const EMPTY_FORM: ScheduleForm = {
+  scheduleMode: 'fixed',
+  type: 'recurring',
+  date: '',
+  time: '',
+  location: '',
+  description: '',
+  rrule: '',
+  channelId: null,
+  reminderTime: '18:00',
+  reminderDays: [1],
+  pollAdvanceDays: 7,
+};
+
+/** Max number of reminder slots allowed. */
+const MAX_REMINDER_DAYS = 5;
+
 export default function CampaignScheduleTab({
   guildId,
   campaignId,
   campaignName,
+  scheduleMode,
   isAdmin,
   currentUserId,
   timezone,
+  channels,
+  campaignChannelId,
 }: CampaignScheduleTabProps) {
   const qc = useQueryClient();
-  const [createOpen, setCreateOpen] = useState(false);
-  const [newType, setNewType] = useState<'once' | 'recurring'>('once');
-  const [newDate, setNewDate] = useState('');
-  const [newTime, setNewTime] = useState('');
-  const [newLocation, setNewLocation] = useState('');
-  const [newRrule, setNewRrule] = useState('');
-  const [newDescription, setNewDescription] = useState('');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [form, setForm] = useState<ScheduleForm>({ ...EMPTY_FORM, scheduleMode });
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
-  // Fetch events for this campaign
+  // 2-year window catches all upcoming occurrences and confirms if a schedule exists
   const { data: events, isLoading } = useQuery<CalendarEvent[]>({
     queryKey: ['campaign-events', guildId, campaignId],
     queryFn: async () => {
       const now = new Date().toISOString();
-      const end = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+      const end = new Date(Date.now() + 2 * 365 * 24 * 60 * 60 * 1000).toISOString();
       const res = await client.get<CalendarEvent[]>(`/api/guilds/${guildId}/events`, {
         params: { start: now, end },
       });
-      // Filter to only this campaign's events
       return res.data.filter((e) => e.campaign_id === campaignId);
     },
     staleTime: 30_000,
   });
 
-  const createMutation = useMutation({
+  // Show only the next 2 sessions to avoid cluttering the card
+  const upcoming = (events ?? []).slice(0, 2);
+
+  // The base event is the first result — all occurrences share the same event.id
+  const baseEvent = events && events.length > 0 ? events[0] : null;
+  const hasSchedule = baseEvent !== null;
+
+  /** Pre-fill form from existing event when opening the edit dialog. */
+  function openDialog() {
+    if (!baseEvent) {
+      setForm({ ...EMPTY_FORM, scheduleMode, channelId: campaignChannelId ?? null });
+    } else {
+      const start = new Date(baseEvent.start_time);
+      const localDate = start.toLocaleDateString('en-CA'); // YYYY-MM-DD
+      const localTime = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }); // HH:MM
+      setForm({
+        scheduleMode,
+        type: baseEvent.rrule ? 'recurring' : 'once',
+        date: localDate,
+        time: localTime,
+        location: baseEvent.location ?? '',
+        description: baseEvent.description ?? '',
+        rrule: baseEvent.rrule ?? '',
+        channelId: baseEvent.channel_id ?? campaignChannelId ?? null,
+        reminderTime: baseEvent.reminder_time ?? '18:00',
+        reminderDays: baseEvent.reminder_days ?? [1],
+        pollAdvanceDays: baseEvent.poll_advance_days ?? 7,
+      });
+    }
+    setConfirmDelete(false);
+    setDialogOpen(true);
+  }
+
+  // Keep scheduleMode in sync if the campaign prop changes externally
+  useEffect(() => {
+    setForm((f) => ({ ...f, scheduleMode }));
+  }, [scheduleMode]);
+
+  const saveMutation = useMutation({
     mutationFn: async () => {
-      const startTime = new Date(`${newDate}T${newTime || '00:00'}`).toISOString();
-      await client.post(`/api/guilds/${guildId}/events`, {
+      const startTime = new Date(`${form.date}T${form.time || '00:00'}`).toISOString();
+      const payload = {
         title: `${campaignName} — Session`,
         start_time: startTime,
-        location: newLocation || null,
-        rrule: newType === 'recurring' ? (newRrule || null) : null,
-        description: newDescription || null,
+        location: form.location || null,
+        rrule: form.type === 'recurring' ? form.rrule || null : null,
+        description: form.description || null,
+        channel_id: form.channelId || null,
+        reminder_days: form.reminderDays.length > 0 ? form.reminderDays : [1],
+        reminder_time: form.reminderTime || '18:00',
+        poll_advance_days: form.scheduleMode === 'poll' ? form.pollAdvanceDays : null,
         campaign_id: campaignId,
-      });
+      };
+
+      if (hasSchedule && baseEvent) {
+        await client.patch(`/api/guilds/${guildId}/events/${baseEvent.id}`, payload);
+      } else {
+        await client.post(`/api/guilds/${guildId}/events`, payload);
+      }
+
+      // Sync schedule_mode on campaign if it changed
+      if (form.scheduleMode !== scheduleMode) {
+        await client.patch(`/api/guilds/${guildId}/campaigns/${campaignId}`, {
+          schedule_mode: form.scheduleMode,
+        });
+        qc.invalidateQueries({ queryKey: ['campaigns', guildId] });
+      }
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['campaign-events', guildId, campaignId] });
       qc.invalidateQueries({ queryKey: ['events', guildId] });
-      setCreateOpen(false);
-      setNewType('once');
-      setNewDate('');
-      setNewTime('');
-      setNewLocation('');
-      setNewRrule('');
-      setNewDescription('');
+      setDialogOpen(false);
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!baseEvent) return;
+      await client.delete(`/api/guilds/${guildId}/events/${baseEvent.id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaign-events', guildId, campaignId] });
+      qc.invalidateQueries({ queryKey: ['events', guildId] });
+      setConfirmDelete(false);
+    },
+  });
+
+  const isFormValid = !!form.date && (form.type === 'once' || !!form.rrule);
 
   if (isLoading) {
     return (
@@ -329,34 +445,69 @@ export default function CampaignScheduleTab({
     );
   }
 
-  const upcoming = events ?? [];
-
   return (
     <Box>
-      {/* Header with create button */}
+      {/* Header */}
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
         <Typography variant="body2" color="text.secondary">
           {upcoming.length === 0
-            ? 'No upcoming sessions scheduled.'
-            : `${upcoming.length} upcoming session${upcoming.length !== 1 ? 's' : ''}`}
+            ? hasSchedule
+              ? 'No upcoming sessions in schedule.'
+              : 'No schedule set up yet.'
+            : `Next ${upcoming.length} upcoming session${upcoming.length !== 1 ? 's' : ''}`}
         </Typography>
+
         {isAdmin && (
-          <Button
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={() => setCreateOpen(true)}
-            sx={{ textTransform: 'none', fontSize: '0.75rem' }}
-          >
-            Schedule Session
-          </Button>
+          <Stack direction="row" spacing={0.5} alignItems="center">
+            <Button
+              size="small"
+              startIcon={hasSchedule ? <EditIcon /> : <EventIcon />}
+              onClick={openDialog}
+              sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+            >
+              {hasSchedule ? 'Edit Schedule' : 'Set Up Schedule'}
+            </Button>
+            {hasSchedule && !confirmDelete && (
+              <Tooltip title="Delete schedule">
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <DeleteIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            {hasSchedule && confirmDelete && (
+              <Stack direction="row" spacing={0.5} alignItems="center">
+                <Button
+                  size="small"
+                  color="error"
+                  variant="contained"
+                  disabled={deleteMutation.isPending}
+                  onClick={() => deleteMutation.mutate()}
+                  sx={{ textTransform: 'none', fontSize: '0.7rem' }}
+                >
+                  {deleteMutation.isPending ? 'Deleting…' : 'Confirm Delete'}
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => setConfirmDelete(false)}
+                  sx={{ textTransform: 'none', fontSize: '0.7rem' }}
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            )}
+          </Stack>
         )}
       </Stack>
 
-      {/* Event list */}
+      {/* Next 2 upcoming sessions */}
       <Stack spacing={1.5}>
         {upcoming.map((ev) => (
           <SessionEventCard
-            key={`${ev.id}-${ev.occurrence_start ?? ev.start_time}`}
+            key={`${ev.id}-${occurrenceKey(ev)}`}
             event={ev}
             guildId={guildId}
             currentUserId={currentUserId}
@@ -365,32 +516,64 @@ export default function CampaignScheduleTab({
         ))}
       </Stack>
 
-      {/* Quick-create session dialog */}
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ pb: 0.5 }}>Schedule Session</DialogTitle>
+      {/* Create / edit schedule dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pb: 0.5 }}>
+          {hasSchedule ? 'Edit Campaign Schedule' : 'Set Up Campaign Schedule'}
+        </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <FormControl>
-              <FormLabel>Session type</FormLabel>
-              <RadioGroup
-                row
-                value={newType}
-                onChange={(e) => setNewType(e.target.value as 'once' | 'recurring')}
+            {/* Scheduling mode */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Scheduling mode
+              </Typography>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={form.scheduleMode}
+                onChange={(_, v) => { if (v) setForm((f) => ({ ...f, scheduleMode: v })); }}
               >
-                <FormControlLabel value="once" control={<Radio size="small" />} label="One-off" />
-                <FormControlLabel value="recurring" control={<Radio size="small" />} label="Recurring" />
-              </RadioGroup>
-            </FormControl>
+                <ToggleButton value="fixed">
+                  <Tooltip title="Sessions happen on a fixed recurring schedule">
+                    <span>Fixed schedule</span>
+                  </Tooltip>
+                </ToggleButton>
+                <ToggleButton value="poll">
+                  <Tooltip title="Poll players for availability before each session">
+                    <span>Poll players</span>
+                  </Tooltip>
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+
+            {/* Session type */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Session type
+              </Typography>
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                value={form.type}
+                onChange={(_, v) => { if (v) setForm((f) => ({ ...f, type: v })); }}
+              >
+                <ToggleButton value="recurring">Recurring</ToggleButton>
+                <ToggleButton value="once">One-off</ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+
+            {/* Date & time */}
             <Stack direction="row" spacing={1.5}>
               <TextField
-                label="Date"
+                label={form.type === 'recurring' ? 'First session date' : 'Date'}
                 type="date"
                 size="small"
                 fullWidth
                 required
                 autoFocus
-                value={newDate}
-                onChange={(e) => setNewDate(e.target.value)}
+                value={form.date}
+                onChange={(e) => setForm((f) => ({ ...f, date: e.target.value }))}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
               <TextField
@@ -398,24 +581,26 @@ export default function CampaignScheduleTab({
                 type="time"
                 size="small"
                 fullWidth
-                value={newTime}
-                onChange={(e) => setNewTime(e.target.value)}
+                value={form.time}
+                onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
-            {newType === 'recurring' && (
+
+            {form.type === 'recurring' && (
               <RRuleBuilder
                 guildId={guildId}
-                value={newRrule}
-                onChange={setNewRrule}
+                value={form.rrule}
+                onChange={(v) => setForm((f) => ({ ...f, rrule: v }))}
               />
             )}
+
             <TextField
               label="Location (optional)"
               size="small"
               fullWidth
-              value={newLocation}
-              onChange={(e) => setNewLocation(e.target.value)}
+              value={form.location}
+              onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
               placeholder="e.g. Voice Channel, Roll20, in person"
             />
             <TextField
@@ -424,25 +609,139 @@ export default function CampaignScheduleTab({
               fullWidth
               multiline
               minRows={2}
-              value={newDescription}
-              onChange={(e) => setNewDescription(e.target.value)}
+              value={form.description}
+              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
             />
-            {createMutation.isError && (
+
+            <Divider />
+
+            {/* Announcement channel */}
+            <Autocomplete
+              size="small"
+              fullWidth
+              options={channels}
+              value={channels.find((c) => c.id === form.channelId) ?? null}
+              onChange={(_, ch) => setForm((f) => ({ ...f, channelId: ch?.id ?? null }))}
+              getOptionLabel={(ch) => `#${ch.name}`}
+              filterOptions={(opts, { inputValue }) => {
+                const q = inputValue.toLowerCase();
+                return opts.filter((ch) => ch.name.toLowerCase().includes(q) || ch.id.includes(q));
+              }}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              renderOption={(props, ch) => (
+                <Box component="li" {...props} key={ch.id}>
+                  <span>#{ch.name}</span>
+                  <Typography component="span" variant="caption" color="text.disabled" sx={{ ml: 1 }}>
+                    {ch.id}
+                  </Typography>
+                </Box>
+              )}
+              renderInput={(params) => (
+                <TextField {...params} label="Announcement Channel (optional)" helperText="Where Grug posts session reminders" />
+              )}
+            />
+
+            {/* Reminder time */}
+            <TextField
+              label="Reminder time of day"
+              type="time"
+              size="small"
+              fullWidth
+              value={form.reminderTime}
+              onChange={(e) => setForm((f) => ({ ...f, reminderTime: e.target.value }))}
+              slotProps={{ inputLabel: { shrink: true } }}
+              helperText={`Reminders fire at this time in the server timezone (${timezone || 'UTC'})`}
+            />
+
+            {/* Reminder days */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Reminders (days before session)
+              </Typography>
+              <Stack spacing={1}>
+                {form.reminderDays.map((d, idx) => (
+                  <Stack key={idx} direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      size="small"
+                      type="number"
+                      value={d}
+                      onChange={(e) => {
+                        const val = Math.max(0, parseInt(e.target.value) || 0);
+                        setForm((f) => {
+                          const next = [...f.reminderDays];
+                          next[idx] = val;
+                          return { ...f, reminderDays: next };
+                        });
+                      }}
+                      slotProps={{ htmlInput: { min: 0, max: 90 } }}
+                      sx={{ width: 100 }}
+                    />
+                    <Typography variant="body2" color="text.secondary">
+                      day{d !== 1 ? 's' : ''} before
+                    </Typography>
+                    {form.reminderDays.length > 1 && (
+                      <IconButton
+                        size="small"
+                        color="error"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            reminderDays: f.reminderDays.filter((_, i) => i !== idx),
+                          }))
+                        }
+                      >
+                        <RemoveCircleOutlineIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Stack>
+                ))}
+                {form.reminderDays.length < MAX_REMINDER_DAYS && (
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() =>
+                      setForm((f) => ({ ...f, reminderDays: [...f.reminderDays, 1] }))
+                    }
+                    sx={{ textTransform: 'none', alignSelf: 'flex-start', fontSize: '0.75rem' }}
+                  >
+                    Add reminder
+                  </Button>
+                )}
+              </Stack>
+            </Box>
+
+            {/* Poll advance days (only in poll mode) */}
+            {form.scheduleMode === 'poll' && (
+              <TextField
+                label="Poll advance (days)"
+                type="number"
+                size="small"
+                fullWidth
+                value={form.pollAdvanceDays}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, pollAdvanceDays: Math.max(1, parseInt(e.target.value) || 1) }))
+                }
+                slotProps={{ htmlInput: { min: 1, max: 90 } }}
+                helperText="How many days before the session to open the availability poll"
+              />
+            )}
+
+            {saveMutation.isError && (
               <Typography variant="caption" color="error">
-                {(createMutation.error as Error)?.message ?? 'Failed to create event.'}
+                {(saveMutation.error as Error)?.message ?? 'Failed to save schedule.'}
               </Typography>
             )}
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button size="small" onClick={() => setCreateOpen(false)}>Cancel</Button>
+          <Button size="small" onClick={() => setDialogOpen(false)}>Cancel</Button>
           <Button
             size="small"
             variant="contained"
-            disabled={!newDate || (newType === 'recurring' && !newRrule) || createMutation.isPending}
-            onClick={() => createMutation.mutate()}
+            disabled={!isFormValid || saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
           >
-            {createMutation.isPending ? 'Creating…' : 'Create'}
+            {saveMutation.isPending ? 'Saving…' : hasSchedule ? 'Save Changes' : 'Create Schedule'}
           </Button>
         </DialogActions>
       </Dialog>
