@@ -183,6 +183,9 @@ export interface Campaign {
   system: string;
   is_active: boolean;
   gm_discord_user_id: string | null;
+  banking_enabled: boolean;
+  player_banking_enabled: boolean;
+  party_gold: number;
   created_by: string;
   created_at: string;
   deleted_at: string | null;
@@ -261,6 +264,7 @@ export interface Character {
   pathbuilder_id: number | null;
   file_path: string | null;
   notes: string | null;
+  gold: number;
   pathbuilder_synced_at: string | null;
   created_at: string;
   updated_at: string;
@@ -295,6 +299,19 @@ export interface BuiltinRuleSource {
   system: string | null;
   url: string;
   enabled: boolean;
+}
+
+/* ── Gold transactions ────────────────────────────────────────────── */
+
+export interface GoldTransaction {
+  id: number;
+  campaign_id: number;
+  character_id: number | null;
+  /** Serialized as a string by the API to preserve Discord snowflake precision. */
+  actor_discord_user_id: string;
+  amount: number;
+  reason: string | null;
+  created_at: string;
 }
 
 /* ── Grug Notes ───────────────────────────────────────────────────── */

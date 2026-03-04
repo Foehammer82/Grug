@@ -10,6 +10,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  IconButton,
   Stack,
   Table,
   TableBody,
@@ -19,9 +20,11 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
+import EditIcon from '@mui/icons-material/Edit';
 import client from '../../api/client';
 import GuildMemberCell from './GuildMemberCell';
 import CharacterDialog from './CharacterDialog';
+import GoldManageDialog from './GoldManageDialog';
 import type { Campaign, Character } from '../../types';
 
 interface CharacterTableProps {
@@ -31,6 +34,10 @@ interface CharacterTableProps {
   isAdmin: boolean;
   currentUserId: string;
   allCampaigns: Campaign[];
+  bankingEnabled?: boolean;
+  playerBankingEnabled?: boolean;
+  campaignGmId?: string;
+  partyGold?: number;
 }
 
 export default function CharacterTable({
@@ -40,6 +47,10 @@ export default function CharacterTable({
   isAdmin,
   currentUserId,
   allCampaigns,
+  bankingEnabled = false,
+  playerBankingEnabled = false,
+  campaignGmId,
+  partyGold = 0,
 }: CharacterTableProps) {
   const qc = useQueryClient();
 
@@ -98,6 +109,9 @@ export default function CharacterTable({
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [dialogChar, setDialogChar] = useState<Character | null>(null);
   const [dialogTab, setDialogTab] = useState(0);
+
+  // ── Gold manage dialog state ──────────────────────────────────────────
+  const [goldChar, setGoldChar] = useState<Character | null>(null);
 
   function openCreate() {
     setDialogMode('create');
@@ -174,6 +188,7 @@ export default function CharacterTable({
               <TableCell>Name</TableCell>
               <TableCell sx={{ width: 100 }}>Source</TableCell>
               <TableCell sx={{ width: 140 }}>Owner</TableCell>
+              {bankingEnabled && <TableCell sx={{ width: 90 }}>Gold</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -229,6 +244,36 @@ export default function CharacterTable({
                       displayName={ch.owner_display_name}
                     />
                   </TableCell>
+                  {bankingEnabled && (() => {
+                    const isAdminOrGm = isAdmin || campaignGmId === currentUserId;
+                    const isOwner = ch.owner_discord_user_id === currentUserId;
+                    const canSee = isAdminOrGm || isOwner;
+                    const canManage = isAdminOrGm || (isOwner && playerBankingEnabled);
+                    return (
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        {canSee ? (
+                          <Stack direction="row" alignItems="center" spacing={0.25}>
+                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                              {(ch.gold ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} gp
+                            </Typography>
+                            {canManage && (
+                              <Tooltip title="Manage gold" placement="top">
+                                <IconButton
+                                  size="small"
+                                  sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, p: 0.25 }}
+                                  onClick={() => setGoldChar(ch)}
+                                >
+                                  <EditIcon sx={{ fontSize: 12 }} />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </Stack>
+                        ) : (
+                          <Typography variant="body2" color="text.disabled">&mdash;</Typography>
+                        )}
+                      </TableCell>
+                    );
+                  })()}
                 </TableRow>
               );
             })}
@@ -257,6 +302,20 @@ export default function CharacterTable({
         allCampaigns={allCampaigns}
         initialTab={dialogTab}
       />
+
+      {/* Gold manage dialog */}
+      {goldChar && (
+        <GoldManageDialog
+          open={goldChar !== null}
+          onClose={() => setGoldChar(null)}
+          guildId={guildId}
+          campaignId={campaignId}
+          character={goldChar}
+          isAdminOrGm={isAdmin || campaignGmId === currentUserId}
+          playerBankingEnabled={playerBankingEnabled}
+          partyGold={partyGold}
+        />
+      )}
 
       {/* Batch delete confirmation */}
       <Dialog open={deleteConfirmOpen} onClose={() => setDeleteConfirmOpen(false)} maxWidth="xs" fullWidth>

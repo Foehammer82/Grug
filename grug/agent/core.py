@@ -112,6 +112,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
         )
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
+    from grug.agent.tools.banking_tools import register_banking_tools
     from grug.agent.tools.campaign_tools import register_campaign_tools
     from grug.agent.tools.character_tools import register_character_tools
     from grug.agent.tools.glossary_tools import register_glossary_tools
@@ -126,6 +127,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_glossary_tools(agent)
     register_character_tools(agent)
     register_campaign_tools(agent)
+    register_banking_tools(agent)
     register_rules_tools(agent)
     register_notes_tools(agent)
 

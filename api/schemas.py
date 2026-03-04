@@ -311,6 +311,10 @@ class CampaignOut(BaseModel):
     system: str
     is_active: bool
     gm_discord_user_id: int | None = None
+    # Banking
+    banking_enabled: bool = False
+    player_banking_enabled: bool = False
+    party_gold: float = 0.0
     created_by: int
     created_at: datetime
     deleted_at: datetime | None = None
@@ -335,6 +339,8 @@ class CampaignCreate(BaseModel):
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     channel_id: str | int
     gm_discord_user_id: str | int | None = None
+    banking_enabled: bool = False
+    player_banking_enabled: bool = False
 
 
 class CampaignUpdate(BaseModel):
@@ -343,6 +349,8 @@ class CampaignUpdate(BaseModel):
     is_active: bool | None = None
     channel_id: str | int | None = None
     gm_discord_user_id: str | int | None = None
+    banking_enabled: bool | None = None
+    player_banking_enabled: bool | None = None
 
 
 class CharacterCreate(BaseModel):
@@ -372,6 +380,7 @@ class CharacterOut(BaseModel):
     pathbuilder_id: int | None = None
     file_path: str | None
     notes: str | None = None
+    gold: float = 0.0
     pathbuilder_synced_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
@@ -410,6 +419,47 @@ class CharacterCopyRequest(BaseModel):
     """Request body for copying a character to a different campaign."""
 
     target_campaign_id: int
+
+
+# --------------------------------------------------------------------------- #
+# Gold banking schemas                                                         #
+# --------------------------------------------------------------------------- #
+
+
+class GoldAdjustRequest(BaseModel):
+    """Adjust a gold balance by a signed amount.  Positive = credit, negative = debit."""
+
+    amount: float
+    reason: str | None = None
+
+
+class GoldTransferRequest(BaseModel):
+    """Transfer gold between a character wallet and the party pool.
+
+    Exactly one of ``from_character_id`` / ``to_character_id`` must be None
+    (the None side means the party pool).
+    """
+
+    from_character_id: int | None = None  # None = from party pool
+    to_character_id: int | None = None  # None = to party pool
+    amount: float
+    reason: str | None = None
+
+
+class GoldTransactionOut(BaseModel):
+    id: int
+    campaign_id: int
+    character_id: int | None = None
+    actor_discord_user_id: int
+    amount: float
+    reason: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("actor_discord_user_id")
+    def _serialize_actor_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
 
 
 class UserProfileOut(BaseModel):

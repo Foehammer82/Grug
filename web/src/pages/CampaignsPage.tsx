@@ -14,9 +14,11 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   Paper,
   Snackbar,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material';
@@ -53,6 +55,12 @@ export default function CampaignsPage() {
 
   // Create GM state
   const [newGmMember, setNewGmMember] = useState<GuildMember | null>(null);
+
+  // Create banking state
+  const [newPlayerBankingEnabled, setNewPlayerBankingEnabled] = useState(false);
+
+  // Edit banking state
+  const [editPlayerBankingEnabled, setEditPlayerBankingEnabled] = useState(false);
 
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -103,6 +111,8 @@ export default function CampaignsPage() {
         system: newSystem || 'unknown',
         channel_id: newChannel?.id ?? null,
         gm_discord_user_id: newGmMember?.discord_user_id ?? null,
+        banking_enabled: true,
+        player_banking_enabled: newPlayerBankingEnabled,
       });
     },
     onSuccess: () => {
@@ -111,6 +121,7 @@ export default function CampaignsPage() {
       setNewSystem('');
       setNewChannel(null);
       setNewGmMember(null);
+      setNewPlayerBankingEnabled(false);
       setShowForm(false);
     },
   });
@@ -123,6 +134,8 @@ export default function CampaignsPage() {
         channel_id: editChannel?.id ?? null,
         is_active: editActive,
         gm_discord_user_id: editGmMember?.discord_user_id ?? null,
+        banking_enabled: true,
+        player_banking_enabled: editPlayerBankingEnabled,
       });
     },
     onSuccess: () => {
@@ -170,6 +183,7 @@ export default function CampaignsPage() {
     setEditChannel(channels.find((ch) => ch.id === c.channel_id) ?? null);
     setEditActive(c.is_active);
     setEditGmMember(guildMembers.find((m) => m.discord_user_id === c.gm_discord_user_id) ?? null);
+    setEditPlayerBankingEnabled(c.player_banking_enabled);
   }
 
   function cancelEdit() {
@@ -179,6 +193,7 @@ export default function CampaignsPage() {
     setEditChannel(null);
     setEditActive(true);
     setEditGmMember(null);
+    setEditPlayerBankingEnabled(false);
   }
 
   const activeCampaigns = campaigns.filter((c) => !c.deleted_at);
@@ -298,6 +313,29 @@ export default function CampaignsPage() {
                 <TextField {...params} label="Game Master (optional)" />
               )}
             />
+            {/* Banking */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Banking
+              </Typography>
+              <Stack spacing={0.5} sx={{ pl: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={newPlayerBankingEnabled}
+                      onChange={(e) => setNewPlayerBankingEnabled(e.target.checked)}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2">Allow player transactions</Typography>
+                      <Typography variant="caption" color="text.secondary">Players can add/remove gold from their own wallet and deposit to or withdraw from the party pool</Typography>
+                    </Box>
+                  }
+                />
+              </Stack>
+            </Box>
             <Box>
               <Button
                 type="submit"
@@ -493,6 +531,29 @@ export default function CampaignsPage() {
                 <TextField {...params} label="Game Master (optional)" />
               )}
             />
+            {/* Banking */}
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                Banking
+              </Typography>
+              <Stack spacing={0.5} sx={{ pl: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={editPlayerBankingEnabled}
+                      onChange={(e) => setEditPlayerBankingEnabled(e.target.checked)}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2">Allow player transactions</Typography>
+                      <Typography variant="caption" color="text.secondary">Players can add/remove gold from their own wallet and deposit to or withdraw from the party pool</Typography>
+                    </Box>
+                  }
+                />
+              </Stack>
+            </Box>
           </Stack>
         </DialogContent>
         <DialogActions>

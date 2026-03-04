@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     JSON,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -141,8 +142,29 @@ class Campaign(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    # ── Banking ──────────────────────────────────────────────────────────
+    # Master switch — no banking features work when False.
+    banking_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # When True, players (not just GM/admin) may adjust their own wallet and
+    # the party pool.
+    player_banking_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # When True, every gold mutation is recorded in gold_transactions.
+    banking_ledger_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Shared party gold pool (single float, system-agnostic).
+    party_gold: Mapped[float] = mapped_column(
+        Numeric(precision=12, scale=4), default=0.0, server_default="0", nullable=False
+    )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
+    gold_transactions: Mapped[list["GoldTransaction"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
 
 
 class Character(Base):
@@ -183,6 +205,10 @@ class Character(Base):
     pathbuilder_synced_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, default=None
     )
+    # Personal gold wallet — only meaningful when the campaign has banking_enabled.
+    gold: Mapped[float] = mapped_column(
+        Numeric(precision=12, scale=4), default=0.0, server_default="0", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -193,6 +219,37 @@ class Character(Base):
     )
 
     campaign: Mapped["Campaign | None"] = relationship(back_populates="characters")
+
+
+class GoldTransaction(Base):
+    """A single gold movement recorded when campaign.banking_ledger_enabled is True.
+
+    Covers both party-pool transactions (character_id IS NULL) and per-character
+    wallet adjustments.  ``amount`` is signed: positive = credit, negative = debit.
+    """
+
+    __tablename__ = "gold_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=False, index=True
+    )
+    # NULL means this is a party-pool transaction.
+    character_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("characters.id"), nullable=True, index=True
+    )
+    # Discord snowflake of whoever triggered the transaction.
+    actor_discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # Signed amount: positive = credit, negative = debit.
+    amount: Mapped[float] = mapped_column(
+        Numeric(precision=12, scale=4), nullable=False
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    campaign: Mapped["Campaign"] = relationship(back_populates="gold_transactions")
 
 
 class UserProfile(Base):

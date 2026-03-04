@@ -106,6 +106,9 @@ async def list_campaigns(
             system=c.system,
             is_active=c.is_active,
             gm_discord_user_id=c.gm_discord_user_id,
+            banking_enabled=c.banking_enabled,
+            player_banking_enabled=c.player_banking_enabled,
+            party_gold=float(c.party_gold),
             created_by=c.created_by,
             created_at=c.created_at,
             deleted_at=c.deleted_at,
@@ -137,6 +140,8 @@ async def create_campaign(
         gm_discord_user_id=int(body.gm_discord_user_id)
         if body.gm_discord_user_id
         else None,
+        banking_enabled=body.banking_enabled,
+        player_banking_enabled=body.player_banking_enabled,
         created_by=int(user["id"]),
         created_at=datetime.now(timezone.utc),
     )
@@ -178,6 +183,10 @@ async def update_campaign(
         campaign.gm_discord_user_id = (  # type: ignore[assignment]
             int(body.gm_discord_user_id) if body.gm_discord_user_id else None
         )
+    if "banking_enabled" in body.model_fields_set:
+        campaign.banking_enabled = body.banking_enabled  # type: ignore[assignment]
+    if "player_banking_enabled" in body.model_fields_set:
+        campaign.player_banking_enabled = body.player_banking_enabled  # type: ignore[assignment]
     await db.commit()
     await db.refresh(campaign)
     return campaign
