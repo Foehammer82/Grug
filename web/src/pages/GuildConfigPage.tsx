@@ -31,6 +31,7 @@ import { useParams } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import type { BuiltinRuleSource, DiscordChannel, GuildConfig } from '../types';
+import { SYSTEM_OPTIONS, systemLabel } from '../constants';
 
 interface ChannelConfig {
   channel_id: string;
@@ -45,19 +46,6 @@ interface Defaults {
 }
 
 const TIMEZONES: string[] = Intl.supportedValuesOf('timeZone');
-
-// Supported TTRPG systems shown as autocomplete suggestions.
-// Users may still type any free-form value — these are just quick-picks.
-const SYSTEM_LABELS: Record<string, string> = {
-  dnd5e: 'D&D 5e',
-  pf2e: 'Pathfinder 2E',
-};
-const SYSTEMS = Object.keys(SYSTEM_LABELS);
-
-function systemLabel(sys: string | null): string {
-  if (!sys) return 'All systems';
-  return SYSTEM_LABELS[sys] ?? sys;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub-panel: Server Settings
@@ -160,7 +148,7 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
         size="small"
         fullWidth
         freeSolo
-        options={SYSTEMS}
+        options={SYSTEM_OPTIONS}
         value={config.default_ttrpg_system ?? ''}
         onChange={(_, v) => mutation.mutate({ default_ttrpg_system: (v as string) || null })}
         onInputChange={(_, _v, reason) => {

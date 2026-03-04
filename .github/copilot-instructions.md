@@ -96,7 +96,7 @@ For guild channels, context history is always bounded by the rolling window `now
 1. **Grug super-admin** — env var `GRUG_SUPER_ADMIN_IDS` or DB `is_super_admin` flag.
 2. **Grug-admin role** — live Discord API check against `grug_admin_role_id` in `GuildConfig` (cached 5 min, bounded to 2048 entries via `_BoundedTTLCache`).
 
-**The Discord ADMINISTRATOR permission bit is NOT read from the JWT** for authorization decisions.  JWT guild data no longer includes `permissions` at all.  Discord server admins who are not Grug super-admins must be assigned the `grug-admin` role via guild config.  `_has_guild_admin_permission()` is kept as a no-op stub for backward compatibility only.
+**The Discord ADMINISTRATOR permission bit is NOT read from the JWT** for authorization decisions.  JWT guild data no longer includes `permissions` at all.  Discord server admins who are not Grug super-admins must be assigned the `grug-admin` role via guild config.
 
 ### ChannelConfig model
 

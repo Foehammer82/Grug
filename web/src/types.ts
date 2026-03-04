@@ -296,6 +296,18 @@ export interface BuiltinRuleSource {
   enabled: boolean;
 }
 
+/* ── Grug Notes ───────────────────────────────────────────────────── */
+
+export interface GrugNote {
+  id: number;
+  guild_id: string | null;
+  user_id: string | null;
+  content: string;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /* ── Datetime helpers ─────────────────────────────────────────────── */
 
 /** Convert ISO UTC datetime string to datetime-local input value (e.g. "2026-03-01T20:00"). */
