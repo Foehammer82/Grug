@@ -90,6 +90,7 @@ async def discord_callback(
 @router.get("/me", response_model=UserOut)
 async def get_me(user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
     """Return the currently authenticated user's profile."""
+    impersonator = user.get("impersonator")
     return UserOut(
         id=user["sub"],
         username=user["username"],
@@ -97,6 +98,9 @@ async def get_me(user: dict[str, Any] = Depends(get_current_user)) -> UserOut:
         avatar=user.get("avatar"),
         is_super_admin=await is_super_admin_full(user),
         can_invite=await has_can_invite(user),
+        impersonating=impersonator is not None,
+        impersonator_id=impersonator.get("sub") if impersonator else None,
+        impersonator_username=impersonator.get("username") if impersonator else None,
     )
 
 
