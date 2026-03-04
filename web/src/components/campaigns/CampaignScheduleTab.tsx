@@ -11,9 +11,11 @@ import {
   DialogContent,
   DialogTitle,
   Divider,
+  FormControlLabel,
   IconButton,
   Skeleton,
   Stack,
+  Switch,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -435,7 +437,10 @@ export default function CampaignScheduleTab({
     },
   });
 
-  const isFormValid = !!form.date && (form.type === 'once' || !!form.rrule);
+  const isFormValid =
+    !!form.date &&
+    (form.type === 'once' || !!form.rrule) &&
+    (form.scheduleMode !== 'poll' || form.pollAdvanceDays >= 1);
 
   if (isLoading) {
     return (
@@ -523,35 +528,8 @@ export default function CampaignScheduleTab({
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            {/* Scheduling mode */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Scheduling mode
-              </Typography>
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={form.scheduleMode}
-                onChange={(_, v) => { if (v) setForm((f) => ({ ...f, scheduleMode: v })); }}
-              >
-                <ToggleButton value="fixed">
-                  <Tooltip title="Sessions happen on a fixed recurring schedule">
-                    <span>Fixed schedule</span>
-                  </Tooltip>
-                </ToggleButton>
-                <ToggleButton value="poll">
-                  <Tooltip title="Poll players for availability before each session">
-                    <span>Poll players</span>
-                  </Tooltip>
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-
-            {/* Session type */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
-                Session type
-              </Typography>
+            {/* Session type + poll toggle — single row */}
+            <Stack direction="row" spacing={2} alignItems="center">
               <ToggleButtonGroup
                 size="small"
                 exclusive
@@ -561,7 +539,23 @@ export default function CampaignScheduleTab({
                 <ToggleButton value="recurring">Recurring</ToggleButton>
                 <ToggleButton value="once">One-off</ToggleButton>
               </ToggleButtonGroup>
-            </Box>
+
+              <Tooltip title="Poll players for availability before each session">
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={form.scheduleMode === 'poll'}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, scheduleMode: e.target.checked ? 'poll' : 'fixed' }))
+                      }
+                    />
+                  }
+                  label="Poll players"
+                  slotProps={{ typography: { variant: 'body2' } }}
+                />
+              </Tooltip>
+            </Stack>
 
             {/* Date & time */}
             <Stack direction="row" spacing={1.5}>
@@ -717,6 +711,7 @@ export default function CampaignScheduleTab({
                 type="number"
                 size="small"
                 fullWidth
+                required
                 value={form.pollAdvanceDays}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, pollAdvanceDays: Math.max(1, parseInt(e.target.value) || 1) }))

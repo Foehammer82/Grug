@@ -9,8 +9,8 @@ import type { GuildConfig } from '../types';
 /** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
 const TABS = [
   { label: 'Config',       path: 'config',       adminOnly: true },
-  { label: 'Events',       path: 'events',       adminOnly: false },
-  { label: 'Tasks',        path: 'tasks',        adminOnly: true },
+  { label: 'Calendar',        path: 'events',       adminOnly: false },
+  { label: 'Scheduled Tasks', path: 'tasks',        adminOnly: true },
   { label: 'Documents',    path: 'documents',    adminOnly: false },
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
   { label: "Grug's Notes", path: 'notes',        adminOnly: false },
