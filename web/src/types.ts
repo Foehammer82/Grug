@@ -184,6 +184,7 @@ export interface Campaign {
   is_active: boolean;
   created_by: string;
   created_at: string;
+  deleted_at: string | null;
   character_count: number;
 }
 
@@ -232,13 +233,16 @@ export interface CharacterSheet {
 
 export interface Character {
   id: number;
-  owner_discord_user_id: string;
+  owner_discord_user_id: string | null;
+  owner_display_name: string | null;
   campaign_id: number | null;
   name: string;
   system: string;
   structured_data: CharacterSheet | null;
   pathbuilder_id: number | null;
   file_path: string | null;
+  notes: string | null;
+  pathbuilder_synced_at: string | null;
   created_at: string;
   updated_at: string;
 }

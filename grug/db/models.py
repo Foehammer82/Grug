@@ -1,11 +1,13 @@
 """SQLAlchemy ORM models for Grug."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     JSON,
@@ -66,8 +68,10 @@ class GuildConfig(Base):
 class ChannelConfig(Base):
     """Per-channel configuration — persists settings that would otherwise live in memory.
 
-    ``always_respond`` replaces the old in-memory ``_ALWAYS_RESPOND_CHANNELS``
-    set so the setting survives bot restarts.
+    ``auto_respond`` enables intelligent auto-response in a channel.  When the
+    threshold is 0.0 Grug responds to every message (equivalent to the old
+    ``always_respond=True``).  When threshold > 0.0 a lightweight LLM scores
+    each message and Grug only responds when ``score >= threshold``.
     """
 
     __tablename__ = "channel_configs"
@@ -82,9 +86,15 @@ class ChannelConfig(Base):
     channel_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
     )
-    # When True, Grug responds to every message here (not just @mentions).
-    always_respond: Mapped[bool] = mapped_column(
+    # When True, Grug considers responding to every message here (not just @mentions).
+    # When threshold == 0.0, Grug always responds; when threshold > 0.0, a lightweight
+    # LLM scores the message and Grug responds only when score >= threshold.
+    auto_respond: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
+    )
+    # Confidence threshold for the auto-respond scorer (0.0 = always, 1.0 = only if certain).
+    auto_respond_threshold: Mapped[float] = mapped_column(
+        Float, default=0.5, server_default="0.5", nullable=False
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -121,6 +131,10 @@ class Campaign(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # Soft-delete timestamp.  NULL = active; set = deleted but recoverable.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
 
@@ -131,9 +145,15 @@ class Character(Base):
     __tablename__ = "characters"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # Discord snowflake of the player who owns this character.
-    owner_discord_user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, index=True
+    # Discord snowflake of the player who owns this character.  Nullable for
+    # NPCs or players who don't have a Discord account.
+    owner_discord_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
+    # Free-form display name shown when owner_discord_user_id is null (NPC,
+    # non-Discord player, etc.).  Ignored when a Discord owner is set.
+    owner_display_name: Mapped[str | None] = mapped_column(
+        String(256), nullable=True, default=None
     )
     # Optional link to a campaign; characters can exist without one.
     campaign_id: Mapped[int | None] = mapped_column(
@@ -142,6 +162,8 @@ class Character(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     # Detected game system, e.g. 'dnd5e', 'pf2e', 'unknown'.
     system: Mapped[str] = mapped_column(String(128), default="unknown")
+    # Private notes visible only to the character's owner and guild admins.
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Full text of the sheet as extracted at upload time.
     raw_sheet_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Structured JSON extracted by the parser (stats, abilities, etc.).
@@ -151,6 +173,10 @@ class Character(Base):
     pathbuilder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Relative path within the grug_files volume, e.g. characters/123/fighter.pdf
     file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Timestamp of the last successful Pathbuilder sync (used for 5-min cooldown).
+    pathbuilder_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -686,3 +712,58 @@ class GuildBuiltinOverride(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False)
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="builtin_overrides")
+
+
+class LLMUsageDailyAggregate(Base):
+    """Daily aggregate of LLM API token usage, keyed by date, guild, user, model, and call type.
+
+    Costs are **not** stored — they are computed at read time from the price
+    table in :mod:`grug.llm_usage` so that retroactive price updates apply
+    automatically.
+    """
+
+    __tablename__ = "llm_usage_daily_aggregates"
+    __table_args__ = (
+        UniqueConstraint(
+            "date",
+            "guild_id",
+            "user_id",
+            "model",
+            "call_type",
+            name="uq_llm_usage_daily",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    # Nullable — DMs or background tasks have no guild / user.
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Exact model name as returned by the API, e.g. "claude-haiku-4-5".
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Feature that triggered the call — see grug.llm_usage.CallType.
+    call_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    input_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    output_tokens: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+
+
+class LLMUsageRecord(Base):
+    """Raw per-call LLM usage record with a full timestamp.
+
+    Used for sub-daily (e.g. hourly) reporting.  Records older than 90 days
+    are pruned automatically by :func:`grug.llm_usage.record_llm_usage`.
+    """
+
+    __tablename__ = "llm_usage_records"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    model: Mapped[str] = mapped_column(String(128), nullable=False)
+    call_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+    output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)

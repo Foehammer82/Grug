@@ -11,6 +11,7 @@ import {
   DialogTitle,
   Divider,
   IconButton,
+  Slider,
   Stack,
   Switch,
   Table,
@@ -34,7 +35,8 @@ import type { BuiltinRuleSource, DiscordChannel, GuildConfig } from '../types';
 interface ChannelConfig {
   channel_id: string;
   guild_id: string;
-  always_respond: boolean;
+  auto_respond: boolean;
+  auto_respond_threshold: number;
   updated_at: string;
 }
 
@@ -48,7 +50,7 @@ const TIMEZONES: string[] = Intl.supportedValuesOf('timeZone');
 // Users may still type any free-form value — these are just quick-picks.
 const SYSTEM_LABELS: Record<string, string> = {
   dnd5e: 'D&D 5e',
-  pf2e: 'Pathfinder 2e',
+  pf2e: 'Pathfinder 2E',
 };
 const SYSTEMS = Object.keys(SYSTEM_LABELS);
 
@@ -196,6 +198,8 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
 function ChannelSettingsPanel({ guildId }: { guildId: string }) {
   const qc = useQueryClient();
   const [filter, setFilter] = useState('');
+  // Tracks slider values while user is dragging (keyed by channel_id).
+  const [pendingThresholds, setPendingThresholds] = useState<Record<string, number>>({});
 
   const {
     data: channels,
@@ -286,8 +290,8 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               <TableHead>
                 <TableRow>
                   <TableCell>Channel</TableCell>
-                  <TableCell align="center" sx={{ whiteSpace: 'nowrap' }}>
-                    Always Respond
+                  <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 200 }}>
+                    Auto Respond
                   </TableCell>
                 </TableRow>
               </TableHead>
@@ -303,32 +307,109 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                 ) : (
                   filtered.map((ch) => {
                     const cfg = configMap.get(ch.id);
-                    const alwaysRespond = cfg?.always_respond ?? false;
+                    const autoRespond = cfg?.auto_respond ?? false;
+                    const threshold =
+                      pendingThresholds[ch.id] ?? cfg?.auto_respond_threshold ?? 0.5;
                     return (
                       <TableRow key={ch.id} hover>
                         <TableCell>
                           <Typography variant="body2">#{ch.name}</Typography>
                         </TableCell>
-                        <TableCell align="center">
-                          <Tooltip
-                            title={
-                              alwaysRespond
-                                ? 'Grug replies to every message here'
-                                : 'Grug only replies to @mentions'
-                            }
-                          >
-                            <Switch
-                              size="small"
-                              checked={alwaysRespond}
-                              onChange={(_, checked) =>
-                                channelMutation.mutate({
-                                  channelId: ch.id,
-                                  patch: { always_respond: checked },
-                                })
-                              }
-                              disabled={channelMutation.isPending || configsError}
-                            />
-                          </Tooltip>
+                        <TableCell>
+                          <Stack spacing={0.5}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Tooltip
+                                title={
+                                  autoRespond
+                                    ? 'Grug considers responding to every message here'
+                                    : 'Grug only replies to @mentions'
+                                }
+                              >
+                                <Switch
+                                  size="small"
+                                  checked={autoRespond}
+                                  onChange={(_, checked) =>
+                                    channelMutation.mutate({
+                                      channelId: ch.id,
+                                      patch: { auto_respond: checked },
+                                    })
+                                  }
+                                  disabled={channelMutation.isPending || configsError}
+                                />
+                              </Tooltip>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ minWidth: 28 }}
+                              >
+                                {autoRespond ? 'On' : 'Off'}
+                              </Typography>
+                            </Box>
+                            {autoRespond && (
+                              <Box
+                                sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 1,
+                                  pl: 0.5,
+                                  pr: 1,
+                                  pt: 1,
+                                  pb: 1,
+                                  maxWidth: 380,
+                                }}
+                              >
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ whiteSpace: 'nowrap' }}
+                                >
+                                  Always
+                                </Typography>
+                                <Slider
+                                  size="small"
+                                  min={0}
+                                  max={1}
+                                  step={0.05}
+                                  value={threshold}
+                                  marks={[
+                                    { value: 0 },
+                                    { value: 0.25 },
+                                    { value: 0.5 },
+                                    { value: 0.75 },
+                                    { value: 1 },
+                                  ]}
+                                  valueLabelDisplay="on"
+                                  valueLabelFormat={(v) => `${Math.round((v as number) * 100)}%`}
+                                  onChange={(_, v) =>
+                                    setPendingThresholds((prev) => ({
+                                      ...prev,
+                                      [ch.id]: v as number,
+                                    }))
+                                  }
+                                  onChangeCommitted={(_, v) => {
+                                    setPendingThresholds((prev) => {
+                                      const next = { ...prev };
+                                      delete next[ch.id];
+                                      return next;
+                                    });
+                                    channelMutation.mutate({
+                                      channelId: ch.id,
+                                      patch: { auto_respond_threshold: v },
+                                    });
+                                  }}
+                                  disabled={channelMutation.isPending || configsError}
+                                  sx={{ flex: 1, mt: 2 }}
+                                />
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ whiteSpace: 'nowrap' }}
+                                >
+                                  Selective
+                                </Typography>
+                              </Box>
+                            )}
+                          </Stack>
                         </TableCell>
                       </TableRow>
                     );

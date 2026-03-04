@@ -19,6 +19,8 @@ import json
 import logging
 from pathlib import Path
 
+from grug.llm_usage import CallType, record_llm_usage
+
 logger = logging.getLogger(__name__)
 
 # Minimum character count from PDF text extraction before we fall back to
@@ -253,6 +255,12 @@ class CharacterSheetParser:
                 model=self._model,
                 max_tokens=4096,
                 messages=messages,
+            )
+            await record_llm_usage(
+                model=self._model,
+                call_type=CallType.CHARACTER_PARSE,
+                input_tokens=response.usage.input_tokens,
+                output_tokens=response.usage.output_tokens,
             )
             raw_json = response.content[0].text.strip()
             # Strip markdown code fences if Claude wrapped the response.

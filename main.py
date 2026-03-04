@@ -11,7 +11,11 @@ from grug.bot.client import create_bot, set_bot
 from grug.config.settings import get_settings
 from grug.db.session import init_db
 from grug.scheduler.manager import start_scheduler
-from grug.scheduler.sync import run_sync, schedule_periodic_sync
+from grug.scheduler.sync import (
+    run_sync,
+    schedule_daily_pathbuilder_sync,
+    schedule_periodic_sync,
+)
 
 
 def setup_logging(level: str) -> None:
@@ -52,6 +56,7 @@ async def main() -> None:
         start_scheduler()
         await run_sync(bot, sync_commands=True)
         schedule_periodic_sync(bot)
+        schedule_daily_pathbuilder_sync()
 
     # Load cogs
     await bot.load_extension("grug.bot.cogs.ai_chat")

@@ -24,6 +24,7 @@ from grug.agent.prompt import SYSTEM_PROMPT
 from grug.config.settings import get_settings
 from grug.db.models import ConversationMessage
 from grug.db.session import get_session_factory
+from grug.llm_usage import CallType, record_llm_usage
 from grug.rag.history_archiver import ConversationArchiver
 
 logger = logging.getLogger(__name__)
@@ -386,6 +387,15 @@ class GrugAgent:
                 deps=deps,
             )
             response_text = result.output
+            _usage = result.usage()
+            await record_llm_usage(
+                model=get_settings().anthropic_model,
+                call_type=CallType.CHAT,
+                input_tokens=_usage.request_tokens or 0,
+                output_tokens=_usage.response_tokens or 0,
+                guild_id=guild_id,
+                user_id=user_id,
+            )
         except Exception as exc:
             logger.exception("Agent run failed: %s", exc)
             response_text = "Grug brain confused... something go wrong. Try again?"

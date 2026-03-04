@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from pydantic_ai import Agent, RunContext
 
 from grug.agent.core import GrugDeps
+from grug.llm_usage import CallType, record_llm_usage
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +70,12 @@ Examples:
 """
 
 
-async def _plan_aon_query(user_query: str) -> _AONQueryPlan:
+async def _plan_aon_query(
+    user_query: str,
+    *,
+    guild_id: int | None = None,
+    user_id: int | None = None,
+) -> _AONQueryPlan:
     """Use a fast LLM to curate the user query for AoN Elasticsearch."""
     from pydantic_ai.models.anthropic import AnthropicModel
     from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -86,10 +92,25 @@ async def _plan_aon_query(user_query: str) -> _AONQueryPlan:
         system_prompt=_AON_CLASSIFIER_PROMPT,
     )
     result = await classifier.run(user_query)
+    _usage = result.usage()
+    await record_llm_usage(
+        model="claude-haiku-4-5",
+        call_type=CallType.RULES_LOOKUP,
+        input_tokens=_usage.request_tokens or 0,
+        output_tokens=_usage.response_tokens or 0,
+        guild_id=guild_id,
+        user_id=user_id,
+    )
     return result.output
 
 
-async def _fetch_aon_pf2e(query: str, *, size: int = 1) -> str:
+async def _fetch_aon_pf2e(
+    query: str,
+    *,
+    guild_id: int | None = None,
+    user_id: int | None = None,
+    size: int = 1,
+) -> str:
     """Query the Archives of Nethys Elasticsearch index directly.
 
     Before searching, a fast LLM call curates the query into a focused PF2e
@@ -107,7 +128,7 @@ async def _fetch_aon_pf2e(query: str, *, size: int = 1) -> str:
 
     # ── Curate the query with haiku ────────────────────────────────────────
     try:
-        plan = await _plan_aon_query(query)
+        plan = await _plan_aon_query(query, guild_id=guild_id, user_id=user_id)
         search_query = plan.search_query or query
         preferred_types = plan.preferred_types
     except Exception as exc:  # noqa: BLE001
@@ -593,7 +614,12 @@ Examples:
 """
 
 
-async def _plan_srd_query(query: str) -> _SRDQueryPlan:
+async def _plan_srd_query(
+    query: str,
+    *,
+    guild_id: int | None = None,
+    user_id: int | None = None,
+) -> _SRDQueryPlan:
     """Use a fast LLM to classify the query and return a structured routing plan."""
     from pydantic_ai.models.anthropic import AnthropicModel
     from pydantic_ai.providers.anthropic import AnthropicProvider
@@ -610,13 +636,27 @@ async def _plan_srd_query(query: str) -> _SRDQueryPlan:
         system_prompt=_SRD_CLASSIFIER_PROMPT,
     )
     result = await classifier.run(query)
+    _usage = result.usage()
+    await record_llm_usage(
+        model="claude-haiku-4-5",
+        call_type=CallType.RULES_LOOKUP,
+        input_tokens=_usage.request_tokens or 0,
+        output_tokens=_usage.response_tokens or 0,
+        guild_id=guild_id,
+        user_id=user_id,
+    )
     plan = result.output
     if not plan.search_term:
         plan.search_term = query
     return plan
 
 
-async def _fetch_srd_5e(query: str) -> str:
+async def _fetch_srd_5e(
+    query: str,
+    *,
+    guild_id: int | None = None,
+    user_id: int | None = None,
+) -> str:
     """Query dnd5eapi.co using an LLM routing plan + parallel detail fetching.
 
     An LLM classifier first produces a :class:`_SRDQueryPlan` that specifies:
@@ -633,7 +673,7 @@ async def _fetch_srd_5e(query: str) -> str:
 
     # ── Get routing plan from LLM (fast haiku call) ────────────────────────
     try:
-        plan = await _plan_srd_query(query)
+        plan = await _plan_srd_query(query, guild_id=guild_id, user_id=user_id)
     except Exception as exc:  # noqa: BLE001
         logger.warning(
             "SRD query planner failed, using word-tokenisation fallback: %s", exc
@@ -834,9 +874,17 @@ def register_rules_tools(agent: Agent[GrugDeps, str]) -> None:
             if system and builtin.system and builtin.system != system:
                 continue  # system filter — skip mismatched sources
             if builtin.source_id == "aon_pf2e":
-                text = await _fetch_aon_pf2e(query)
+                text = await _fetch_aon_pf2e(
+                    query,
+                    guild_id=ctx.deps.guild_id,
+                    user_id=ctx.deps.user_id,
+                )
             elif builtin.source_id == "srd_5e":
-                text = await _fetch_srd_5e(query)
+                text = await _fetch_srd_5e(
+                    query,
+                    guild_id=ctx.deps.guild_id,
+                    user_id=ctx.deps.user_id,
+                )
             else:
                 continue
             sections.append(text[:_MAX_SOURCE_CHARS])

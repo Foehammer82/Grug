@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from anthropic import AsyncAnthropic
 
 from grug.config.settings import get_settings
+from grug.llm_usage import CallType, record_llm_usage
 from grug.rag.vector_store import VectorStore, get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,9 @@ class ConversationArchiver:
         self._model = settings.anthropic_big_brain_model
         self._max_summaries = settings.agent_history_max_summaries
 
-    async def _summarise(self, messages: list[dict]) -> str:
+    async def _summarise(
+        self, messages: list[dict], guild_id: int | None = None
+    ) -> str:
         """Ask Claude to summarise a batch of messages into a session narrative."""
         transcript_lines = []
         for m in messages:
@@ -54,6 +57,13 @@ class ConversationArchiver:
                     "content": f"Conversation to summarise:\n\n{transcript}",
                 }
             ],
+        )
+        await record_llm_usage(
+            model=self._model,
+            call_type=CallType.HISTORY_ARCHIVE,
+            input_tokens=response.usage.input_tokens,
+            output_tokens=response.usage.output_tokens,
+            guild_id=guild_id,
         )
         return response.content[0].text.strip()
 
@@ -83,7 +93,7 @@ class ConversationArchiver:
         if not messages:
             return ""
 
-        summary = await self._summarise(messages)
+        summary = await self._summarise(messages, guild_id=guild_id)
         start_time = messages[0].get(
             "created_at", datetime.now(timezone.utc).isoformat()
         )

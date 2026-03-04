@@ -27,7 +27,7 @@ import type { BuiltinRuleSource } from '../types';
 // unrecognised system a user has entered as free-form text.
 const SYSTEM_LABELS: Record<string, string> = {
   dnd5e: 'D&D 5e',
-  pf2e: 'Pathfinder 2e',
+  pf2e: 'Pathfinder 2E',
 };
 
 function systemLabel(sys: string | null): string {

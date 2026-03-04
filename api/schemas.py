@@ -59,7 +59,8 @@ class GuildConfigUpdate(BaseModel):
 class ChannelConfigOut(BaseModel):
     channel_id: int
     guild_id: int
-    always_respond: bool
+    auto_respond: bool
+    auto_respond_threshold: float
     updated_at: datetime
 
     model_config = {"from_attributes": True}
@@ -70,7 +71,9 @@ class ChannelConfigOut(BaseModel):
 
 
 class ChannelConfigUpdate(BaseModel):
-    always_respond: bool | None = None
+    auto_respond: bool | None = None
+    # Must be in the range [0.0, 1.0].
+    auto_respond_threshold: float | None = None
 
 
 class CalendarEventOut(BaseModel):
@@ -309,6 +312,7 @@ class CampaignOut(BaseModel):
     is_active: bool
     created_by: int
     created_at: datetime
+    deleted_at: datetime | None = None
     character_count: int = 0
 
     model_config = {"from_attributes": True}
@@ -336,38 +340,68 @@ class CampaignUpdate(BaseModel):
 class CharacterCreate(BaseModel):
     name: str
     system: str = "unknown"
+    owner_discord_user_id: int | None = None
+    owner_display_name: str | None = None
 
 
 class CharacterUpdate(BaseModel):
     name: str | None = None
     system: str | None = None
     campaign_id: int | None = None
+    owner_discord_user_id: int | None = None
+    owner_display_name: str | None = None
+    notes: str | None = None
 
 
 class CharacterOut(BaseModel):
     id: int
-    owner_discord_user_id: int
+    owner_discord_user_id: int | None
+    owner_display_name: str | None = None
     campaign_id: int | None
     name: str
     system: str
     structured_data: dict | None
     pathbuilder_id: int | None = None
     file_path: str | None
+    notes: str | None = None
+    pathbuilder_synced_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
 
     @field_serializer("owner_discord_user_id")
-    def serialize_owner_id(self, v: int) -> str:
+    def serialize_owner_id(self, v: int | None) -> str | None:
         """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
-        return str(v)
+        return str(v) if v is not None else None
 
 
 class PathbuilderLinkRequest(BaseModel):
-    """Request body for linking a Pathbuilder 2e character by ID."""
+    """Request body for linking a Pathbuilder 2e character by ID.
+
+    When ``pathbuilder_data`` is provided (pre-fetched by the browser, which
+    bypasses Cloudflare bot protection on the Pathbuilder endpoint), the server
+    normalises it directly without making an outbound HTTP request.
+    """
 
     pathbuilder_id: int
+    pathbuilder_data: dict | None = None
+
+
+class SyncPathbuilderRequest(BaseModel):
+    """Optional request body for re-syncing a Pathbuilder-linked character.
+
+    Pass ``pathbuilder_data`` (the raw JSON fetched client-side) to skip the
+    server-side fetch, which is blocked by Cloudflare bot protection.
+    """
+
+    pathbuilder_data: dict | None = None
+
+
+class CharacterCopyRequest(BaseModel):
+    """Request body for copying a character to a different campaign."""
+
+    target_campaign_id: int
 
 
 class UserProfileOut(BaseModel):
