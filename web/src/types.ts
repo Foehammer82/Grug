@@ -28,6 +28,7 @@ export interface ScheduledTask {
   enabled: boolean;
   last_run: string | null;
   next_run: string | null;
+  upcoming_runs: string[];
   created_by: string;
   created_at: string;
 }
