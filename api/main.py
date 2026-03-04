@@ -17,11 +17,14 @@ from api.routes import (
     auth,
     campaigns,
     characters,
+    dice,
     documents,
+    encounters,
     events,
     glossary,
     gold,
     guilds,
+    monsters,
     notes,
     personal,
     public,
@@ -84,4 +87,7 @@ app.include_router(characters.router, dependencies=_auth_required)
 app.include_router(gold.router, dependencies=_auth_required)
 app.include_router(admin.router, dependencies=_auth_required)
 app.include_router(rule_sources.router, dependencies=_auth_required)
+app.include_router(dice.router, dependencies=_auth_required)
+app.include_router(encounters.router, dependencies=_auth_required)
+app.include_router(monsters.router, dependencies=_auth_required)
 app.include_router(usage.router, dependencies=_auth_required)

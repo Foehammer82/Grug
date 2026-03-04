@@ -105,9 +105,10 @@ For guild channels, context history is always bounded by the rolling window `now
 
 ### Guild admin authorization
 
-`is_guild_admin()` in `api/deps.py` grants admin access via two paths:
+`is_guild_admin()` in `api/deps.py` grants admin access via three paths:
 1. **Grug super-admin** — env var `GRUG_SUPER_ADMIN_IDS` or DB `is_super_admin` flag.
-2. **Grug-admin role** — live Discord API check against `grug_admin_role_id` in `GuildConfig` (cached 5 min, bounded to 2048 entries via `_BoundedTTLCache`).
+2. **Discord guild owner** — live Discord API check against the guild's `owner_id` (cached 5 min in `_GUILD_OWNER_CACHE`).
+3. **Grug-admin role** — live Discord API check against `grug_admin_role_id` in `GuildConfig` (cached 5 min, bounded to 2048 entries via `_BoundedTTLCache`).
 
 **The Discord ADMINISTRATOR permission bit is NOT read from the JWT** for authorization decisions.  JWT guild data no longer includes `permissions` at all.  Discord server admins who are not Grug super-admins must be assigned the `grug-admin` role via guild config.
 

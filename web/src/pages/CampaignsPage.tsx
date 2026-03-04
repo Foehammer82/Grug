@@ -6,7 +6,6 @@ import {
   Autocomplete,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Collapse,
   Dialog,
@@ -28,7 +27,14 @@ import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import { SYSTEM_OPTIONS, SYSTEM_LABELS } from '../constants/character';
 import CampaignCard from '../components/campaigns/CampaignCard';
-import type { Campaign, DiscordChannel, GuildMember } from '../types';
+import MenuItem from '@mui/material/MenuItem';
+import type { Campaign, CombatTrackerDepth, DiscordChannel, GuildMember } from '../types';
+
+const DEPTH_OPTIONS: { value: CombatTrackerDepth; label: string; description: string }[] = [
+  { value: 'basic', label: 'Basic', description: 'Initiative & turns only' },
+  { value: 'standard', label: 'Standard', description: '+ HP, AC, conditions' },
+  { value: 'full', label: 'Full', description: '+ damage log, death saves, concentration' },
+];
 
 // ── Main page ─────────────────────────────────────────────────────────────
 
@@ -36,7 +42,7 @@ export default function CampaignsPage() {
   const { data: me } = useAuth();
   const { guildId } = useParams<{ guildId: string }>();
   const qc = useQueryClient();
-  const { isAdmin } = useGuildContext();
+  const { isAdmin, timezone } = useGuildContext();
   const currentUserId = me?.id ?? '';
 
   // Create form state
@@ -61,6 +67,12 @@ export default function CampaignsPage() {
 
   // Edit banking state
   const [editPlayerBankingEnabled, setEditPlayerBankingEnabled] = useState(false);
+
+  // Edit combat depth state
+  const [editCombatDepth, setEditCombatDepth] = useState<CombatTrackerDepth>('standard');
+
+  // Edit dice recording state
+  const [editAllowManualDice, setEditAllowManualDice] = useState(false);
 
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -136,6 +148,8 @@ export default function CampaignsPage() {
         gm_discord_user_id: editGmMember?.discord_user_id ?? null,
         banking_enabled: true,
         player_banking_enabled: editPlayerBankingEnabled,
+        combat_tracker_depth: editCombatDepth,
+        allow_manual_dice_recording: editAllowManualDice,
       });
     },
     onSuccess: () => {
@@ -184,6 +198,8 @@ export default function CampaignsPage() {
     setEditActive(c.is_active);
     setEditGmMember(guildMembers.find((m) => m.discord_user_id === c.gm_discord_user_id) ?? null);
     setEditPlayerBankingEnabled(c.player_banking_enabled);
+    setEditCombatDepth(c.combat_tracker_depth ?? 'standard');
+    setEditAllowManualDice(c.allow_manual_dice_recording ?? false);
   }
 
   function cancelEdit() {
@@ -194,6 +210,8 @@ export default function CampaignsPage() {
     setEditActive(true);
     setEditGmMember(null);
     setEditPlayerBankingEnabled(false);
+    setEditCombatDepth('standard');
+    setEditAllowManualDice(false);
   }
 
   const activeCampaigns = campaigns.filter((c) => !c.deleted_at);
@@ -383,6 +401,7 @@ export default function CampaignsPage() {
               isAdmin={isAdmin}
               currentUserId={currentUserId}
               allCampaigns={activeCampaigns}
+              timezone={timezone}
               onEdit={startEdit}
               onDelete={(camp) => setDeleteId(camp.id)}
             />
@@ -448,14 +467,30 @@ export default function CampaignsPage() {
         <DialogTitle>Edit Campaign</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Name"
-              size="small"
-              required
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              fullWidth
-            />
+            <Stack direction="row" spacing={2} alignItems="center">
+              <TextField
+                label="Name"
+                size="small"
+                required
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                sx={{ flex: 1 }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={editActive}
+                    onChange={(e) => setEditActive(e.target.checked)}
+                  />
+                }
+                label={editActive ? 'Active' : 'Inactive'}
+                slotProps={{ typography: { variant: 'body2', fontWeight: 500 } }}
+                sx={{ flexShrink: 0 }}
+              />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+              Inactive campaigns are hidden from players and Grug won&apos;t track context in their channel.
+            </Typography>
             <Autocomplete
               size="small"
               freeSolo
@@ -498,18 +533,7 @@ export default function CampaignsPage() {
                 <TextField {...params} label="Channel" />
               )}
             />
-            <Box>
-              <Chip
-                label={editActive ? 'Active' : 'Inactive'}
-                size="small"
-                color={editActive ? 'success' : 'default'}
-                onClick={() => setEditActive((v) => !v)}
-                sx={{ cursor: 'pointer' }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                Click to toggle
-              </Typography>
-            </Box>
+
             <Autocomplete
               size="small"
               fullWidth
@@ -554,6 +578,39 @@ export default function CampaignsPage() {
                 />
               </Stack>
             </Box>
+            {/* Combat Tracker Depth */}
+            <TextField
+              select
+              size="small"
+              label="Combat Tracker Depth"
+              value={editCombatDepth}
+              onChange={(e) => setEditCombatDepth(e.target.value as CombatTrackerDepth)}
+              helperText={DEPTH_OPTIONS.find((d) => d.value === editCombatDepth)?.description}
+            >
+              {DEPTH_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            {/* Manual Dice Recording */}
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={editAllowManualDice}
+                  onChange={(e) => setEditAllowManualDice(e.target.checked)}
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2">Allow manual dice recording</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Players can log physical dice rolls to the campaign roll history
+                  </Typography>
+                </Box>
+              }
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

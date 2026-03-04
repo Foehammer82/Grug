@@ -21,6 +21,77 @@ logger = logging.getLogger(__name__)
 _DM_GUILD_ID = 0
 
 
+class GrugInviteView(discord.ui.View):
+    """Persistent button that lets a channel admin invite Grug to a new channel.
+
+    Uses a fixed ``custom_id`` so a single view registration on startup handles
+    every invite button the bot has ever posted, regardless of channel.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="✅ Invite Grug",
+        style=discord.ButtonStyle.success,
+        custom_id="invite_grug",
+    )
+    async def invite_button(
+        self,
+        interaction: discord.Interaction,
+        button: discord.ui.Button,  # noqa: ARG002
+    ) -> None:
+        if not interaction.channel or not interaction.guild:
+            await interaction.response.send_message(
+                "Grug confused — could not determine channel.", ephemeral=True
+            )
+            return
+
+        member = interaction.user
+        if (
+            not isinstance(member, discord.Member)
+            or not member.guild_permissions.manage_channels
+        ):
+            await interaction.response.send_message(
+                "You need **Manage Channels** permission to invite Grug here.",
+                ephemeral=True,
+            )
+            return
+
+        from grug.db.models import ChannelConfig
+        from grug.db.session import get_session_factory
+        from grug.utils import ensure_guild
+
+        channel_id = interaction.channel_id
+        guild_id = interaction.guild_id
+        await ensure_guild(guild_id)
+        factory = get_session_factory()
+        async with factory() as session:
+            result = await session.execute(
+                select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
+            )
+            cfg = result.scalar_one_or_none()
+            if cfg is None:
+                cfg = ChannelConfig(
+                    guild_id=guild_id,
+                    channel_id=channel_id,
+                    enabled=True,
+                )
+                session.add(cfg)
+            else:
+                cfg.enabled = True
+            await session.commit()
+
+        await interaction.response.edit_message(
+            content=(
+                "Grug now walks these halls! "
+                "Use `/enable_auto_respond` to set how proactively he chimes in, "
+                "or `/chat_here` to send him away. 🪓"
+            ),
+            view=None,
+        )
+
+
 class AIChatCog(GrugCogBase, name="AI Chat"):
     """Handles AI-powered conversations with Grug."""
 
@@ -28,6 +99,10 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
         self.bot = bot
         self._agent = GrugAgent()
         self._history_flushed = False
+
+    async def cog_load(self) -> None:
+        """Register persistent views so invite buttons survive bot restarts."""
+        self.bot.add_view(GrugInviteView())
 
     @commands.Cog.listener()
     async def on_ready(self) -> None:
@@ -76,20 +151,29 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
         # -------------------------------------------------------- Guild messages
         mentioned = self.bot.user in message.mentions if self.bot.user else False
         channel_cfg = await _get_channel_config(message.channel.id)
+        enabled = channel_cfg.enabled if channel_cfg else False
+
+        # Gate: Grug is only active in explicitly enabled channels.
+        # If disabled and @mentioned, post an invite button; otherwise ignore.
+        if not enabled:
+            if mentioned:
+                await message.channel.send(
+                    "Grug not allowed in this channel yet! "
+                    "A channel admin can invite him by clicking below. 🪓",
+                    view=GrugInviteView(),
+                )
+            return
+
         auto_respond = channel_cfg.auto_respond if channel_cfg else False
         auto_respond_threshold = (
             channel_cfg.auto_respond_threshold if channel_cfg else 0.0
         )
 
-        # Always log the message so Grug stays context-aware in the channel.
-        await self._agent.save_passive_message(
-            guild_id=message.guild.id,
-            channel_id=message.channel.id,
-            content=message.clean_content,
-            author_id=message.author.id,
-            author_name=message.author.display_name,
-        )
-
+        # Determine whether Grug should respond BEFORE saving anything.
+        # This avoids saving the message as passive (background chatter)
+        # and then having respond() save it again as non-passive — which
+        # created duplicates AND made the LLM see @mentions as "background
+        # channel chat" that the system prompt told it to ignore.
         should_respond = mentioned
         if not should_respond and auto_respond:
             if auto_respond_threshold == 0.0:
@@ -112,14 +196,11 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                                 ConversationMessage.archived.is_(False),
                             )
                             .order_by(ConversationMessage.created_at.desc())
-                            .limit(6)
+                            .limit(5)
                         )
                         _rows = list(reversed(_result.scalars().all()))
-                        # Drop the last row — it's the message we just passively saved.
-                        context_rows = _rows[:-1] if _rows else []
                         recent_context = [
-                            f"{r.author_name or 'Grug'}: {r.content}"
-                            for r in context_rows
+                            f"{r.author_name or 'Grug'}: {r.content}" for r in _rows
                         ]
                 except Exception:
                     logger.exception(
@@ -141,6 +222,16 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                 )
 
         if not should_respond:
+            # Save as passive only when NOT responding — Grug overheard but
+            # won't reply.  When Grug IS responding, respond() saves the
+            # message as non-passive, so we must not save it here too.
+            await self._agent.save_passive_message(
+                guild_id=message.guild.id,
+                channel_id=message.channel.id,
+                content=message.clean_content,
+                author_id=message.author.id,
+                author_name=message.author.display_name,
+            )
             return
 
         content = message.clean_content
@@ -207,10 +298,11 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
 
     @app_commands.command(
         name="chat_here",
-        description="Toggle Grug responding to every message in this channel.",
+        description="Enable or disable Grug in this channel.",
     )
     @app_commands.checks.has_permissions(manage_channels=True)
     async def toggle_always_on(self, interaction: discord.Interaction) -> None:
+        """Toggle whether Grug is enabled in this channel (master on/off switch)."""
         cid = interaction.channel_id
         gid = interaction.guild_id
         if cid is None or gid is None:
@@ -231,26 +323,89 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                 cfg = ChannelConfig(
                     guild_id=gid,
                     channel_id=cid,
-                    auto_respond=True,
-                    auto_respond_threshold=0.5,
+                    enabled=True,
                 )
                 session.add(cfg)
                 await session.commit()
                 await interaction.response.send_message(
-                    "Grug listen to everything in this channel now! 👂"
+                    "Grug has arrived in this channel! Use `/enable_auto_respond` to set "
+                    "how proactively he chimes in. 🪓"
                 )
             else:
-                cfg.auto_respond = not cfg.auto_respond
+                cfg.enabled = not cfg.enabled
                 cfg.updated_at = datetime.now(timezone.utc)
                 await session.commit()
-                if cfg.auto_respond:
+                if cfg.enabled:
                     await interaction.response.send_message(
-                        "Grug listen to everything in this channel now! 👂"
+                        "Grug has arrived in this channel! Use `/enable_auto_respond` to set "
+                        "how proactively he chimes in. 🪓"
                     )
                 else:
                     await interaction.response.send_message(
-                        "Grug go quiet now. Only respond when mentioned."
+                        "Grug has left this channel. He will ignore all messages here "
+                        "until invited back. 🏕️"
                     )
+
+    @app_commands.command(
+        name="enable_auto_respond",
+        description="Set how proactively Grug responds without @mentions (0=off, 1=always, 10=very selective).",
+    )
+    @app_commands.describe(
+        level="0 = off, 1 = respond to every message, 10 = only very relevant messages"
+    )
+    @app_commands.checks.has_permissions(manage_channels=True)
+    async def set_auto_respond(
+        self,
+        interaction: discord.Interaction,
+        level: app_commands.Range[int, 0, 10],
+    ) -> None:
+        """Configure the auto-respond sensitivity for this channel (0–10 scale)."""
+        cid = interaction.channel_id
+        gid = interaction.guild_id
+        if cid is None or gid is None:
+            return
+
+        from grug.db.models import ChannelConfig
+        from grug.db.session import get_session_factory
+        from grug.utils import ensure_guild
+
+        await ensure_guild(gid)
+        factory = get_session_factory()
+        async with factory() as session:
+            result = await session.execute(
+                select(ChannelConfig).where(ChannelConfig.channel_id == cid)
+            )
+            cfg = result.scalar_one_or_none()
+            if cfg is None or not cfg.enabled:
+                await interaction.response.send_message(
+                    "Grug is not enabled in this channel yet! Use `/chat_here` first. 🪓",
+                    ephemeral=True,
+                )
+                return
+
+            if level == 0:
+                cfg.auto_respond = False
+                cfg.updated_at = datetime.now(timezone.utc)
+                await session.commit()
+                await interaction.response.send_message(
+                    "Auto-respond disabled. Grug will only reply when @mentioned. 🤫"
+                )
+            else:
+                # Map 1–10 to threshold 0.0–1.0 (1 = always, 10 = very selective)
+                threshold = round((level - 1) / 9.0, 4)
+                cfg.auto_respond = True
+                cfg.auto_respond_threshold = threshold
+                cfg.updated_at = datetime.now(timezone.utc)
+                await session.commit()
+                if level == 1:
+                    label = "every message"
+                elif level == 10:
+                    label = "only very relevant messages"
+                else:
+                    label = f"level {level}/10 messages"
+                await interaction.response.send_message(
+                    f"Grug will auto-respond to {label} in this channel. 👂"
+                )
 
     @app_commands.command(
         name="clear_history",

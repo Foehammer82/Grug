@@ -10,7 +10,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   Stack,
   Table,
   TableBody,
@@ -20,23 +19,61 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn'
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import client from '../../api/client';
 import GuildMemberCell from './GuildMemberCell';
 import CharacterDialog from './CharacterDialog';
 import GoldManageDialog from './GoldManageDialog';
 import type { Campaign, Character } from '../../types';
 
+// ── CopyablePathbuilderChip ────────────────────────────────────────────────
+
+function CopyablePathbuilderChip({ pathbuilderId }: { pathbuilderId: number }) {
+  const [copied, setCopied] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(String(pathbuilderId)).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  return (
+    <Tooltip title={copied ? 'Copied!' : `ID: ${pathbuilderId}`} placement="top">
+      <Chip
+        label="Pathbuilder"
+        size="small"
+        color={copied ? 'success' : 'secondary'}
+        variant="outlined"
+        onClick={handleCopy}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        deleteIcon={<ContentCopyIcon sx={{ fontSize: '0.75rem !important' }} />}
+        onDelete={hovered ? handleCopy : undefined}
+        sx={{
+          height: 20,
+          fontSize: '0.65rem',
+          cursor: 'pointer',
+          transition: 'width 0.15s ease',
+        }}
+      />
+    </Tooltip>
+  );
+}
+
 interface CharacterTableProps {
   guildId: string;
   campaignId: number;
   campaignSystem: string;
   isAdmin: boolean;
+  isGm: boolean;
   currentUserId: string;
   allCampaigns: Campaign[];
   bankingEnabled?: boolean;
   playerBankingEnabled?: boolean;
-  campaignGmId?: string;
   partyGold?: number;
 }
 
@@ -45,11 +82,11 @@ export default function CharacterTable({
   campaignId,
   campaignSystem,
   isAdmin,
+  isGm,
   currentUserId,
   allCampaigns,
   bankingEnabled = false,
   playerBankingEnabled = false,
-  campaignGmId,
   partyGold = 0,
 }: CharacterTableProps) {
   const qc = useQueryClient();
@@ -127,9 +164,9 @@ export default function CharacterTable({
     setDialogOpen(true);
   }
 
-  // Only admins (or owners of at least one selected character) can batch-delete
+  // Only GMs/admins (or owners of at least one selected character) can batch-delete
   const canBatchDelete =
-    isAdmin ||
+    isGm ||
     [...selected].every((id) => {
       const ch = characters.find((c) => c.id === id);
       return ch?.owner_discord_user_id === currentUserId;
@@ -175,7 +212,7 @@ export default function CharacterTable({
         <Table size="small" sx={{ '& td, & th': { borderColor: 'divider' } }}>
           <TableHead>
             <TableRow>
-              {(isAdmin || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
+              {(isGm || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
                 <TableCell padding="checkbox" sx={{ width: 42 }}>
                   <Checkbox
                     size="small"
@@ -193,7 +230,7 @@ export default function CharacterTable({
           </TableHead>
           <TableBody>
             {characters.map((ch) => {
-              const canEdit = isAdmin || ch.owner_discord_user_id === currentUserId;
+              const canEdit = isGm || ch.owner_discord_user_id === currentUserId;
               return (
                 <TableRow
                   key={ch.id}
@@ -201,7 +238,7 @@ export default function CharacterTable({
                   sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 0 } }}
                   onClick={() => openCharacter(ch, canEdit ? 0 : 1)}
                 >
-                  {(isAdmin || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
+                  {(isGm || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
                     <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
                       {canEdit && (
                         <Checkbox
@@ -230,9 +267,7 @@ export default function CharacterTable({
                   </TableCell>
                   <TableCell>
                     {ch.pathbuilder_id != null ? (
-                      <Tooltip title={`Pathbuilder ID: ${ch.pathbuilder_id}`}>
-                        <Chip label="Pathbuilder" size="small" color="secondary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
-                      </Tooltip>
+                      <CopyablePathbuilderChip pathbuilderId={ch.pathbuilder_id} />
                     ) : ch.file_path ? (
                       <Chip label="Sheet" size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
                     ) : null}
@@ -245,29 +280,41 @@ export default function CharacterTable({
                     />
                   </TableCell>
                   {bankingEnabled && (() => {
-                    const isAdminOrGm = isAdmin || campaignGmId === currentUserId;
+                    const isAdminOrGm = isGm;
                     const isOwner = ch.owner_discord_user_id === currentUserId;
                     const canSee = isAdminOrGm || isOwner;
-                    const canManage = isAdminOrGm || (isOwner && playerBankingEnabled);
+                    // Players can always spend / transfer their own gold;
+                    // player_banking_enabled only gates positive self-adjustments (backend-enforced).
+                    const canManage = isAdminOrGm || isOwner;
                     return (
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {canSee ? (
-                          <Stack direction="row" alignItems="center" spacing={0.25}>
-                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                              {(ch.gold ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} gp
-                            </Typography>
-                            {canManage && (
-                              <Tooltip title="Manage gold" placement="top">
-                                <IconButton
-                                  size="small"
-                                  sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, p: 0.25 }}
-                                  onClick={() => setGoldChar(ch)}
-                                >
-                                  <EditIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Stack>
+                          <Tooltip
+                            title={canManage ? 'Manage gold' : ''}
+                            placement="top"
+                          >
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              icon={
+                                <MonetizationOnIcon
+                                  sx={{ fontSize: '13px !important', color: 'warning.main !important' }}
+                                />
+                              }
+                              label={
+                                `${(ch.gold ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} gp`
+                              }
+                              onClick={canManage ? () => setGoldChar(ch) : undefined}
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: 'warning.main',
+                                borderColor: 'warning.main',
+                                cursor: canManage ? 'pointer' : 'default',
+                              }}
+                            />
+                          </Tooltip>
                         ) : (
                           <Typography variant="body2" color="text.disabled">&mdash;</Typography>
                         )}
@@ -298,6 +345,7 @@ export default function CharacterTable({
         campaignId={campaignId}
         campaignSystem={campaignSystem}
         isAdmin={isAdmin}
+        isGm={isGm}
         currentUserId={currentUserId}
         allCampaigns={allCampaigns}
         initialTab={dialogTab}
@@ -311,7 +359,7 @@ export default function CharacterTable({
           guildId={guildId}
           campaignId={campaignId}
           character={goldChar}
-          isAdminOrGm={isAdmin || campaignGmId === currentUserId}
+          isAdminOrGm={isGm}
           playerBankingEnabled={playerBankingEnabled}
           partyGold={partyGold}
         />

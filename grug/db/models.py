@@ -69,6 +69,10 @@ class GuildConfig(Base):
 class ChannelConfig(Base):
     """Per-channel configuration — persists settings that would otherwise live in memory.
 
+    ``enabled`` gates Grug's participation in a channel entirely.  When False,
+    Grug ignores all messages in that channel (no passive logging, no responses).
+    When True, the normal auto-respond / @mention logic applies.
+
     ``auto_respond`` enables intelligent auto-response in a channel.  When the
     threshold is 0.0 Grug responds to every message (equivalent to the old
     ``always_respond=True``).  When threshold > 0.0 a lightweight LLM scores
@@ -86,6 +90,11 @@ class ChannelConfig(Base):
     )
     channel_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
+    )
+    # Master switch — when False, Grug ignores this channel entirely.
+    # Defaults to False; the announce_channel_id for a guild is auto-enabled on setup.
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
     # When True, Grug considers responding to every message here (not just @mentions).
     # When threshold == 0.0, Grug always responds; when threshold > 0.0, a lightweight
@@ -160,6 +169,27 @@ class Campaign(Base):
     party_gold: Mapped[float] = mapped_column(
         Numeric(precision=12, scale=4), default=0.0, server_default="0", nullable=False
     )
+    # ── Combat ────────────────────────────────────────────────────────────
+    # How much combat detail the tracker records:
+    #   'basic'    — initiative order + turn tracking only
+    #   'standard' — + HP tracking, AC display, conditions
+    #   'full'     — + damage/healing log, death saves, concentration tracking
+    combat_tracker_depth: Mapped[str] = mapped_column(
+        String(16), default="standard", server_default="standard", nullable=False
+    )
+    # ── Scheduling ───────────────────────────────────────────────────────
+    # How this campaign's sessions are scheduled:
+    #   'fixed'  — GM picks a recurring day/time (default)
+    #   'poll'   — an availability poll decides each session date
+    schedule_mode: Mapped[str] = mapped_column(
+        String(16), default="fixed", server_default="fixed", nullable=False
+    )
+    # ── Dice ─────────────────────────────────────────────────────────────
+    # When True, players may post manual (physical dice) roll results to the
+    # campaign log via the dice tab.  Off by default.
+    allow_manual_dice_recording: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
     gold_transactions: Mapped[list["GoldTransaction"]] = relationship(
@@ -167,6 +197,13 @@ class Campaign(Base):
     )
     session_notes: Mapped[list["SessionNote"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
+    )
+    encounters: Mapped[list["Encounter"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
+    events: Mapped[list["CalendarEvent"]] = relationship(
+        back_populates="campaign",
+        foreign_keys="CalendarEvent.campaign_id",
     )
 
 
@@ -382,6 +419,26 @@ class CalendarEvent(Base):
     # Human-readable location (voice channel name, address, etc.)
     location: Mapped[str | None] = mapped_column(String(256), nullable=True)
     channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # Reminder configuration — which days before the event to send reminders.
+    # Stored as a JSON list of integers, e.g. [7, 1] = 7 days + 1 day before.
+    reminder_days: Mapped[list[int] | None] = mapped_column(
+        JSON, nullable=True, default=lambda: [1]
+    )
+    # Time-of-day for reminders in guild timezone, HH:MM format.
+    reminder_time: Mapped[str | None] = mapped_column(
+        String(8), nullable=True, default="18:00"
+    )
+    # How many days in advance to open an availability poll (poll mode only).
+    poll_advance_days: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=7
+    )
+    # Optional link to a campaign — session events are scoped to a campaign.
+    campaign_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("campaigns.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -393,6 +450,7 @@ class CalendarEvent(Base):
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="events")
+    campaign: Mapped["Campaign | None"] = relationship(back_populates="events")
     rsvps: Mapped[list["EventRSVP"]] = relationship(
         back_populates="event", cascade="all, delete-orphan"
     )
@@ -640,12 +698,21 @@ class ScheduledTask(Base):
     last_run: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Optional link to a calendar event — auto-created reminders reference
+    # the event they belong to so they can be refreshed or cleaned up.
+    event_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="scheduled_tasks")
+    event: Mapped["CalendarEvent | None"] = relationship()
 
 
 class ConversationMessage(Base):
@@ -856,6 +923,193 @@ class GrugNote(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class DiceRoll(Base):
+    """A persisted dice roll — every roll is stored for GM audit + session recaps.
+
+    Privacy rules:
+    - GM (``Campaign.gm_discord_user_id``) and guild admins can see all rolls.
+    - Players see their own rolls and any roll with ``is_private=False``.
+    """
+
+    __tablename__ = "dice_rolls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    campaign_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=True, index=True
+    )
+    # Discord snowflake of the person who rolled.
+    roller_discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True
+    )
+    roller_display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Optional character name (for context — "Gandalf rolled…")
+    character_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # The raw dice expression as typed by the user, e.g. "2d6+3".
+    expression: Mapped[str] = mapped_column(String(256), nullable=False)
+    # JSON array of individual die results.
+    # Format: [{"sides": 6, "rolls": [4, 2], "kept": [4, 2], "total": 6}]
+    individual_rolls: Mapped[list] = mapped_column(JSON, nullable=False)
+    # Final numeric result.
+    total: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Categorises the roll purpose.
+    # Values: general, attack, damage, saving_throw, ability_check, initiative,
+    #         death_save, skill_check
+    roll_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="general", server_default="general"
+    )
+    # When True, only the roller and GM/admin can see this roll.
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Optional flavour text, e.g. "STR save vs Fireball DC 15"
+    context_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    campaign: Mapped["Campaign | None"] = relationship()
+
+
+class Encounter(Base):
+    """An initiative encounter within a campaign."""
+
+    __tablename__ = "encounters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=False, index=True
+    )
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="preparing", server_default="preparing"
+    )
+    current_turn_index: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    round_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    campaign: Mapped["Campaign"] = relationship(back_populates="encounters")
+    combatants: Mapped[list["Combatant"]] = relationship(
+        back_populates="encounter", cascade="all, delete-orphan"
+    )
+
+
+class Combatant(Base):
+    """A participant in an initiative encounter."""
+
+    __tablename__ = "combatants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    encounter_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("encounters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    character_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("characters.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    initiative_roll: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    initiative_modifier: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    is_enemy: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    # When True, only the GM can see this combatant — hidden from players
+    is_hidden: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # ── HP / AC (standard+ depth) ────────────────────────────────────────
+    max_hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    temp_hp: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    armor_class: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # JSON list of active condition strings, e.g. ["Blinded","Prone"]
+    conditions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # JSON dict of ability save modifiers, e.g. {"STR": 4, "DEX": 2, ...}
+    save_modifiers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # ── Death saves & concentration (full depth) ─────────────────────────
+    death_save_successes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    death_save_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Name of the spell/effect being concentrated on, or null.
+    concentration_spell: Mapped[str | None] = mapped_column(
+        String(256), nullable=True, default=None
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    encounter: Mapped["Encounter"] = relationship(back_populates="combatants")
+    character: Mapped["Character | None"] = relationship()
+    combat_log_entries: Mapped[list["CombatLogEntry"]] = relationship(
+        back_populates="combatant", cascade="all, delete-orphan"
+    )
+
+
+class CombatLogEntry(Base):
+    """A single event in the combat log — damage, healing, death save, etc."""
+
+    __tablename__ = "combat_log_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    encounter_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("encounters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    combatant_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("combatants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    round_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Event type: 'damage', 'healing', 'death_save', 'condition_add',
+    # 'condition_remove', 'concentration_check', 'concentration_broken'
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    # JSON details — varies by event_type:
+    #   damage:  {"amount": 15, "damage_type": "fire", "source": "Fireball"}
+    #   healing: {"amount": 10, "source": "Cure Wounds"}
+    #   death_save: {"roll": 14, "success": true}
+    #   condition_add/remove: {"condition": "Blinded"}
+    #   concentration_check: {"dc": 10, "roll": 14, "total": 18, "passed": true}
+    #   concentration_broken: {"spell": "Fly", "trigger": "damage"}
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    encounter: Mapped["Encounter"] = relationship()
+    combatant: Mapped["Combatant"] = relationship(back_populates="combat_log_entries")
 
 
 class LLMUsageDailyAggregate(Base):

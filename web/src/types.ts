@@ -29,6 +29,7 @@ export interface ScheduledTask {
   last_run: string | null;
   next_run: string | null;
   upcoming_runs: string[];
+  event_id: number | null;
   created_by: string;
   created_at: string;
 }
@@ -46,6 +47,10 @@ export interface CalendarEvent {
   all_day: boolean;
   rrule: string | null;
   channel_id: string | null;
+  reminder_days: number[] | null;
+  reminder_time: string | null;
+  poll_advance_days: number | null;
+  campaign_id: number | null;
   occurrence_start?: string;
   occurrence_end?: string;
   /** original_start is present for recurring event occurrences */
@@ -184,9 +189,12 @@ export interface Campaign {
   system: string;
   is_active: boolean;
   gm_discord_user_id: string | null;
+  schedule_mode: 'fixed' | 'poll';
+  combat_tracker_depth: 'basic' | 'standard' | 'full';
   banking_enabled: boolean;
   player_banking_enabled: boolean;
   party_gold: number;
+  allow_manual_dice_recording: boolean;
   created_by: string;
   created_at: string;
   deleted_at: string | null;
@@ -346,6 +354,137 @@ export interface GrugNote {
   created_at: string;
   updated_at: string;
 }
+
+/* ── Dice Rolls ───────────────────────────────────────────────────── */
+
+export type DiceRollType =
+  | 'general'
+  | 'attack'
+  | 'damage'
+  | 'saving_throw'
+  | 'ability_check'
+  | 'initiative'
+  | 'death_save'
+  | 'skill_check';
+
+export const ROLL_TYPE_LABELS: Record<DiceRollType, string> = {
+  general: 'General',
+  attack: 'Attack',
+  damage: 'Damage',
+  saving_throw: 'Saving Throw',
+  ability_check: 'Ability Check',
+  initiative: 'Initiative',
+  death_save: 'Death Save',
+  skill_check: 'Skill Check',
+};
+
+export interface DiceRollIndividual {
+  expression?: string;
+  sides?: number;
+  rolls?: number[];
+  kept?: number[];
+  total?: number;
+  sign?: number;
+  constant?: number;
+  manual?: boolean;
+}
+
+export interface DiceRoll {
+  id: number;
+  guild_id: string;
+  campaign_id: number | null;
+  roller_discord_user_id: string;
+  roller_display_name: string;
+  character_name: string | null;
+  expression: string;
+  individual_rolls: DiceRollIndividual[];
+  total: number;
+  roll_type: DiceRollType;
+  is_private: boolean;
+  context_note: string | null;
+  formatted: string;
+  created_at: string;
+}
+
+/* ── Encounters / Initiative ──────────────────────────────────────── */
+
+export type EncounterStatus = 'preparing' | 'active' | 'ended';
+
+export type CombatTrackerDepth = 'basic' | 'standard' | 'full';
+
+export interface MonsterSearchResult {
+  name: string;
+  source: string;
+  system: string;
+  hp: number | null;
+  ac: number | null;
+  initiative_modifier: number | null;
+  cr: string | null;
+  size: string | null;
+  type: string | null;
+  save_modifiers: Record<string, number> | null;
+}
+
+export interface Combatant {
+  id: number;
+  encounter_id: number;
+  character_id: number | null;
+  name: string;
+  initiative_roll: number | null;
+  initiative_modifier: number;
+  is_enemy: boolean;
+  is_hidden: boolean;
+  sort_order: number;
+  is_active: boolean;
+  // HP / AC (standard+ depth)
+  max_hp: number | null;
+  current_hp: number | null;
+  temp_hp: number;
+  armor_class: number | null;
+  conditions: string[] | null;
+  save_modifiers: Record<string, number> | null;
+  // Death saves & concentration (full depth)
+  death_save_successes: number;
+  death_save_failures: number;
+  concentration_spell: string | null;
+  created_at: string;
+}
+
+export interface CombatLogEntry {
+  id: number;
+  encounter_id: number;
+  combatant_id: number;
+  round_number: number;
+  event_type: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface SavingThrowResult {
+  combatant_id: number;
+  combatant_name: string;
+  roll: number;
+  modifier: number;
+  total: number;
+  dc: number;
+  passed: boolean;
+}
+
+export interface Encounter {
+  id: number;
+  campaign_id: number;
+  guild_id: string;
+  name: string;
+  status: EncounterStatus;
+  current_turn_index: number;
+  round_number: number;
+  channel_id: string | null;
+  created_by: string;
+  created_at: string;
+  ended_at: string | null;
+  combatants: Combatant[];
+}
+
 
 /* ── Datetime helpers ─────────────────────────────────────────────── */
 

@@ -203,7 +203,9 @@ def test_upcoming_runs_schema_recurring():
     assert len(runs) == 60
     # All should be Fridays at 08:00 UTC
     for run in runs:
-        assert run.weekday() == 4, f"Expected Friday, got {calendar.day_name[run.weekday()]}"
+        assert run.weekday() == 4, (
+            f"Expected Friday, got {calendar.day_name[run.weekday()]}"
+        )
         assert run.hour == 8
         assert run.minute == 0
 

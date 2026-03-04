@@ -1,7 +1,11 @@
 import { useState } from 'react';
 import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import BoltIcon from '@mui/icons-material/Bolt';
+import CasinoIcon from '@mui/icons-material/Casino';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EventIcon from '@mui/icons-material/Event';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import PeopleIcon from '@mui/icons-material/People';
@@ -11,7 +15,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
 import CharacterTable from './CharacterTable';
+import CampaignScheduleTab from './CampaignScheduleTab';
+import DiceTab from './DiceTab';
 import GoldLedgerDialog from './GoldLedgerDialog';
+import InitiativePanel from './InitiativePanel';
 import SessionNotesTab from './SessionNotesTab';
 import type { Campaign, DiscordChannel, GuildMember } from '../../types';
 
@@ -21,6 +28,7 @@ interface CampaignCardProps {
   isAdmin: boolean;
   currentUserId: string;
   allCampaigns: Campaign[];
+  timezone: string;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
 }
@@ -69,19 +77,27 @@ export default function CampaignCard({
   isAdmin,
   currentUserId,
   allCampaigns,
+  timezone,
   onEdit,
   onDelete,
 }: CampaignCardProps) {
   const c = campaign;
   const channelName = channels.find((ch) => ch.id === c.channel_id)?.name;
-  const isGm = c.gm_discord_user_id === currentUserId;
-  const canManagePartyGold = isAdmin || isGm;
+  const isActualGm = c.gm_discord_user_id === currentUserId;
+
+  // Admin GM-mode toggle — lets admins opt-in to GM controls per campaign
+  // so they can play as a regular player by default without spoilers.
+  const [gmModeEnabled, setGmModeEnabled] = useState(() =>
+    localStorage.getItem(`gm-mode-${c.id}`) === 'true',
+  );
+  const isGm = isActualGm || (isAdmin && gmModeEnabled);
+  const canManagePartyGold = isGm;
 
   const qc = useQueryClient();
   const [partyGoldOpen, setPartyGoldOpen] = useState(false);
   const [partyGoldAmount, setPartyGoldAmount] = useState('');
   const [partyGoldReason, setPartyGoldReason] = useState('');
-  const [activeTab, setActiveTab] = useState<'characters' | 'notes'>('characters');
+  const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'schedule' | 'dice' | 'initiative'>('characters');
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [goldMenuAnchor, setGoldMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -152,7 +168,7 @@ export default function CampaignCard({
         )}
         {c.banking_enabled && (
           <Tooltip
-            title={`Party gold pool${c.player_banking_enabled ? ' · Players can transact' : ''}${canManagePartyGold ? ' · Click for options' : ''}`}
+            title={`Party gold pool${c.player_banking_enabled ? ' · Players can transact' : ''}${canManagePartyGold ? ' · Click for options' : ' · Click to view ledger'}`}
             placement="top"
           >
             <Chip
@@ -160,14 +176,17 @@ export default function CampaignCard({
               variant="outlined"
               icon={<MonetizationOnIcon sx={{ fontSize: '13px !important', color: 'warning.main !important' }} />}
               label={`${c.party_gold.toLocaleString(undefined, { maximumFractionDigits: 4 })} gp`}
-              onClick={canManagePartyGold ? (e) => setGoldMenuAnchor(e.currentTarget) : undefined}
+              onClick={canManagePartyGold
+                ? (e) => setGoldMenuAnchor(e.currentTarget)
+                : () => setLedgerOpen(true)
+              }
               sx={{
                 height: 20,
                 fontSize: '0.7rem',
                 flexShrink: 0,
                 color: 'warning.main',
                 borderColor: 'warning.main',
-                cursor: canManagePartyGold ? 'pointer' : 'default',
+                cursor: 'pointer',
               }}
             />
           </Tooltip>
@@ -196,19 +215,36 @@ export default function CampaignCard({
             sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
           />
         </Tooltip>
+        {isAdmin && !isActualGm && (
+          <Tooltip title={gmModeEnabled ? 'Disable GM mode' : 'Enable GM mode — show GM controls'} placement="top">
+            <Chip
+              label="GM Mode"
+              size="small"
+              icon={<AdminPanelSettingsIcon sx={{ fontSize: '13px !important' }} />}
+              color={gmModeEnabled ? 'primary' : 'default'}
+              variant={gmModeEnabled ? 'filled' : 'outlined'}
+              onClick={() => {
+                const next = !gmModeEnabled;
+                setGmModeEnabled(next);
+                localStorage.setItem(`gm-mode-${c.id}`, String(next));
+              }}
+              sx={{ height: 20, fontSize: '0.7rem', cursor: 'pointer', flexShrink: 0 }}
+            />
+          </Tooltip>
+        )}
+        {isGm && (
+          <Tooltip title="Edit campaign">
+            <IconButton size="small" onClick={() => onEdit(c)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         {isAdmin && (
-          <Stack direction="row" spacing={0.25} sx={{ flexShrink: 0 }}>
-            <Tooltip title="Edit campaign">
-              <IconButton size="small" onClick={() => onEdit(c)}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete campaign">
-              <IconButton size="small" color="error" onClick={() => onDelete(c)}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Stack>
+          <Tooltip title="Delete campaign">
+            <IconButton size="small" color="error" onClick={() => onDelete(c)}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
 
@@ -235,6 +271,27 @@ export default function CampaignCard({
             iconPosition="start"
             sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
           />
+          <Tab
+            value="schedule"
+            label="Schedule"
+            icon={<EventIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
+          <Tab
+            value="dice"
+            label="Dice"
+            icon={<CasinoIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
+          <Tab
+            value="initiative"
+            label="Initiative"
+            icon={<BoltIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
         </Tabs>
       </Box>
 
@@ -246,11 +303,11 @@ export default function CampaignCard({
             campaignId={c.id}
             campaignSystem={c.system}
             isAdmin={isAdmin}
+            isGm={isGm}
             currentUserId={currentUserId}
             allCampaigns={allCampaigns}
             bankingEnabled={c.banking_enabled}
             playerBankingEnabled={c.player_banking_enabled}
-            campaignGmId={c.gm_discord_user_id ?? undefined}
             partyGold={c.party_gold}
           />
         )}
@@ -259,6 +316,38 @@ export default function CampaignCard({
             guildId={c.guild_id}
             campaignId={c.id}
             isAdmin={isAdmin}
+            isGm={isGm}
+            currentUserId={currentUserId}
+          />
+        )}
+        {activeTab === 'schedule' && (
+          <CampaignScheduleTab
+            guildId={c.guild_id}
+            campaignId={c.id}
+            campaignName={c.name}
+            scheduleMode={c.schedule_mode ?? 'fixed'}
+            isGm={isGm}
+            currentUserId={currentUserId}
+            timezone={timezone}
+            channels={channels}
+            campaignChannelId={c.channel_id ?? null}
+          />
+        )}
+        {activeTab === 'dice' && (
+          <DiceTab
+            guildId={c.guild_id}
+            campaignId={c.id}
+            isGm={isGm}
+            currentUserId={currentUserId}
+            allowManualDiceRecording={c.allow_manual_dice_recording ?? false}
+          />
+        )}
+        {activeTab === 'initiative' && (
+          <InitiativePanel
+            guildId={c.guild_id}
+            campaignId={c.id}
+            isGm={isGm}
+            depth={c.combat_tracker_depth ?? 'standard'}
             currentUserId={currentUserId}
           />
         )}

@@ -81,6 +81,7 @@ All configuration is driven by environment variables (or a `.env` file). Key opt
 | `AGENT_HISTORY_ARCHIVE_BATCH` | No | `10` | Overflow messages needed before archiving to RAG |
 | `AGENT_HISTORY_MAX_SUMMARIES` | No | `100` | Max history summaries per channel in the vector store |
 | `AGENT_CONTEXT_LOOKBACK_DAYS` | No | `30` | Rolling lookback window (days) when no per-channel cutoff is set |
+| `AGENT_SESSION_GAP_HOURS` | No | `4` | Gap between messages (hours) that marks a new session; older messages are dropped from context to prevent necro-thread responses. Set to `0` to disable. |
 | `FLUSH_CHAT_HISTORY` | No | `false` | Archive all conversation history on startup |
 | `LOG_LEVEL` | No | `INFO` | Logging level |
 

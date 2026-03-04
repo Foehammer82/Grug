@@ -7,7 +7,7 @@ construction and the ``GrugAgent`` orchestration wrapper.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
@@ -99,7 +99,8 @@ def _build_agent() -> Agent[GrugDeps, str]:
             default_system_line = (
                 f"This server default game system: {default_system}. "
                 "Grug know this. Grug use this for all rule lookups unless "
-                "friend ask about different game."
+                "friend ask about different game. "
+                "NEVER ask friend which system they playing. Grug already know."
             )
         else:
             default_system_line = ""
@@ -120,7 +121,9 @@ def _build_agent() -> Agent[GrugDeps, str]:
     from grug.agent.tools.banking_tools import register_banking_tools
     from grug.agent.tools.campaign_tools import register_campaign_tools
     from grug.agent.tools.character_tools import register_character_tools
+    from grug.agent.tools.dice_tools import register_dice_tools
     from grug.agent.tools.glossary_tools import register_glossary_tools
+    from grug.agent.tools.initiative_tools import register_initiative_tools
     from grug.agent.tools.rag_tools import register_rag_tools
     from grug.agent.tools.rules_tools import register_rules_tools
     from grug.agent.tools.scheduling_tools import register_scheduling_tools
@@ -137,6 +140,8 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_rules_tools(agent)
     register_notes_tools(agent)
     register_session_notes_tools(agent)
+    register_dice_tools(agent)
+    register_initiative_tools(agent)
 
     @agent.tool
     async def get_current_time(ctx: RunContext[GrugDeps]) -> str:
@@ -336,6 +341,30 @@ class GrugAgent:
             )
             rows = list(reversed(recent_result.scalars().all()))
 
+        # Session-gap detection: if there is a gap larger than the configured
+        # threshold between any two consecutive messages, drop everything before
+        # that gap.  This prevents "necro thread" behaviour where Grug latches
+        # onto stale channel chatter from days/weeks ago and responds to it
+        # instead of the current conversation.
+        session_gap_hours = settings.agent_session_gap_hours
+        if session_gap_hours > 0 and len(rows) > 1:
+            gap_threshold = timedelta(hours=session_gap_hours)
+            # Scan backwards (newest → oldest) so we clip at the *most recent*
+            # large gap, preserving as much of the current session as possible.
+            for i in range(len(rows) - 1, 0, -1):
+                t_after = rows[i].created_at
+                t_before = rows[i - 1].created_at
+                if t_after and t_before and (t_after - t_before) > gap_threshold:
+                    logger.debug(
+                        "Session gap of %s detected at message index %d — "
+                        "dropping %d older messages from context",
+                        t_after - t_before,
+                        i,
+                        i,
+                    )
+                    rows = rows[i:]
+                    break
+
         messages: list[ModelRequest | ModelResponse] = []
 
         # Inject a voice reminder at the top of history so the model sees
@@ -349,7 +378,10 @@ class GrugAgent:
                             "No emoji. No markdown. No contractions. No 'I' or 'me'. "
                             "Say 'Grug' instead. Keep it short and punchy. "
                             "Never use a person name, display name, or username. "
-                            "Always say 'you' or 'friend' instead. No exceptions."
+                            "Always say 'you' or 'friend' instead. No exceptions. "
+                            "Messages labelled [background channel chat] are things "
+                            "Grug overheard but was NOT spoken to. Never address or "
+                            "comment on those — they are context only."
                         )
                     )
                 ]
@@ -367,14 +399,18 @@ class GrugAgent:
 
         for row in rows:
             if row.role == "user":
-                # Prefix with the speaker's name so Grug knows who said what
-                # in multi-user channels.
                 prefix = f"{row.author_name}: " if row.author_name else ""
-                messages.append(
-                    ModelRequest(
-                        parts=[UserPromptPart(content=f"{prefix}{row.content}")]
+                if row.is_passive:
+                    # Passive messages are ambient channel chatter — Grug overheard
+                    # them but was not addressed.  Wrap them so the model knows not
+                    # to respond to their content; they exist only for context.
+                    content = (
+                        f"[background channel chat — Grug was not spoken to]\n"
+                        f"{prefix}{row.content}"
                     )
-                )
+                else:
+                    content = f"{prefix}{row.content}"
+                messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
         return messages
@@ -483,8 +519,10 @@ class GrugAgent:
             # notes appear before the actual conversation history.
             history = history[:2] + notes_messages + history[2:]
 
-        # Default TTRPG system is determined lazily by tools (e.g. rule
-        # lookup) when needed, to avoid an extra DB query on every message.
+        # Resolve the default TTRPG system so the system prompt can tell
+        # Grug which game is being played.  Priority:
+        #   1. Campaign system (channel-specific)
+        #   2. Guild-level default_ttrpg_system (server-wide fallback)
         default_ttrpg_system: str | None = None
 
         # Pre-load campaign details so the agent knows what campaign and
@@ -503,6 +541,11 @@ class GrugAgent:
                         )
                     ).scalar_one_or_none()
                     if _campaign is not None:
+                        # Use the campaign's system as the default for this
+                        # channel — this is the most specific signal.
+                        if _campaign.system:
+                            default_ttrpg_system = _campaign.system
+
                         _chars = (
                             (
                                 await _session2.execute(
@@ -542,6 +585,29 @@ class GrugAgent:
                 logger.warning(
                     "Failed to load campaign context for campaign %d",
                     campaign_id,
+                    exc_info=True,
+                )
+
+        # Fall back to the guild-level default system when no campaign
+        # provided the system (no campaign linked, or campaign has no system).
+        if default_ttrpg_system is None and not is_dm_session:
+            try:
+                from grug.db.models import GuildConfig as _GuildConfig
+
+                _factory3 = get_session_factory()
+                async with _factory3() as _session3:
+                    _result3 = await _session3.execute(
+                        select(_GuildConfig.default_ttrpg_system).where(
+                            _GuildConfig.guild_id == guild_id
+                        )
+                    )
+                    _guild_system = _result3.scalar_one_or_none()
+                    if _guild_system:
+                        default_ttrpg_system = _guild_system
+            except Exception:
+                logger.warning(
+                    "Failed to load guild default TTRPG system for guild %d",
+                    guild_id,
                     exc_info=True,
                 )
 

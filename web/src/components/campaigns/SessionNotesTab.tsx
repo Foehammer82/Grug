@@ -34,6 +34,7 @@ interface SessionNotesTabProps {
   guildId: string;
   campaignId: number;
   isAdmin: boolean;
+  isGm: boolean;
   currentUserId: string;
 }
 
@@ -55,19 +56,19 @@ const STATUS_LABELS: Record<SynthesisStatus, string> = {
 function NoteRow({
   note,
   guildId,
-  isAdmin,
+  isGm,
   currentUserId,
 }: {
   note: SessionNote;
   guildId: string;
-  isAdmin: boolean;
+  isGm: boolean;
   currentUserId: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const qc = useQueryClient();
 
-  const canWrite = isAdmin || note.submitted_by === currentUserId;
+  const canWrite = isGm || note.submitted_by === currentUserId;
 
   const resynthMutation = useMutation({
     mutationFn: async () => {
@@ -670,6 +671,7 @@ export default function SessionNotesTab({
   guildId,
   campaignId,
   isAdmin,
+  isGm,
   currentUserId,
 }: SessionNotesTabProps) {
   const [addOpen, setAddOpen] = useState(false);
@@ -751,7 +753,7 @@ export default function SessionNotesTab({
             key={note.id}
             note={note}
             guildId={guildId}
-            isAdmin={isAdmin}
+            isGm={isGm}
             currentUserId={currentUserId}
           />
         ))}

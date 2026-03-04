@@ -15,6 +15,8 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material';
+import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import client from '../../api/client';
 import type { Character } from '../../types';
 
@@ -34,8 +36,10 @@ interface GoldManageDialogProps {
 /**
  * Dialog for managing a character's gold wallet.
  *
- * - Admin / GM: can directly add or remove any amount from the wallet.
- * - Admin / GM / player (when playerBankingEnabled): can transfer between the wallet and the party pool.
+ * - Admin / GM: can directly add or remove any amount (Adjust tab) + transfer to/from party pool.
+ * - Players: can always spend (deduct) their own gold and transfer to/from the party pool.
+ *   `playerBankingEnabled` only gates positive self-adjustments (adding gold from nowhere),
+ *   which are enforced on the backend and do not appear as a separate UI tab.
  */
 export default function GoldManageDialog({
   open,
@@ -50,13 +54,27 @@ export default function GoldManageDialog({
   const qc = useQueryClient();
 
   // ── Tab state ─────────────────────────────────────────────────────────
-  const canTransfer = isAdminOrGm || playerBankingEnabled;
-  const useTabs = isAdminOrGm && canTransfer;
-  const [tab, setTab] = useState<'adjust' | 'transfer'>(isAdminOrGm ? 'adjust' : 'transfer');
+  // Players can always spend (deduct) their own gold and transfer to/from the party pool.
+  // player_banking_enabled only gates positive self-adjustments (adding gold from nowhere),
+  // which is enforced on the backend — no separate tab needed here.
+  const canSpend = !isAdminOrGm;
+  const canTransfer = true;
+  // Admins/GMs see Adjust + Transfer; players always see Spend + Transfer
+  const useTabs = true;
+  type TabKey = 'adjust' | 'spend' | 'transfer';
+  const defaultTab: TabKey = isAdminOrGm ? 'adjust' : 'spend';
+  const [tab, setTab] = useState<TabKey>(defaultTab);
 
-  // ── Adjust state ──────────────────────────────────────────────────────
+  // ── Adjust state (GM / admin) ─────────────────────────────────────────
+  const [adjustDirection, setAdjustDirection] = useState<'add' | 'remove'>('add');
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
+
+  // ── Wallet state (players — direction determines sign sent to API) ─────
+  // 'add' only available when playerBankingEnabled; otherwise locked to 'spend'.
+  const [walletDirection, setWalletDirection] = useState<'add' | 'spend'>('spend');
+  const [spendAmount, setSpendAmount] = useState('');
+  const [spendReason, setSpendReason] = useState('');
 
   // ── Transfer state ────────────────────────────────────────────────────
   const [transferAmount, setTransferAmount] = useState('');
@@ -64,21 +82,41 @@ export default function GoldManageDialog({
   const [transferReason, setTransferReason] = useState('');
 
   function resetAndClose() {
+    setAdjustDirection('add');
     setAdjustAmount('');
     setAdjustReason('');
+    setWalletDirection('spend');
+    setSpendAmount('');
+    setSpendReason('');
     setTransferAmount('');
     setTransferDirection('to_party');
     setTransferReason('');
-    setTab(isAdminOrGm ? 'adjust' : 'transfer');
+    setTab(defaultTab);
     onClose();
   }
 
   // ── Mutations ─────────────────────────────────────────────────────────
   const adjustMutation = useMutation({
     mutationFn: async () => {
+      const signed = adjustDirection === 'add' ? adjustAmountNum : -adjustAmountNum;
       await client.post(
         `/api/guilds/${guildId}/campaigns/${campaignId}/gold/characters/${character.id}`,
-        { amount: parseFloat(adjustAmount), reason: adjustReason || null },
+        { amount: signed, reason: adjustReason || null },
+      );
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['campaign-characters', guildId, campaignId] });
+      resetAndClose();
+    },
+  });
+
+  // Player wallet mutation — direction determines sign.
+  const spendMutation = useMutation({
+    mutationFn: async () => {
+      const signed = walletDirection === 'add' ? spendAmountNum : -spendAmountNum;
+      await client.post(
+        `/api/guilds/${guildId}/campaigns/${campaignId}/gold/characters/${character.id}`,
+        { amount: signed, reason: spendReason || null },
       );
     },
     onSuccess: () => {
@@ -105,21 +143,46 @@ export default function GoldManageDialog({
 
   const currentGold = (character.gold ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
   const adjustAmountNum = parseFloat(adjustAmount);
+  const spendAmountNum = parseFloat(spendAmount);
   const transferAmountNum = parseFloat(transferAmount);
 
+  const fmtGp = (n: number) => n.toLocaleString(undefined, { maximumFractionDigits: 4 }) + ' gp';
+
+  // ── GM / Admin: Adjust panel ──────────────────────────────────────────
   const adjustPanel = (
     <Stack spacing={1.5}>
+      <ToggleButtonGroup
+        exclusive
+        size="small"
+        value={adjustDirection}
+        onChange={(_, v) => v && setAdjustDirection(v)}
+        fullWidth
+      >
+        <ToggleButton
+          value="add"
+          sx={{ gap: 0.5, '&.Mui-selected': { color: 'success.main', borderColor: 'success.main', bgcolor: 'success.main' + '1A' } }}
+        >
+          <AddCircleOutlineIcon fontSize="small" /> Add
+        </ToggleButton>
+        <ToggleButton
+          value="remove"
+          sx={{ gap: 0.5, '&.Mui-selected': { color: 'error.main', borderColor: 'error.main', bgcolor: 'error.main' + '1A' } }}
+        >
+          <RemoveCircleOutlineIcon fontSize="small" /> Remove
+        </ToggleButton>
+      </ToggleButtonGroup>
       <TextField
-        label="Amount"
+        label="Amount (gp)"
         size="small"
         type="number"
         value={adjustAmount}
         onChange={(e) => setAdjustAmount(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && adjustAmount && !isNaN(adjustAmountNum) && !adjustMutation.isPending)
+          if (e.key === 'Enter' && adjustAmount && !isNaN(adjustAmountNum) && adjustAmountNum > 0 && !adjustMutation.isPending)
             adjustMutation.mutate();
         }}
-        helperText="Use a negative number to remove gold"
+        helperText={adjustDirection === 'add' ? 'Will be credited to the wallet' : 'Will be deducted from the wallet'}
+        inputProps={{ min: 0 }}
         fullWidth
         autoFocus={tab === 'adjust'}
       />
@@ -138,10 +201,84 @@ export default function GoldManageDialog({
       <Button
         variant="contained"
         size="small"
-        disabled={!adjustAmount || isNaN(adjustAmountNum) || adjustMutation.isPending}
+        color={adjustDirection === 'add' ? 'success' : 'error'}
+        disabled={!adjustAmount || isNaN(adjustAmountNum) || adjustAmountNum <= 0 || adjustMutation.isPending}
         onClick={() => adjustMutation.mutate()}
       >
-        {adjustMutation.isPending ? 'Adjusting…' : 'Adjust'}
+        {adjustMutation.isPending
+          ? (adjustDirection === 'add' ? 'Adding…' : 'Removing…')
+          : (adjustDirection === 'add'
+              ? `Add${adjustAmountNum > 0 ? ' ' + fmtGp(adjustAmountNum) : ''}`
+              : `Remove${adjustAmountNum > 0 ? ' ' + fmtGp(adjustAmountNum) : ''}`)}
+      </Button>
+    </Stack>
+  );
+
+  // ── Player: Wallet panel ──────────────────────────────────────────────
+  const spendPanel = (
+    <Stack spacing={1.5}>
+      {playerBankingEnabled && (
+        <ToggleButtonGroup
+          exclusive
+          size="small"
+          value={walletDirection}
+          onChange={(_, v) => v && setWalletDirection(v)}
+          fullWidth
+        >
+          <ToggleButton
+            value="add"
+            sx={{ gap: 0.5, '&.Mui-selected': { color: 'success.main', borderColor: 'success.main', bgcolor: 'success.main' + '1A' } }}
+          >
+            <AddCircleOutlineIcon fontSize="small" /> Receive
+          </ToggleButton>
+          <ToggleButton
+            value="spend"
+            sx={{ gap: 0.5, '&.Mui-selected': { color: 'warning.main', borderColor: 'warning.main', bgcolor: 'warning.main' + '1A' } }}
+          >
+            <RemoveCircleOutlineIcon fontSize="small" /> Spend
+          </ToggleButton>
+        </ToggleButtonGroup>
+      )}
+      <TextField
+        label="Amount (gp)"
+        size="small"
+        type="number"
+        value={spendAmount}
+        onChange={(e) => setSpendAmount(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && spendAmount && !isNaN(spendAmountNum) && spendAmountNum > 0 && !spendMutation.isPending)
+            spendMutation.mutate();
+        }}
+        helperText={walletDirection === 'add' ? 'Will be credited to your wallet' : 'Will be deducted from your wallet'}
+        inputProps={{ min: 0 }}
+        fullWidth
+        autoFocus={tab === 'spend'}
+      />
+      <TextField
+        label="Reason (optional)"
+        size="small"
+        value={spendReason}
+        onChange={(e) => setSpendReason(e.target.value)}
+        placeholder={walletDirection === 'add' ? 'e.g. Reward from the blacksmith' : 'e.g. Bought rations at the market'}
+        fullWidth
+      />
+      {spendMutation.isError && (
+        <Typography variant="caption" color="error">
+          {(spendMutation.error as Error)?.message ?? 'Failed to update gold.'}
+        </Typography>
+      )}
+      <Button
+        variant="contained"
+        size="small"
+        color={walletDirection === 'add' ? 'success' : 'warning'}
+        disabled={!spendAmount || isNaN(spendAmountNum) || spendAmountNum <= 0 || spendMutation.isPending}
+        onClick={() => spendMutation.mutate()}
+      >
+        {spendMutation.isPending
+          ? (walletDirection === 'add' ? 'Adding…' : 'Spending…')
+          : (walletDirection === 'add'
+              ? `Receive${spendAmountNum > 0 ? ' ' + fmtGp(spendAmountNum) : ''}`
+              : `Spend${spendAmountNum > 0 ? ' ' + fmtGp(spendAmountNum) : ''}`)}
       </Button>
     </Stack>
   );
@@ -216,19 +353,21 @@ export default function GoldManageDialog({
       {useTabs && (
         <Tabs
           value={tab}
-          onChange={(_, v) => setTab(v)}
+          onChange={(_, v) => setTab(v as TabKey)}
           variant="fullWidth"
           sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}
         >
-          <Tab label="Adjust" value="adjust" />
+          {isAdminOrGm && <Tab label="Adjust" value="adjust" />}
+          {canSpend && <Tab label={playerBankingEnabled ? 'Wallet' : 'Spend'} value="spend" />}
           <Tab label="Transfer" value="transfer" />
         </Tabs>
       )}
 
       <DialogContent>
         <Box sx={{ mt: 1 }}>
-          {(!useTabs || tab === 'adjust') && isAdminOrGm && adjustPanel}
-          {(!useTabs || tab === 'transfer') && canTransfer && transferPanel}
+          {tab === 'adjust' && isAdminOrGm && adjustPanel}
+          {tab === 'spend' && canSpend && spendPanel}
+          {tab === 'transfer' && transferPanel}
         </Box>
       </DialogContent>
 

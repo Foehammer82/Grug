@@ -102,6 +102,15 @@ class Settings(BaseSettings):
         default=30,
         description="Rolling lookback window (days) used when no explicit per-channel context cutoff is set",
     )
+    agent_session_gap_hours: int = Field(
+        default=4,
+        description=(
+            "If the most recent gap between consecutive messages in the context window "
+            "exceeds this many hours, messages before that gap are dropped. "
+            "Prevents necro-thread responses where Grug latches onto old channel chatter. "
+            "Set to 0 to disable."
+        ),
+    )
     flush_chat_history: bool = Field(
         default=False,
         description="Archive all conversation history on startup (useful for testing prompt changes)",

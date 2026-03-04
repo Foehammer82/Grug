@@ -25,6 +25,8 @@ from api.schemas import (
     CronFromTextOut,
     CronFromTextRequest,
     EventNoteCreate,
+    RruleFromTextOut,
+    RruleFromTextRequest,
     EventNoteOut,
     EventNoteUpdate,
     EventOccurrenceOverrideOut,
@@ -72,7 +74,7 @@ async def list_events(
     parameters the endpoint falls back to returning upcoming events
     (start_time >= now) without RRULE expansion.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
 
     if start is not None and end is not None:
         # Date-range mode — return expanded occurrences.
@@ -128,6 +130,7 @@ async def list_events(
                 "rrule": e.rrule,
                 "location": e.location,
                 "channel_id": e.channel_id,
+                "campaign_id": e.campaign_id,
                 "created_by": e.created_by,
                 "created_at": e.created_at,
                 "updated_at": e.updated_at,
@@ -146,7 +149,7 @@ async def create_event(
     db: AsyncSession = Depends(get_db),
 ) -> CalendarEvent:
     """Create a new calendar event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     user_id = int(user["id"])
     await ensure_guild(guild_id)
@@ -161,11 +164,22 @@ async def create_event(
         rrule=body.rrule,
         location=body.location,
         channel_id=channel_id,
+        reminder_days=body.reminder_days,
+        reminder_time=body.reminder_time,
+        poll_advance_days=body.poll_advance_days,
+        campaign_id=body.campaign_id,
         created_by=user_id,
     )
     db.add(event)
     await db.commit()
     await db.refresh(event)
+
+    # Auto-create reminders for the new event, but only if a channel is set.
+    if channel_id is not None:
+        from grug.event_reminders import create_event_reminders
+
+        await create_event_reminders(event.id, guild_id, channel_id)
+
     return event
 
 
@@ -181,7 +195,7 @@ async def update_event(
 ) -> CalendarEvent:
     """Update a calendar event.  Uses ``model_fields_set`` so explicit
     ``null`` clears the field."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     event = await get_or_404(
         db,
@@ -199,6 +213,14 @@ async def update_event(
 
     await db.commit()
     await db.refresh(event)
+
+    # Refresh reminders if timing, channel, or reminder config changed.
+    _reminder_fields = {"start_time", "reminder_days", "reminder_time", "channel_id"}
+    if body.model_fields_set & _reminder_fields:
+        from grug.event_reminders import refresh_event_reminders
+
+        await refresh_event_reminders(event.id)
+
     return event
 
 
@@ -210,7 +232,7 @@ async def delete_event(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a calendar event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     event = await get_or_404(
         db,
@@ -219,6 +241,12 @@ async def delete_event(
         CalendarEvent.guild_id == guild_id,
         detail="Event not found",
     )
+
+    # Clean up any linked reminder tasks before deleting the event.
+    from grug.event_reminders import delete_event_reminders
+
+    await delete_event_reminders(event_id)
+
     await db.delete(event)
     await db.commit()
 
@@ -239,7 +267,7 @@ async def list_rsvps(
     db: AsyncSession = Depends(get_db),
 ) -> list[EventRSVP]:
     """List all RSVPs for a calendar event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         CalendarEvent,
@@ -263,7 +291,7 @@ async def upsert_rsvp(
     db: AsyncSession = Depends(get_db),
 ) -> EventRSVP:
     """Set or update the current user's RSVP for an event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         CalendarEvent,
@@ -303,7 +331,7 @@ async def delete_rsvp(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Remove the current user's RSVP for an event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     discord_user_id = int(user["id"])
     result = await db.execute(
         select(EventRSVP).where(
@@ -333,7 +361,7 @@ async def list_notes(
     db: AsyncSession = Depends(get_db),
 ) -> list[EventNote]:
     """List planning notes for a calendar event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         CalendarEvent,
@@ -362,7 +390,7 @@ async def create_note(
     db: AsyncSession = Depends(get_db),
 ) -> EventNote:
     """Add a planning note to a calendar event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     await get_or_404(
         db,
@@ -395,7 +423,7 @@ async def update_note(
     db: AsyncSession = Depends(get_db),
 ) -> EventNote:
     """Update a planning note's content or done state."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         CalendarEvent,
@@ -428,7 +456,7 @@ async def delete_note(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a planning note."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     await get_or_404(
         db,
@@ -464,7 +492,7 @@ async def list_overrides(
     db: AsyncSession = Depends(get_db),
 ) -> list[EventOccurrenceOverride]:
     """List per-occurrence overrides for a recurring event."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         CalendarEvent,
@@ -496,7 +524,7 @@ async def upsert_override(
     Identified by ``original_start`` — pass ``cancelled=true`` to hide the
     occurrence; set ``new_start`` / ``new_end`` to reschedule it.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     await get_or_404(
         db,
@@ -546,7 +574,7 @@ async def delete_override(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a per-occurrence override, restoring the normal RRULE occurrence."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     override = await get_or_404(
         db,
@@ -574,7 +602,7 @@ async def list_polls(
     db: AsyncSession = Depends(get_db),
 ) -> list[AvailabilityPoll]:
     """List availability polls for a guild."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(AvailabilityPoll)
         .where(AvailabilityPoll.guild_id == guild_id)
@@ -596,7 +624,7 @@ async def create_poll(
     db: AsyncSession = Depends(get_db),
 ) -> AvailabilityPoll:
     """Create a new availability poll for a guild."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     await ensure_guild(guild_id)
 
@@ -632,7 +660,7 @@ async def get_poll(
     db: AsyncSession = Depends(get_db),
 ) -> AvailabilityPoll:
     """Get a single availability poll with its votes."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(AvailabilityPoll)
         .where(
@@ -661,7 +689,7 @@ async def update_poll(
     db: AsyncSession = Depends(get_db),
 ) -> AvailabilityPoll:
     """Update a poll (e.g. set winner or close it)."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
         select(AvailabilityPoll)
@@ -700,7 +728,7 @@ async def upsert_poll_vote(
     db: AsyncSession = Depends(get_db),
 ) -> PollVote:
     """Cast or update the current user's vote on a poll."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(AvailabilityPoll).where(
             AvailabilityPoll.id == poll_id,
@@ -743,7 +771,7 @@ async def delete_poll_vote(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Remove the current user's vote from a poll."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     discord_user_id = int(user["id"])
     result = await db.execute(
         select(PollVote).where(
@@ -765,7 +793,7 @@ async def delete_poll(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete an availability poll."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
         select(AvailabilityPoll).where(
@@ -791,7 +819,7 @@ async def list_tasks(
     db: AsyncSession = Depends(get_db),
 ) -> list[ScheduledTask]:
     """List scheduled tasks for a guild."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(ScheduledTask)
         .where(ScheduledTask.guild_id == guild_id)
@@ -809,11 +837,27 @@ async def guild_cron_from_text(
     user: dict[str, Any] = Depends(get_current_user),
 ) -> CronFromTextOut:
     """Convert a plain-English schedule description to a 5-field UTC cron expression."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     from api.services import parse_cron_from_text
 
     cron_expr = await parse_cron_from_text(body.text)
     return CronFromTextOut(cron_expression=cron_expr)
+
+
+@router.post(
+    "/api/guilds/{guild_id}/events/rrule-from-text", response_model=RruleFromTextOut
+)
+async def guild_rrule_from_text(
+    guild_id: int,
+    body: RruleFromTextRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> RruleFromTextOut:
+    """Convert a plain-English recurrence description to an iCal RRULE string."""
+    await assert_guild_member(guild_id, user)
+    from api.services import parse_rrule_from_text
+
+    rrule = await parse_rrule_from_text(body.text)
+    return RruleFromTextOut(rrule=rrule)
 
 
 @router.post(
@@ -826,7 +870,7 @@ async def create_guild_task(
     db: AsyncSession = Depends(get_db),
 ) -> ScheduledTask:
     """Create a new scheduled task for a guild via the web UI."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     user_id = int(user["id"])
     await ensure_guild(guild_id)
@@ -872,7 +916,7 @@ async def toggle_task(
     db: AsyncSession = Depends(get_db),
 ) -> ScheduledTask:
     """Enable or disable a scheduled task."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     task = await get_or_404(
         db,
@@ -895,7 +939,7 @@ async def delete_task(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a scheduled task."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     task = await get_or_404(
         db,

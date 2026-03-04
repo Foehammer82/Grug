@@ -137,6 +137,23 @@ async def get_guild_config(
                     cfg.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(cfg)
+                    # Auto-enable the default channel so Grug responds there immediately.
+                    ch_result = await db.execute(
+                        select(ChannelConfig).where(
+                            ChannelConfig.channel_id == cfg.announce_channel_id
+                        )
+                    )
+                    ch_cfg = ch_result.scalar_one_or_none()
+                    if ch_cfg is None:
+                        ch_cfg = ChannelConfig(
+                            guild_id=guild_id,
+                            channel_id=cfg.announce_channel_id,
+                            enabled=True,
+                        )
+                        db.add(ch_cfg)
+                    else:
+                        ch_cfg.enabled = True
+                    await db.commit()
         except HTTPException:
             pass  # Bot token not configured — non-fatal
         except Exception:
@@ -175,6 +192,27 @@ async def update_guild_config(
     cfg.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(cfg)
+
+    # Auto-enable the announce_channel_id whenever it's set so Grug can
+    # respond in his default channel out of the box.
+    if "announce_channel_id" in body.model_fields_set and cfg.announce_channel_id:
+        result = await db.execute(
+            select(ChannelConfig).where(
+                ChannelConfig.channel_id == cfg.announce_channel_id
+            )
+        )
+        ch_cfg = result.scalar_one_or_none()
+        if ch_cfg is None:
+            ch_cfg = ChannelConfig(
+                guild_id=guild_id,
+                channel_id=cfg.announce_channel_id,
+                enabled=True,
+            )
+            db.add(ch_cfg)
+        else:
+            ch_cfg.enabled = True
+        await db.commit()
+
     return cfg
 
 
@@ -341,7 +379,7 @@ async def get_channel_config(
     db: AsyncSession = Depends(get_db),
 ) -> ChannelConfig:
     """Return the per-channel config, creating a default row if none exists."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(ChannelConfig).where(
             ChannelConfig.channel_id == channel_id,
@@ -372,7 +410,7 @@ async def update_channel_config(
     db: AsyncSession = Depends(get_db),
 ) -> ChannelConfig:
     """Update per-channel config fields (always_respond)."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
         select(ChannelConfig).where(
@@ -387,6 +425,8 @@ async def update_channel_config(
         await ensure_guild(guild_id)
         cfg = ChannelConfig(guild_id=guild_id, channel_id=channel_id)
         db.add(cfg)
+    if "enabled" in body.model_fields_set:
+        cfg.enabled = body.enabled
     if "auto_respond" in body.model_fields_set:
         cfg.auto_respond = body.auto_respond
     if (
@@ -428,7 +468,7 @@ async def get_calendar_token(
     """
     import secrets
 
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     cfg = await get_or_404(
         db,
         GuildConfig,
@@ -455,7 +495,7 @@ async def regenerate_calendar_token(
     """
     import secrets
 
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     cfg = await get_or_404(
         db,

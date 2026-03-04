@@ -63,6 +63,7 @@ class GuildConfigUpdate(BaseModel):
 class ChannelConfigOut(BaseModel):
     channel_id: int
     guild_id: int
+    enabled: bool
     auto_respond: bool
     auto_respond_threshold: float
     updated_at: datetime
@@ -75,6 +76,8 @@ class ChannelConfigOut(BaseModel):
 
 
 class ChannelConfigUpdate(BaseModel):
+    # Master switch — when False, Grug ignores this channel entirely.
+    enabled: bool | None = None
     auto_respond: bool | None = None
     # Must be in the range [0.0, 1.0].
     auto_respond_threshold: float | None = None
@@ -90,6 +93,10 @@ class CalendarEventOut(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: int | None
+    reminder_days: list[int] | None = None
+    reminder_time: str | None = None
+    poll_advance_days: int | None = None
+    campaign_id: int | None = None
     created_by: int
     created_at: datetime
     updated_at: datetime | None = None
@@ -120,6 +127,10 @@ class CalendarEventCreate(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: str | int | None = None
+    reminder_days: list[int] | None = None
+    reminder_time: str | None = None
+    poll_advance_days: int | None = None
+    campaign_id: int | None = None
 
 
 class CalendarEventUpdate(BaseModel):
@@ -130,6 +141,10 @@ class CalendarEventUpdate(BaseModel):
     rrule: str | None = None
     location: str | None = None
     channel_id: str | int | None = None
+    reminder_days: list[int] | None = None
+    reminder_time: str | None = None
+    poll_advance_days: int | None = None
+    campaign_id: int | None = None
 
 
 class ScheduledTaskOut(BaseModel):
@@ -145,6 +160,7 @@ class ScheduledTaskOut(BaseModel):
     enabled: bool
     last_run: datetime | None
     source: str
+    event_id: int | None = None
     created_by: int
     created_at: datetime
 
@@ -234,6 +250,14 @@ class CronFromTextRequest(BaseModel):
 
 class CronFromTextOut(BaseModel):
     cron_expression: str
+
+
+class RruleFromTextRequest(BaseModel):
+    text: str
+
+
+class RruleFromTextOut(BaseModel):
+    rrule: str
 
 
 class DocumentOut(BaseModel):
@@ -338,10 +362,14 @@ class CampaignOut(BaseModel):
     system: str
     is_active: bool
     gm_discord_user_id: int | None = None
+    schedule_mode: str = "fixed"
+    combat_tracker_depth: str = "standard"
     # Banking
     banking_enabled: bool = False
     player_banking_enabled: bool = False
     party_gold: float = 0.0
+    # Dice
+    allow_manual_dice_recording: bool = False
     created_by: int
     created_at: datetime
     deleted_at: datetime | None = None
@@ -366,8 +394,11 @@ class CampaignCreate(BaseModel):
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     channel_id: str | int
     gm_discord_user_id: str | int | None = None
+    schedule_mode: str = "fixed"
+    combat_tracker_depth: str = "standard"
     banking_enabled: bool = False
     player_banking_enabled: bool = False
+    allow_manual_dice_recording: bool = False
 
 
 class CampaignUpdate(BaseModel):
@@ -376,8 +407,11 @@ class CampaignUpdate(BaseModel):
     is_active: bool | None = None
     channel_id: str | int | None = None
     gm_discord_user_id: str | int | None = None
+    schedule_mode: str | None = None
+    combat_tracker_depth: str | None = None
     banking_enabled: bool | None = None
     player_banking_enabled: bool | None = None
+    allow_manual_dice_recording: bool | None = None
 
 
 class CharacterCreate(BaseModel):
@@ -797,3 +831,226 @@ class SessionNoteRagTestRequest(BaseModel):
 
     query: str
     k: int = 5
+
+
+# --------------------------------------------------------------------------- #
+# Dice rolling schemas                                                         #
+# --------------------------------------------------------------------------- #
+
+
+class DiceRollRequest(BaseModel):
+    """Roll dice via the API."""
+
+    expression: str
+    roll_type: str = "general"
+    is_private: bool = False
+    context_note: str | None = None
+    character_name: str | None = None
+
+
+class ManualDiceRecordRequest(BaseModel):
+    """Record a manual (physical) dice roll."""
+
+    expression: str  # e.g. "1d20+5" — what they rolled
+    total: int  # the result they got
+    roll_type: str = "general"
+    is_private: bool = False
+    context_note: str | None = None
+    character_name: str | None = None
+
+
+class DiceRollIndividual(BaseModel):
+    """A single dice group result within a roll."""
+
+    expression: str
+    sides: int
+    rolls: list[int]
+    kept: list[int]
+    total: int
+
+
+class DiceRollOut(BaseModel):
+    """A persisted dice roll record."""
+
+    id: int
+    guild_id: int
+    campaign_id: int | None = None
+    roller_discord_user_id: int
+    roller_display_name: str
+    character_name: str | None = None
+    expression: str
+    individual_rolls: list[dict]
+    total: int
+    roll_type: str
+    is_private: bool
+    context_note: str | None = None
+    formatted: str = ""
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("roller_discord_user_id")
+    def serialize_roller_id(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("guild_id")
+    def serialize_guild_id(self, v: int) -> str:
+        return str(v)
+
+
+# ── Encounters / Initiative ──────────────────────────────────────────
+
+
+class CombatantOut(BaseModel):
+    id: int
+    encounter_id: int
+    character_id: int | None = None
+    name: str
+    initiative_roll: int | None = None
+    initiative_modifier: int = 0
+    is_enemy: bool = False
+    is_hidden: bool = False
+    sort_order: int = 0
+    is_active: bool = True
+    # HP / AC (standard+ depth)
+    max_hp: int | None = None
+    current_hp: int | None = None
+    temp_hp: int = 0
+    armor_class: int | None = None
+    conditions: list[str] | None = None
+    save_modifiers: dict[str, int] | None = None
+    # Death saves & concentration (full depth)
+    death_save_successes: int = 0
+    death_save_failures: int = 0
+    concentration_spell: str | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EncounterOut(BaseModel):
+    id: int
+    campaign_id: int
+    guild_id: int
+    name: str
+    status: str
+    current_turn_index: int = 0
+    round_number: int = 1
+    channel_id: int | None = None
+    created_by: int
+    created_at: datetime
+    ended_at: datetime | None = None
+    combatants: list[CombatantOut] = []
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflakes(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
+
+class EncounterCreate(BaseModel):
+    name: str
+    channel_id: str | int | None = None
+
+
+class EncounterUpdate(BaseModel):
+    name: str
+
+
+class CombatantCreate(BaseModel):
+    name: str
+    initiative_modifier: int = 0
+    is_enemy: bool = False
+    is_hidden: bool = False
+    character_id: int | None = None
+    max_hp: int | None = None
+    armor_class: int | None = None
+    save_modifiers: dict[str, int] | None = None
+
+
+class CombatantUpdate(BaseModel):
+    name: str | None = None
+    is_hidden: bool | None = None
+
+
+class SetInitiativeBody(BaseModel):
+    """Body for manually setting a combatant's initiative roll value.
+
+    Pass ``null`` / ``None`` to clear a previously entered manual roll.
+    """
+
+    initiative_roll: int | None = None
+
+
+class CombatLogEntryOut(BaseModel):
+    id: int
+    encounter_id: int
+    combatant_id: int
+    round_number: int
+    event_type: str
+    details: dict
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DamageHealBody(BaseModel):
+    """Body for damage/heal API endpoints."""
+
+    combatant_ids: list[int]
+    amount: int
+    damage_type: str | None = None
+    source: str | None = None
+
+
+class SavingThrowBody(BaseModel):
+    """Body for the saving throw API endpoint."""
+
+    combatant_ids: list[int]
+    ability: str
+    dc: int
+
+
+class ConditionBody(BaseModel):
+    """Body for add/remove condition API endpoints."""
+
+    combatant_ids: list[int]
+    condition: str
+
+
+class ConcentrationBody(BaseModel):
+    """Body for setting concentration."""
+
+    spell: str | None = None
+
+
+class SavingThrowResult(BaseModel):
+    """Result of a single saving throw."""
+
+    combatant_id: int
+    combatant_name: str
+    roll: int
+    modifier: int
+    total: int
+    dc: int
+    passed: bool
+
+
+class MonsterSearchResult(BaseModel):
+    """Structured monster data returned by the monster search API."""
+
+    name: str
+    source: str
+    system: str
+    hp: int | None = None
+    ac: int | None = None
+    initiative_modifier: int | None = None
+    cr: str | None = None
+    size: str | None = None
+    type: str | None = None
+    save_modifiers: dict[str, int] | None = None
