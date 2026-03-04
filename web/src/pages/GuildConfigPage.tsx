@@ -183,14 +183,18 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
 // Sub-panel: Channel Settings
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Equally-spaced slider positions → real threshold values sent to the API.
-const THRESHOLD_STEPS: { value: number; label: string }[] = [
-  { value: 0, label: 'Always' },
-  { value: 0.1, label: 'Often' },
-  { value: 0.5, label: 'Sometimes' },
-  { value: 0.8, label: 'Selectively' },
-];
-/** Convert a real threshold to the nearest slider index (0–3). */
+// 10 equally-spaced slider positions (indices 0–9) mapping to threshold values.
+// Index 0 → 0 ("Always"), index 9 → 1.0 ("Selectively"); middle positions are
+// unlabelled ticks.
+const THRESHOLD_STEPS: { value: number; label: string }[] = Array.from(
+  { length: 10 },
+  (_, i) => ({
+    value: Math.round((i * (1.0 / 9)) * 1000) / 1000,
+    label: i === 0 ? 'Always' : i === 9 ? 'Selectively' : '',
+  }),
+);
+
+/** Convert a real threshold to the nearest slider index (0–9). */
 function thresholdToIndex(t: number): number {
   let best = 0;
   let bestDist = Infinity;
@@ -295,7 +299,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               <TableHead>
                 <TableRow>
                   <TableCell>Channel</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', minWidth: 200 }}>
+                  <TableCell sx={{ whiteSpace: 'nowrap', width: '55%', minWidth: 320 }}>
                     Auto Respond
                   </TableCell>
                 </TableRow>
@@ -321,8 +325,9 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                         <TableCell>
                           <Typography variant="body2">#{ch.name}</Typography>
                         </TableCell>
-                        <TableCell>
-                          <Stack spacing={0.5}>
+                        <TableCell sx={{ py: 1 }}>
+                          <Stack spacing={0}>
+                            {/* Toggle row */}
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Tooltip
                                 title={
@@ -343,28 +348,28 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   disabled={channelMutation.isPending || configsError}
                                 />
                               </Tooltip>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ minWidth: 28 }}
-                              >
+                              <Typography variant="caption" color="text.secondary">
                                 {autoRespond ? 'On' : 'Off'}
                               </Typography>
                             </Box>
+                            {/* Slider row — only when on */}
                             {autoRespond && (
                               <Box
                                 sx={{
-                                  pl: 0.5,
-                                  pr: 1,
-                                  pt: 1,
-                                  pb: 1,
-                                  maxWidth: 380,
+                                  // Indent to align with switch thumb centre;
+                                  // extra right pad so "Selectively" isn't clipped.
+                                  pl: '4px',
+                                  pr: '8px',
+                                  width: 320,
+                                  // Push slider track up, leave room below for labels.
+                                  mt: 0.5,
+                                  mb: 1.5,
                                 }}
                               >
                                 <Slider
                                   size="small"
                                   min={0}
-                                  max={3}
+                                  max={9}
                                   step={1}
                                   value={sliderIndex}
                                   marks={THRESHOLD_STEPS.map((s, i) => ({ value: i, label: s.label }))}
@@ -388,7 +393,6 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                     });
                                   }}
                                   disabled={channelMutation.isPending || configsError}
-                                  sx={{ flex: 1, mt: 2, mb: 2 }}
                                 />
                               </Box>
                             )}

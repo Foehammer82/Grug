@@ -19,6 +19,7 @@ import json
 import logging
 from pathlib import Path
 
+from grug.character.models import parse_character_sheet, sheet_to_dict
 from grug.llm_usage import CallType, record_llm_usage
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,12 @@ class CharacterSheetParser:
         raw_text, content_blocks = await self._extract_content(
             file_bytes, filename, ext
         )
-        structured_data = await self._extract_structured(raw_text, content_blocks)
+        raw_dict = await self._extract_structured(raw_text, content_blocks)
+        # Tag the source and validate through the typed model so the stored
+        # dict always matches the schema (unknown fields go into ``extra``).
+        raw_dict.setdefault("_source", "claude")
+        sheet = parse_character_sheet(raw_dict)
+        structured_data = sheet_to_dict(sheet) if sheet else raw_dict
         detected_system = structured_data.get("system", "unknown") or "unknown"
         return raw_text, structured_data, detected_system
 

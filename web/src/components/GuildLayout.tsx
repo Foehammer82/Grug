@@ -13,7 +13,7 @@ const TABS = [
   { label: 'Tasks',        path: 'tasks',        adminOnly: true },
   { label: 'Documents',    path: 'documents',    adminOnly: false },
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
-  { label: 'Notes',        path: 'notes',        adminOnly: false },
+  { label: "Grug's Notes", path: 'notes',        adminOnly: false },
   { label: 'Campaigns',    path: 'campaigns',    adminOnly: false },
 ];
 

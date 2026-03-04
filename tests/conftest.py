@@ -69,6 +69,31 @@ def mock_db_session():
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def mock_record_llm_usage():
+    """Suppress all DB-touching ``record_llm_usage`` calls in every test.
+
+    Because every caller uses ``from grug.llm_usage import record_llm_usage``,
+    the name is bound at import time in each module.  We patch every known
+    call-site so no real DB connection is attempted during tests.
+    Tests in ``test_llm_usage.py`` that exercise the function directly
+    patch ``get_session_factory`` themselves, so this fixture doesn't interfere.
+    """
+    _sites = [
+        "grug.character.parser.record_llm_usage",
+        "grug.rag.history_archiver.record_llm_usage",
+        "grug.bot.auto_respond.record_llm_usage",
+        "grug.agent.tools.rules_tools.record_llm_usage",
+        "grug.agent.core.record_llm_usage",
+    ]
+    patches = [patch(site, new=AsyncMock(return_value=None)) for site in _sites]
+    for p in patches:
+        p.start()
+    yield
+    for p in patches:
+        p.stop()
+
+
 @pytest.fixture()
 def mock_anthropic():
     """Patch ``anthropic.AsyncAnthropic`` and yield the mock client instance.

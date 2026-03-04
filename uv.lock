@@ -1007,7 +1007,7 @@ wheels = [
 
 [[package]]
 name = "grug"
-version = "0.1.0"
+version = "0.1"
 source = { editable = "grug" }
 dependencies = [
     { name = "aiofiles" },
@@ -1058,7 +1058,7 @@ requires-dist = [
 
 [[package]]
 name = "grug-api"
-version = "0.1.0"
+version = "0.1"
 source = { editable = "api" }
 dependencies = [
     { name = "fastapi" },
@@ -1077,7 +1077,7 @@ requires-dist = [
 
 [[package]]
 name = "grug-bot"
-version = "0.2.0"
+version = "0.2"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },

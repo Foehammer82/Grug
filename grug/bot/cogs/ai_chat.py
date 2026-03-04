@@ -1,6 +1,8 @@
 """AI chat cog — routes Discord messages to the Grug agent."""
 
+import io
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 
 import discord
@@ -8,7 +10,7 @@ from discord import app_commands
 from discord.ext import commands
 from sqlalchemy import select
 
-from grug.agent.core import GrugAgent
+from grug.agent.core import AgentResponse, GrugAgent
 from grug.bot.cogs.base import GrugCogBase
 from grug.config.settings import get_settings
 from grug.utils import get_campaign_id_for_channel
@@ -156,7 +158,7 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
 
         try:
             async with message.channel.typing():
-                response = await self._agent.respond(
+                agent_resp = await self._agent.respond(
                     guild_id=message.guild.id,
                     channel_id=message.channel.id,
                     user_id=message.author.id,
@@ -165,8 +167,7 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                     campaign_id=campaign_id,
                     context_cutoff=context_cutoff,
                 )
-            for chunk in _split_message(response):
-                await message.channel.send(chunk)
+            await _deliver_response(message, agent_resp)
         except Exception:
             logger.exception(
                 "Unhandled error in on_message for guild %s channel %s",
@@ -189,7 +190,7 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
         dm_context_cutoff = await _get_dm_context_cutoff(user_id)
 
         async with message.channel.typing():
-            response = await self._agent.respond(
+            agent_resp = await self._agent.respond(
                 guild_id=_DM_GUILD_ID,
                 channel_id=message.channel.id,  # DM channel ID is stable per user
                 user_id=user_id,
@@ -201,7 +202,7 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                 context_cutoff=dm_context_cutoff,
             )
 
-        for chunk in _split_message(response):
+        for chunk in _split_message(agent_resp.text):
             await message.channel.send(chunk)
 
     @app_commands.command(
@@ -274,6 +275,47 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
         await interaction.response.send_message(
             "Grug forget everything said here. Fresh start! 🧹"
         )
+
+
+# Pattern used by agent tools to signal that a file should be DM'd.
+# The sentinel is stripped from the public channel message.
+_DM_FILE_RE = re.compile(r"\[DM_FILE:[^\]]+\]\s*")
+
+
+async def _deliver_response(
+    message: discord.Message, agent_resp: AgentResponse
+) -> None:
+    """Send the agent response to the channel and DM any pending files.
+
+    If the agent included ``[DM_FILE:filename]`` sentinels in the text,
+    those are stripped from the public message and the corresponding files
+    are sent via DM.
+    """
+    # Strip DM_FILE sentinels from the public text.
+    public_text = _DM_FILE_RE.sub("", agent_resp.text).strip()
+
+    # Send the public reply in the channel.
+    for chunk in _split_message(public_text):
+        await message.channel.send(chunk)
+
+    # DM any pending files to the requesting user.
+    if agent_resp.dm_files:
+        try:
+            dm_channel = message.author.dm_channel or await message.author.create_dm()
+            for filename, file_bytes in agent_resp.dm_files:
+                df = discord.File(io.BytesIO(file_bytes), filename=filename)
+                await dm_channel.send(
+                    "Here's that character sheet you asked for, adventurer! 📜",
+                    file=df,
+                )
+        except discord.Forbidden:
+            await message.channel.send(
+                "Grug tried to send you a DM but your DMs are closed! "
+                "Enable DMs from server members and try again."
+            )
+        except Exception:
+            logger.exception("Failed to DM files to user %s", message.author.id)
+            await message.channel.send("Grug had trouble sending the file. Try again?")
 
 
 def _split_message(text: str, limit: int = 2000) -> list[str]:

@@ -75,6 +75,7 @@ class CallType(StrEnum):
     CHARACTER_PARSE = "character_parse"
     CRON_PARSE = "cron_parse"
     AUTO_RESPOND_SCORE = "auto_respond_score"
+    SESSION_NOTE_SYNTHESIS = "session_note_synthesis"
 
 
 # ---------------------------------------------------------------------------

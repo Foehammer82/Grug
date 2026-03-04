@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -105,6 +106,10 @@ async def list_campaigns(
             name=c.name,
             system=c.system,
             is_active=c.is_active,
+            gm_discord_user_id=c.gm_discord_user_id,
+            banking_enabled=c.banking_enabled,
+            player_banking_enabled=c.player_banking_enabled,
+            party_gold=float(c.party_gold),
             created_by=c.created_by,
             created_at=c.created_at,
             deleted_at=c.deleted_at,
@@ -133,11 +138,23 @@ async def create_campaign(
         name=body.name,
         system=body.system,
         is_active=True,
+        gm_discord_user_id=int(body.gm_discord_user_id)
+        if body.gm_discord_user_id
+        else None,
+        banking_enabled=body.banking_enabled,
+        player_banking_enabled=body.player_banking_enabled,
         created_by=int(user["id"]),
         created_at=datetime.now(timezone.utc),
     )
     db.add(campaign)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="A campaign already exists for this channel.",
+        )
     await db.refresh(campaign)
     return campaign
 
@@ -170,6 +187,14 @@ async def update_campaign(
         campaign.is_active = body.is_active  # type: ignore[assignment]
     if "channel_id" in body.model_fields_set:
         campaign.channel_id = int(body.channel_id)  # type: ignore[assignment]
+    if "gm_discord_user_id" in body.model_fields_set:
+        campaign.gm_discord_user_id = (  # type: ignore[assignment]
+            int(body.gm_discord_user_id) if body.gm_discord_user_id else None
+        )
+    if "banking_enabled" in body.model_fields_set:
+        campaign.banking_enabled = body.banking_enabled  # type: ignore[assignment]
+    if "player_banking_enabled" in body.model_fields_set:
+        campaign.player_banking_enabled = body.player_banking_enabled  # type: ignore[assignment]
     await db.commit()
     await db.refresh(campaign)
     return campaign

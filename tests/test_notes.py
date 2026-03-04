@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 
 import pytest
 
@@ -41,7 +40,9 @@ async def test_guild_note_creates_ok(db_session):
 
     from grug.db.models import GrugNote
 
-    note = GrugNote(guild_id=111, user_id=None, content="# Server Rules\n- Be kind", updated_by=0)
+    note = GrugNote(
+        guild_id=111, user_id=None, content="# Server Rules\n- Be kind", updated_by=0
+    )
     db_session.add(note)
     await db_session.commit()
 
@@ -79,8 +80,12 @@ async def test_guild_and_personal_notes_coexist(db_session):
 
     from grug.db.models import GrugNote
 
-    db_session.add(GrugNote(guild_id=111, user_id=None, content="Guild note", updated_by=0))
-    db_session.add(GrugNote(guild_id=None, user_id=42, content="Personal note", updated_by=0))
+    db_session.add(
+        GrugNote(guild_id=111, user_id=None, content="Guild note", updated_by=0)
+    )
+    db_session.add(
+        GrugNote(guild_id=None, user_id=42, content="Personal note", updated_by=0)
+    )
     await db_session.commit()
 
     result = await db_session.execute(select(GrugNote))
@@ -90,7 +95,6 @@ async def test_guild_and_personal_notes_coexist(db_session):
 
 async def test_note_content_update(db_session):
     """Updating a note's content persists correctly."""
-    from sqlalchemy import select
 
     from grug.db.models import GrugNote
 

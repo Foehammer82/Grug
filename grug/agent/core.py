@@ -6,7 +6,7 @@ construction and the ``GrugAgent`` orchestration wrapper.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from pydantic_ai import Agent, RunContext
@@ -29,6 +29,11 @@ from grug.rag.history_archiver import ConversationArchiver
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of characters fetched per campaign when building the
+# campaign_context prompt fragment — prevents large rosters from inflating
+# token usage on every respond() call.
+_MAX_CAMPAIGN_CHARS = 10
+
 
 # ------------------------------------------------------------------
 # Dependencies
@@ -46,6 +51,22 @@ class GrugDeps:
     campaign_id: int | None = None
     active_character_id: int | None = None
     is_dm_session: bool = False
+    default_ttrpg_system: str | None = None
+    # Pre-loaded campaign summary injected into the system prompt.
+    campaign_context: str | None = None
+    # Files to DM to the user after the response is sent.
+    # Populated by agent tools (e.g. export_character_pdf_tool).
+    # Each entry is (filename, pdf_bytes).
+    _pending_dm_files: list[tuple[str, bytes]] = field(default_factory=list)
+
+
+@dataclass
+class AgentResponse:
+    """Result returned by :meth:`GrugAgent.respond`."""
+
+    text: str
+    #: Files the bot should DM to the requesting user.
+    dm_files: list[tuple[str, bytes]] = field(default_factory=list)
 
 
 # ------------------------------------------------------------------
@@ -71,11 +92,33 @@ def _build_agent() -> Agent[GrugDeps, str]:
     )
 
     @agent.system_prompt(dynamic=True)
-    def _system_prompt(_ctx: RunContext[GrugDeps]) -> str:  # noqa: ARG001
+    def _system_prompt(ctx: RunContext[GrugDeps]) -> str:
         """Re-evaluate on every run (dynamic=True) so `now` is always current."""
-        return SYSTEM_PROMPT.format(now=datetime.now(timezone.utc).isoformat())
+        default_system = ctx.deps.default_ttrpg_system
+        if default_system:
+            default_system_line = (
+                f"This server default game system: {default_system}. "
+                "Grug know this. Grug use this for all rule lookups unless "
+                "friend ask about different game."
+            )
+        else:
+            default_system_line = ""
+        campaign_ctx = ctx.deps.campaign_context
+        if campaign_ctx:
+            campaign_context_line = (
+                f"\nCAMPAIGN CONTEXT (this channel):\n{campaign_ctx}\n"
+            )
+        else:
+            campaign_context_line = ""
+        return SYSTEM_PROMPT.format(
+            now=datetime.now(timezone.utc).isoformat(),
+            default_ttrpg_system_line=default_system_line,
+            campaign_context_line=campaign_context_line,
+        )
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
+    from grug.agent.tools.banking_tools import register_banking_tools
+    from grug.agent.tools.campaign_tools import register_campaign_tools
     from grug.agent.tools.character_tools import register_character_tools
     from grug.agent.tools.glossary_tools import register_glossary_tools
     from grug.agent.tools.rag_tools import register_rag_tools
@@ -83,13 +126,17 @@ def _build_agent() -> Agent[GrugDeps, str]:
     from grug.agent.tools.scheduling_tools import register_scheduling_tools
 
     from grug.agent.tools.notes_tools import register_notes_tools
+    from grug.agent.tools.session_notes_tools import register_session_notes_tools
 
     register_rag_tools(agent)
     register_scheduling_tools(agent)
     register_glossary_tools(agent)
     register_character_tools(agent)
+    register_campaign_tools(agent)
+    register_banking_tools(agent)
     register_rules_tools(agent)
     register_notes_tools(agent)
+    register_session_notes_tools(agent)
 
     @agent.tool
     async def get_current_time(ctx: RunContext[GrugDeps]) -> str:
@@ -399,7 +446,7 @@ class GrugAgent:
         active_character_id: int | None = None,
         is_dm_session: bool = False,
         context_cutoff: datetime | None = None,
-    ) -> str:
+    ) -> AgentResponse:
         """Process a user message and return Grug's response."""
         try:
             # Load history BEFORE saving the current message so the incoming
@@ -436,6 +483,68 @@ class GrugAgent:
             # notes appear before the actual conversation history.
             history = history[:2] + notes_messages + history[2:]
 
+        # Default TTRPG system is determined lazily by tools (e.g. rule
+        # lookup) when needed, to avoid an extra DB query on every message.
+        default_ttrpg_system: str | None = None
+
+        # Pre-load campaign details so the agent knows what campaign and
+        # characters are active in this channel without needing a tool call.
+        campaign_context: str | None = None
+        if campaign_id is not None:
+            try:
+                from grug.db.models import Campaign as _Campaign
+                from grug.db.models import Character as _Character
+
+                _factory2 = get_session_factory()
+                async with _factory2() as _session2:
+                    _campaign = (
+                        await _session2.execute(
+                            select(_Campaign).where(_Campaign.id == campaign_id)
+                        )
+                    ).scalar_one_or_none()
+                    if _campaign is not None:
+                        _chars = (
+                            (
+                                await _session2.execute(
+                                    select(_Character)
+                                    .where(_Character.campaign_id == campaign_id)
+                                    .limit(_MAX_CAMPAIGN_CHARS)
+                                )
+                            )
+                            .scalars()
+                            .all()
+                        )
+                        char_lines: list[str] = []
+                        for _c in _chars:
+                            _sd = _c.structured_data or {}
+                            _level = _sd.get("level", "?")
+                            _ancestry = _sd.get("ancestry") or _sd.get("race") or ""
+                            _cls = _sd.get("class") or _sd.get("classes") or ""
+                            if isinstance(_cls, list):
+                                _cls = "/".join(str(x) for x in _cls)
+                            _detail = f"Lvl {_level}"
+                            if _cls:
+                                _detail += f" {_cls}"
+                            if _ancestry:
+                                _detail += f" {_ancestry}"
+                            char_lines.append(f"  - {_c.name} ({_detail})")
+                        _chars_text = (
+                            "\n".join(char_lines) if char_lines else "  (none yet)"
+                        )
+                        _status = "active" if _campaign.is_active else "inactive"
+                        campaign_context = (
+                            f"Campaign name: {_campaign.name}\n"
+                            f"Game system: {_campaign.system}\n"
+                            f"Status: {_status}\n"
+                            f"Characters:\n{_chars_text}"
+                        )
+            except Exception:
+                logger.warning(
+                    "Failed to load campaign context for campaign %d",
+                    campaign_id,
+                    exc_info=True,
+                )
+
         deps = GrugDeps(
             guild_id=guild_id,
             channel_id=channel_id,
@@ -444,6 +553,8 @@ class GrugAgent:
             campaign_id=campaign_id,
             active_character_id=active_character_id,
             is_dm_session=is_dm_session,
+            default_ttrpg_system=default_ttrpg_system,
+            campaign_context=campaign_context,
         )
 
         try:
@@ -471,4 +582,7 @@ class GrugAgent:
         except Exception as exc:
             logger.exception("Failed to save assistant message: %s", exc)
 
-        return response_text
+        return AgentResponse(
+            text=response_text,
+            dm_files=list(deps._pending_dm_files),
+        )

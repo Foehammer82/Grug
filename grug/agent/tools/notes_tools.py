@@ -62,8 +62,19 @@ def register_notes_tools(agent: Agent[GrugDeps, str]) -> None:
             note = result.scalar_one_or_none()
 
         if note is None or not note.content.strip():
-            return "Grug notes: (empty — nothing written down yet)"
-        return f"Grug notes:\n\n{note.content}"
+            notes_text = "Grug notes: (empty — nothing written down yet)"
+        else:
+            notes_text = f"Grug notes:\n\n{note.content}"
+
+        # Remind Grug who is currently speaking in guild sessions so notes can
+        # be cross-referenced with the right person.  Not included in DMs since
+        # the user_id is already implicit from the DM session scope.
+        if not ctx.deps.is_dm_session:
+            notes_text += (
+                f"\n\n[Current speaker: user_id={ctx.deps.user_id}, "
+                f"username={ctx.deps.username}]"
+            )
+        return notes_text
 
     @agent.tool
     async def write_notes(ctx: RunContext[GrugDeps], content: str) -> str:
@@ -78,6 +89,20 @@ def register_notes_tools(agent: Agent[GrugDeps, str]) -> None:
         - The user asks Grug to remember something going forward.
         - Updating house rules, campaign notes, or naming conventions.
         - Correcting or expanding notes based on new information.
+
+        IMPORTANT — user identity in guild notes:
+        Never write "you", "they", or a display name when referring to a
+        specific person in server-scoped notes.  Always tag them with their
+        stable Discord identity using the format:
+            [user:{user_id}]
+        The current speaker's user_id is always included at the bottom of the
+        ``read_notes`` output for guild sessions — use that value.  This
+        ensures notes remain meaningful after the conversation ends while
+        avoiding unstable usernames/display names.  The raw tag is for
+        internal disambiguation only and must not be echoed back verbatim in
+        user-facing responses.
+        Example: Instead of "you like coffee ice cream", write
+        "[user:123456789] likes coffee ice cream".
         """
         from grug.db.models import GrugNote
         from grug.db.session import get_session_factory

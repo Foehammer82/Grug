@@ -76,6 +76,19 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not break backward compatibility without a clear migration path and documentation.
 - **Never run git commands (commit, push, add, rebase, merge, etc.) unless the user explicitly asks.** Completing a code change does not imply permission to commit it.
 
+## Dual-Surface Development
+
+Every user-facing feature in Grug must work through **both** surfaces:
+
+1. **Discord** — via agent tools (pydantic-ai) and/or slash commands (discord.py cogs)
+2. **Web dashboard** — via FastAPI API endpoints and React UI components
+
+When implementing a new feature, always consider both surfaces. A feature that only works in one surface is incomplete. Put shared business logic in a `grug/` service module so both the API route and the agent tool call the same function.
+
+### DM delivery for sensitive data
+
+Character sheets, private notes, and other sensitive data must not be posted publicly in a Discord channel. Agent tools that produce files append them to `ctx.deps._pending_dm_files` and prefix their response with `[DM_FILE:filename]`. The bot's `_deliver_response()` helper strips these sentinels and DMs the files to the requesting user. See the `dual-surface-features` skill (`.github/skills/dual-surface-features/SKILL.md`) for full patterns and checklist.
+
 ## Domain Concepts — Context Awareness
 
 Grug passively logs **every** non-bot guild message to `conversation_messages` with `is_passive=True` so he stays context-aware in channels even when not @mentioned. When he actually responds, the message is saved with `is_passive=False` (the default).
@@ -181,14 +194,42 @@ Transfer (move) a character between campaigns uses the existing `PATCH /api/guil
 
 | Component | Purpose |
 |---|---|
-| `CampaignCard` | Header bar (name, system chip, channel chip, character count, edit/delete) + embedded `CharacterTable` |
+| `CampaignCard` | Header bar + tabbed panel: **Characters** tab (embeds `CharacterTable`) and **Session Notes** tab (embeds `SessionNotesTab`) |
 | `CharacterTable` | MUI Table with checkbox column, batch toolbar, "Add character" button; opens `CharacterDialog` |
 | `CharacterDialog` | Combined tabbed dialog (Details · Sheet · Notes); handles create, edit, delete, move, copy |
 | `CharacterStatCard` | Compact parsed-stats card (headline, AC/HP/Speed, ability scores) |
 | `OwnerAutocomplete` | Autocomplete for picking a guild member or free-text owner; exports `UNASSIGNED_MEMBER` sentinel and `resolveOwnerPayload()` |
 | `GuildMemberCell` | Renders guild member avatar + display name with loading/error states |
+| `SessionNotesTab` | Lists session notes (expand-to-read), exposes "Add Notes" button with text paste + file upload; polls every 5 s while any note is pending/processing |
 
 Shared constants live in `web/src/constants/character.ts` (`SYSTEM_OPTIONS`, `SYSTEM_LABELS`, `ABILITY_KEYS`, `SHEET_ACCEPTED`, `MAX_SHEET_MB`, `abilityMod()`).
+
+### Agent tools (campaigns & characters)
+
+Campaign and character tools are registered by `register_campaign_tools()` in `grug/agent/tools/campaign_tools.py`. Two tools:
+
+| Tool | What it does | Access |
+|---|---|---|
+| `get_campaign_info` | Returns campaign name, system, status, and party roster | Everyone |
+| `get_party_character` | Looks up a specific character by name in the current campaign | Own character → full sheet; other's character → public summary only; admin → full access |
+
+Admin detection uses `_is_admin()` helper that checks (1) `GRUG_SUPER_ADMIN_IDS` env, (2) `GrugUser.is_super_admin` DB flag, (3) Discord `grug-admin` role via bot cache.
+
+The existing `register_character_tools()` (`character_tools.py`) handles `get_character_sheet` and `search_character_knowledge` — both read-only, scoped to the requesting user's **active character** via `UserProfile.active_character_id`. Character data is never modified by Grug; it is ingested on upload or Pathbuilder sync and queried for context.
+
+### Session Notes
+
+Session notes allow any campaign member (or guild admin) to submit raw notes (text paste or `.txt`/`.md`/`.rst` upload) for a campaign. An LLM (`claude-haiku-4-5`) synthesizes them into a clean prose summary in the background. Clean notes are indexed into the RAG vector store so Grug can search them.
+
+**ORM model**: `SessionNote` (table `session_notes`, `grug/db/models.py`) — `id`, `campaign_id` (FK → `campaigns.id`), `guild_id`, `session_date`, `title`, `raw_notes`, `clean_notes`, `synthesis_status` (`pending`|`processing`|`done`|`failed`), `synthesis_error`, `rag_document_id`, `submitted_by`, `created_at`, `updated_at`.
+
+**Service**: `grug/session_notes.py` — `create_session_note()`, `synthesize_note(note_id)` (background-safe, own DB sessions), `delete_session_note(note_id, guild_id)`.
+
+**API routes**: `api/routes/session_notes.py` — full CRUD under `/api/guilds/{guild_id}/campaigns/{campaign_id}/session-notes`. Any campaign member may read/create; only the submitter or an admin may update/delete/re-synthesize.
+
+**Agent tool**: `search_session_notes` registered in `grug/agent/tools/session_notes_tools.py`. Uses `DocumentRetriever` scoped to `ctx.deps.campaign_id`. Returns a friendly message if no campaign is linked. Registered in `_build_agent()` via `register_session_notes_tools(agent)`.
+
+**`CallType`**: `SESSION_NOTE_SYNTHESIS` — add to the `CallType` enum in `grug/llm_usage.py` if it's missing.
 
 **Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:
 
@@ -205,6 +246,9 @@ Key points:
 - `name` and `cron_expression` are nullable columns; `name` auto-defaults to first 80 chars of `prompt` for one-shot tasks.
 
 ## API Patterns (FastAPI)
+
+### Campaign creation — duplicate channel 409
+`campaigns.channel_id` has a `unique=True` DB constraint (one channel → one campaign).  The POST `/api/guilds/{id}/campaigns` handler wraps `db.commit()` in a `try/except IntegrityError`, rolls back, and raises `HTTPException(status_code=409)`.  Never remove this guard.
 
 ### PATCH endpoints — nullable field clearing
 **Never** gate an optional field update with `if body.field is not None`. This silently swallows intentional null-clears. Use `model_fields_set` instead:
