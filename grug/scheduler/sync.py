@@ -6,12 +6,12 @@ schedule it to run periodically so any drift is automatically corrected.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from grug.db.models import ScheduledTask
+from grug.db.models import Character, ScheduledTask
 from grug.db.session import get_session_factory
 from grug.scheduler.manager import add_cron_job, add_date_job, get_scheduler
 from grug.scheduler.tasks import execute_scheduled_task
@@ -223,3 +223,84 @@ def schedule_periodic_sync(bot: "commands.Bot") -> None:
         SYNC_INTERVAL_MINUTES,
         job_id,
     )
+
+
+async def daily_pathbuilder_sync() -> None:
+    """Re-sync all Pathbuilder-linked characters that haven't been synced today.
+
+    Skips any character whose ``pathbuilder_synced_at`` is within the last
+    5 minutes (respects the global cooldown set by manual/campaign syncs).
+    Runs silently and logs per-character errors rather than aborting the batch.
+    """
+    from grug.character.pathbuilder import PathbuilderError, fetch_pathbuilder_character
+
+    factory = get_session_factory()
+    cooldown = timedelta(minutes=5)
+    now = datetime.now(timezone.utc)
+    synced = 0
+    skipped = 0
+    errors = 0
+
+    async with factory() as session:
+        result = await session.execute(
+            select(Character).where(Character.pathbuilder_id.is_not(None))
+        )
+        characters = result.scalars().all()
+
+        for character in characters:
+            if (
+                character.pathbuilder_synced_at is not None
+                and (now - character.pathbuilder_synced_at) < cooldown
+            ):
+                skipped += 1
+                continue
+            try:
+                structured_data = await fetch_pathbuilder_character(
+                    character.pathbuilder_id
+                )  # type: ignore[arg-type]
+                character.structured_data = structured_data
+                new_name = structured_data.get("name")
+                if new_name:
+                    character.name = new_name
+                character.system = "pf2e"
+                character.pathbuilder_synced_at = now
+                synced += 1
+            except PathbuilderError:
+                logger.warning(
+                    "Daily Pathbuilder sync: character %d (id=%d) not found or fetch failed",
+                    character.id,
+                    character.pathbuilder_id or 0,
+                )
+                errors += 1
+            except Exception:
+                logger.exception(
+                    "Daily Pathbuilder sync: unexpected error for character %d",
+                    character.id,
+                )
+                errors += 1
+
+        if synced:
+            await session.commit()
+
+    logger.info(
+        "Daily Pathbuilder sync complete: %d synced, %d skipped (cooldown), %d errors.",
+        synced,
+        skipped,
+        errors,
+    )
+
+
+def schedule_daily_pathbuilder_sync() -> None:
+    """Register a daily APScheduler cron job to sync all Pathbuilder-linked characters at 03:00 UTC."""
+    from apscheduler.triggers.cron import CronTrigger
+
+    scheduler = get_scheduler()
+    job_id = "pathbuilder_daily_sync"
+    scheduler.add_job(
+        daily_pathbuilder_sync,
+        trigger=CronTrigger(hour=3, minute=0, timezone="UTC"),
+        id=job_id,
+        replace_existing=True,
+        misfire_grace_time=300,
+    )
+    logger.info("Daily Pathbuilder sync scheduled at 03:00 UTC (job id: %s).", job_id)

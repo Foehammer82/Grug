@@ -134,7 +134,44 @@ Rule Sources is its own top-level tab in `GuildLayout` (`path: 'rule-sources'`, 
 - `PATCH /api/guilds/{id}/rule-sources/builtins/{source_id}` — toggle a builtin
 - `POST /api/guilds/{id}/rule-sources/test` — test a built-in source with a query (`source_id` required)
 
-## Domain Concepts — Scheduled Tasks
+## Domain Concepts — Campaigns & Characters
+
+Characters are a sub-concept of campaigns — they only exist within a campaign. There is no standalone Characters tab or route.
+
+### Campaign model (`campaigns` table)
+
+Key fields: `id`, `guild_id`, `channel_id` (unique), `name`, `system`, `is_active`, `created_by`, `created_at`, `deleted_at`.
+
+`deleted_at` is the soft-delete column. `NULL` = active; non-NULL = deleted but recoverable.  Hard-deletes never happen via the soft-delete trigger — only `DELETE .../permanent` issues an actual `db.delete()`.
+
+### Character model (`characters` table)
+
+Characters belong to a campaign via a nullable FK `campaign_id → campaigns.id`.  No many-to-many.  A character can be unlinked (`campaign_id IS NULL`) — e.g. Pathbuilder-linked characters created before being assigned to a campaign.
+
+### API routes (campaigns)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| `GET` | `/api/guilds/{id}/campaigns` | member | `?include_deleted=true` for admins fetches deleted too. Non-admins filtered to campaigns where they own a character. |
+| `POST` | `.../campaigns` | admin | |
+| `PATCH` | `.../campaigns/{cid}` | admin | |
+| `DELETE` | `.../campaigns/{cid}` | admin | **Soft-delete** — sets `deleted_at`. Never hard-deletes. |
+| `POST` | `.../campaigns/{cid}/restore` | admin | Clears `deleted_at`. |
+| `DELETE` | `.../campaigns/{cid}/permanent` | admin | Hard-delete + cascade characters. |
+| `GET/POST/PATCH/DELETE` | `.../campaigns/{cid}/characters/…` | admin | Full character CRUD scoped to a campaign. |
+| `POST` | `.../campaigns/{cid}/characters/{chid}/copy` | admin | Deep-copies character (all fields) to `target_campaign_id` in same guild. |
+| `POST` | `.../campaigns/{cid}/characters/{chid}/upload` | admin | Parse + index character sheet. |
+
+Transfer (move) a character between campaigns uses the existing `PATCH /api/guilds/{id}/characters/{chid}` with `{ campaign_id: targetId }`.
+
+### Web UI
+
+- **Campaigns tab** — `adminOnly: false`.  Non-admins see a filtered read-only view (only campaigns they have a character in, no edit controls).  Admins get full CRUD.
+- **Characters tab** — **removed**.  All character management lives inside the Campaigns accordion.
+- Soft-delete shows an 8-second **Undo snackbar** allowing instant restore.
+- A collapsed **"Deleted campaigns"** section (admin-only) lists soft-deleted campaigns with per-row **Restore** and **Delete permanently** actions. Permanent delete has a separate confirmation dialog.
+- Each character row has a 3-dot menu with **Move to campaign…** and **Copy to campaign…** items (only shown when other campaigns exist).  Both open a dialog with an `Autocomplete` to pick the target campaign.
+- `CharacterSheetPage` back button navigates to `/guilds/:guildId/campaigns` (previously pointed to the removed `/characters` route).
 
 **Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:
 

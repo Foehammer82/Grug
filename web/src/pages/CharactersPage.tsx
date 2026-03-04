@@ -29,7 +29,7 @@ import { useGuildContext } from '../hooks/useGuildContext';
 import type { Character } from '../types';
 
 const SYSTEM_LABELS: Record<string, string> = {
-  pf2e: 'Pathfinder 2e',
+  pf2e: 'Pathfinder 2E',
   dnd5e: 'D&D 5e',
   unknown: 'Unknown',
 };

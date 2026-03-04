@@ -310,14 +310,20 @@ export default function AdminPage() {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Switch
-                      size="small"
-                      checked={u.can_invite}
-                      onChange={(_, checked) =>
-                        toggleMutation.mutate({ id: u.discord_user_id, canInvite: checked })
-                      }
-                      disabled={toggleMutation.isPending}
-                    />
+                    {u.is_super_admin ? (
+                      <Tooltip title="Super admins can always invite">
+                        <Typography variant="caption" color="text.disabled">—</Typography>
+                      </Tooltip>
+                    ) : (
+                      <Switch
+                        size="small"
+                        checked={u.can_invite}
+                        onChange={(_, checked) =>
+                          toggleMutation.mutate({ id: u.discord_user_id, canInvite: checked })
+                        }
+                        disabled={toggleMutation.isPending}
+                      />
+                    )}
                   </TableCell>
                   <TableCell>{new Date(u.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>

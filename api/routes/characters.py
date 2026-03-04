@@ -1,6 +1,7 @@
 """Character routes — guild-scoped character CRUD and Pathbuilder integration."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -284,6 +285,7 @@ async def link_pathbuilder(
         system="pf2e",
         structured_data=structured_data,
         pathbuilder_id=body.pathbuilder_id,
+        pathbuilder_synced_at=datetime.now(timezone.utc),
     )
     db.add(character)
     await db.commit()
@@ -311,16 +313,19 @@ async def sync_pathbuilder(
         db, Character, Character.id == character_id, detail="Character not found"
     )
 
-    # Only owner can sync
-    user_id = int(user["id"])
-    if character.owner_discord_user_id != user_id:
-        raise HTTPException(status_code=403, detail="Only the character owner can sync")
-
     if not character.pathbuilder_id:
         raise HTTPException(
             status_code=400,
             detail="This character is not linked to Pathbuilder",
         )
+
+    # 5-minute global cooldown — return current data if synced too recently.
+    _cooldown = timedelta(minutes=5)
+    if (
+        character.pathbuilder_synced_at is not None
+        and (datetime.now(timezone.utc) - character.pathbuilder_synced_at) < _cooldown
+    ):
+        return character
 
     try:
         structured_data = await fetch_pathbuilder_character(character.pathbuilder_id)
@@ -333,6 +338,7 @@ async def sync_pathbuilder(
     if new_name:
         character.name = new_name  # type: ignore[assignment]
     character.system = "pf2e"  # type: ignore[assignment]
+    character.pathbuilder_synced_at = datetime.now(timezone.utc)  # type: ignore[assignment]
 
     await db.commit()
     await db.refresh(character)

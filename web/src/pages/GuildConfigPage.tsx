@@ -50,7 +50,7 @@ const TIMEZONES: string[] = Intl.supportedValuesOf('timeZone');
 // Users may still type any free-form value — these are just quick-picks.
 const SYSTEM_LABELS: Record<string, string> = {
   dnd5e: 'D&D 5e',
-  pf2e: 'Pathfinder 2e',
+  pf2e: 'Pathfinder 2E',
 };
 const SYSTEMS = Object.keys(SYSTEM_LABELS);
 
@@ -353,6 +353,9 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   gap: 1,
                                   pl: 0.5,
                                   pr: 1,
+                                  pt: 1,
+                                  pb: 1,
+                                  maxWidth: 380,
                                 }}
                               >
                                 <Typography
@@ -368,6 +371,15 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   max={1}
                                   step={0.05}
                                   value={threshold}
+                                  marks={[
+                                    { value: 0 },
+                                    { value: 0.25 },
+                                    { value: 0.5 },
+                                    { value: 0.75 },
+                                    { value: 1 },
+                                  ]}
+                                  valueLabelDisplay="on"
+                                  valueLabelFormat={(v) => `${Math.round((v as number) * 100)}%`}
                                   onChange={(_, v) =>
                                     setPendingThresholds((prev) => ({
                                       ...prev,
@@ -386,7 +398,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                     });
                                   }}
                                   disabled={channelMutation.isPending || configsError}
-                                  sx={{ flex: 1 }}
+                                  sx={{ flex: 1, mt: 2 }}
                                 />
                                 <Typography
                                   variant="caption"

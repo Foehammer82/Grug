@@ -24,7 +24,7 @@ import type { Character } from '../types';
 const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as const;
 
 const SYSTEM_LABELS: Record<string, string> = {
-  pf2e: 'Pathfinder 2e',
+  pf2e: 'Pathfinder 2E',
   dnd5e: 'D&D 5e',
   unknown: 'Unknown',
 };
@@ -135,7 +135,7 @@ export default function CharacterSheetPage() {
     <>
       {/* Back button + header */}
       <Stack direction="row" alignItems="center" spacing={1} mb={2}>
-        <IconButton onClick={() => navigate(`/guilds/${guildId}/characters`)} size="small">
+        <IconButton onClick={() => navigate(`/guilds/${guildId}/campaigns`)} size="small">
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h5" fontWeight={700} sx={{ flex: 1 }}>

@@ -131,6 +131,10 @@ class Campaign(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+    # Soft-delete timestamp.  NULL = active; set = deleted but recoverable.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
 
@@ -141,9 +145,15 @@ class Character(Base):
     __tablename__ = "characters"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    # Discord snowflake of the player who owns this character.
-    owner_discord_user_id: Mapped[int] = mapped_column(
-        BigInteger, nullable=False, index=True
+    # Discord snowflake of the player who owns this character.  Nullable for
+    # NPCs or players who don't have a Discord account.
+    owner_discord_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
+    # Free-form display name shown when owner_discord_user_id is null (NPC,
+    # non-Discord player, etc.).  Ignored when a Discord owner is set.
+    owner_display_name: Mapped[str | None] = mapped_column(
+        String(256), nullable=True, default=None
     )
     # Optional link to a campaign; characters can exist without one.
     campaign_id: Mapped[int | None] = mapped_column(
@@ -152,6 +162,8 @@ class Character(Base):
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     # Detected game system, e.g. 'dnd5e', 'pf2e', 'unknown'.
     system: Mapped[str] = mapped_column(String(128), default="unknown")
+    # Private notes visible only to the character's owner and guild admins.
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     # Full text of the sheet as extracted at upload time.
     raw_sheet_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Structured JSON extracted by the parser (stats, abilities, etc.).
@@ -161,6 +173,10 @@ class Character(Base):
     pathbuilder_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Relative path within the grug_files volume, e.g. characters/123/fighter.pdf
     file_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Timestamp of the last successful Pathbuilder sync (used for 5-min cooldown).
+    pathbuilder_synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

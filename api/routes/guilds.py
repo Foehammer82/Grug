@@ -158,6 +158,65 @@ async def list_guild_channels(
 
 
 @router.get(
+    "/api/guilds/{guild_id}/members",
+    response_model=list[DiscordMemberOut],
+)
+async def list_guild_members(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> list[DiscordMemberOut]:
+    """Return all members of a guild (up to 1000), resolved to display names.
+
+    Used by the web UI owner-assignment autocomplete.  Guild-admin only.
+    """
+    await assert_guild_admin(guild_id, user)
+    bot_token = get_bot_token()
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        resp = await http.get(
+            f"https://discord.com/api/v10/guilds/{guild_id}/members",
+            params={"limit": 1000},
+            headers={"Authorization": f"Bot {bot_token}"},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Discord API returned {resp.status_code}",
+        )
+    members: list[DiscordMemberOut] = []
+    for data in resp.json():
+        u = data.get("user", {})
+        if u.get("bot"):
+            continue  # skip bots
+        uid = u.get("id", "")
+        avatar_hash = data.get("avatar") or u.get("avatar")
+        if avatar_hash:
+            if data.get("avatar"):
+                avatar_url = (
+                    f"https://cdn.discordapp.com/guilds/{guild_id}"
+                    f"/users/{uid}/avatars/{avatar_hash}.png"
+                )
+            else:
+                avatar_url = (
+                    f"https://cdn.discordapp.com/avatars/{uid}/{avatar_hash}.png"
+                )
+        else:
+            avatar_url = None
+        display_name = (
+            data.get("nick") or u.get("global_name") or u.get("username", uid)
+        )
+        members.append(
+            DiscordMemberOut(
+                discord_user_id=uid,
+                username=u.get("username", uid),
+                display_name=display_name,
+                avatar_url=avatar_url,
+            )
+        )
+    members.sort(key=lambda m: m.display_name.lower())
+    return members
+
+
+@router.get(
     "/api/guilds/{guild_id}/members/{user_id}",
     response_model=DiscordMemberOut,
 )

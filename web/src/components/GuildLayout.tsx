@@ -13,8 +13,7 @@ const TABS = [
   { label: 'Tasks',        path: 'tasks',        adminOnly: true },
   { label: 'Documents',    path: 'documents',    adminOnly: false },
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
-  { label: 'Campaigns',    path: 'campaigns',    adminOnly: true },
-  { label: 'Characters',   path: 'characters',   adminOnly: false },
+  { label: 'Campaigns',    path: 'campaigns',    adminOnly: false },
 ];
 
 export default function GuildLayout() {
