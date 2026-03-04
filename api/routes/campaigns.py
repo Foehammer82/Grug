@@ -107,8 +107,11 @@ async def list_campaigns(
             system=c.system,
             is_active=c.is_active,
             gm_discord_user_id=c.gm_discord_user_id,
+            schedule_mode=c.schedule_mode,
+            combat_tracker_depth=c.combat_tracker_depth,
             banking_enabled=c.banking_enabled,
             player_banking_enabled=c.player_banking_enabled,
+            allow_manual_dice_recording=c.allow_manual_dice_recording,
             party_gold=float(c.party_gold),
             created_by=c.created_by,
             created_at=c.created_at,
@@ -142,6 +145,7 @@ async def create_campaign(
         if body.gm_discord_user_id
         else None,
         schedule_mode=body.schedule_mode,
+        combat_tracker_depth=body.combat_tracker_depth,
         banking_enabled=body.banking_enabled,
         player_banking_enabled=body.player_banking_enabled,
         created_by=int(user["id"]),
@@ -172,7 +176,7 @@ async def update_campaign(
     db: AsyncSession = Depends(get_db),
 ) -> Campaign:
     """Update a campaign.  Only fields present in the request body are changed."""
-    await assert_guild_admin(guild_id, user)
+    # Fetch before auth so we can check GM ownership.
     campaign = await get_or_404(
         db,
         Campaign,
@@ -180,6 +184,15 @@ async def update_campaign(
         Campaign.guild_id == guild_id,
         detail="Campaign not found",
     )
+    admin = await is_guild_admin(guild_id, user)
+    is_campaign_gm = campaign.gm_discord_user_id is not None and str(
+        campaign.gm_discord_user_id
+    ) == str(user["id"])
+    if not admin and not is_campaign_gm:
+        raise HTTPException(
+            status_code=403,
+            detail="Only guild admins or the campaign GM may edit this campaign.",
+        )
     if "name" in body.model_fields_set:
         campaign.name = body.name  # type: ignore[assignment]
     if "system" in body.model_fields_set:
@@ -198,6 +211,10 @@ async def update_campaign(
         campaign.player_banking_enabled = body.player_banking_enabled  # type: ignore[assignment]
     if "schedule_mode" in body.model_fields_set:
         campaign.schedule_mode = body.schedule_mode  # type: ignore[assignment]
+    if "combat_tracker_depth" in body.model_fields_set:
+        campaign.combat_tracker_depth = body.combat_tracker_depth  # type: ignore[assignment]
+    if "allow_manual_dice_recording" in body.model_fields_set:
+        campaign.allow_manual_dice_recording = body.allow_manual_dice_recording  # type: ignore[assignment]
     await db.commit()
     await db.refresh(campaign)
     return campaign

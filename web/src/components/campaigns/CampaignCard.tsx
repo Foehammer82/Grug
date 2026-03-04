@@ -168,7 +168,7 @@ export default function CampaignCard({
         )}
         {c.banking_enabled && (
           <Tooltip
-            title={`Party gold pool${c.player_banking_enabled ? ' · Players can transact' : ''}${canManagePartyGold ? ' · Click for options' : ''}`}
+            title={`Party gold pool${c.player_banking_enabled ? ' · Players can transact' : ''}${canManagePartyGold ? ' · Click for options' : ' · Click to view ledger'}`}
             placement="top"
           >
             <Chip
@@ -176,14 +176,17 @@ export default function CampaignCard({
               variant="outlined"
               icon={<MonetizationOnIcon sx={{ fontSize: '13px !important', color: 'warning.main !important' }} />}
               label={`${c.party_gold.toLocaleString(undefined, { maximumFractionDigits: 4 })} gp`}
-              onClick={canManagePartyGold ? (e) => setGoldMenuAnchor(e.currentTarget) : undefined}
+              onClick={canManagePartyGold
+                ? (e) => setGoldMenuAnchor(e.currentTarget)
+                : () => setLedgerOpen(true)
+              }
               sx={{
                 height: 20,
                 fontSize: '0.7rem',
                 flexShrink: 0,
                 color: 'warning.main',
                 borderColor: 'warning.main',
-                cursor: canManagePartyGold ? 'pointer' : 'default',
+                cursor: 'pointer',
               }}
             />
           </Tooltip>
@@ -229,19 +232,19 @@ export default function CampaignCard({
             />
           </Tooltip>
         )}
+        {isGm && (
+          <Tooltip title="Edit campaign">
+            <IconButton size="small" onClick={() => onEdit(c)}>
+              <EditIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
         {isAdmin && (
-          <Stack direction="row" spacing={0.25} sx={{ flexShrink: 0 }}>
-            <Tooltip title="Edit campaign">
-              <IconButton size="small" onClick={() => onEdit(c)}>
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete campaign">
-              <IconButton size="small" color="error" onClick={() => onDelete(c)}>
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Stack>
+          <Tooltip title="Delete campaign">
+            <IconButton size="small" color="error" onClick={() => onDelete(c)}>
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         )}
       </Stack>
 
@@ -336,6 +339,7 @@ export default function CampaignCard({
             campaignId={c.id}
             isGm={isGm}
             currentUserId={currentUserId}
+            allowManualDiceRecording={c.allow_manual_dice_recording ?? false}
           />
         )}
         {activeTab === 'initiative' && (
@@ -343,6 +347,8 @@ export default function CampaignCard({
             guildId={c.guild_id}
             campaignId={c.id}
             isGm={isGm}
+            depth={c.combat_tracker_depth ?? 'standard'}
+            currentUserId={currentUserId}
           />
         )}
       </Box>

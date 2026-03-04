@@ -169,12 +169,26 @@ class Campaign(Base):
     party_gold: Mapped[float] = mapped_column(
         Numeric(precision=12, scale=4), default=0.0, server_default="0", nullable=False
     )
+    # ── Combat ────────────────────────────────────────────────────────────
+    # How much combat detail the tracker records:
+    #   'basic'    — initiative order + turn tracking only
+    #   'standard' — + HP tracking, AC display, conditions
+    #   'full'     — + damage/healing log, death saves, concentration tracking
+    combat_tracker_depth: Mapped[str] = mapped_column(
+        String(16), default="standard", server_default="standard", nullable=False
+    )
     # ── Scheduling ───────────────────────────────────────────────────────
     # How this campaign's sessions are scheduled:
     #   'fixed'  — GM picks a recurring day/time (default)
     #   'poll'   — an availability poll decides each session date
     schedule_mode: Mapped[str] = mapped_column(
         String(16), default="fixed", server_default="fixed", nullable=False
+    )
+    # ── Dice ─────────────────────────────────────────────────────────────
+    # When True, players may post manual (physical dice) roll results to the
+    # campaign log via the dice tab.  Off by default.
+    allow_manual_dice_recording: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
@@ -1023,12 +1037,75 @@ class Combatant(Base):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+    # ── HP / AC (standard+ depth) ────────────────────────────────────────
+    max_hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    current_hp: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    temp_hp: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    armor_class: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # JSON list of active condition strings, e.g. ["Blinded","Prone"]
+    conditions: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # JSON dict of ability save modifiers, e.g. {"STR": 4, "DEX": 2, ...}
+    save_modifiers: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # ── Death saves & concentration (full depth) ─────────────────────────
+    death_save_successes: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    death_save_failures: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # Name of the spell/effect being concentrated on, or null.
+    concentration_spell: Mapped[str | None] = mapped_column(
+        String(256), nullable=True, default=None
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
     encounter: Mapped["Encounter"] = relationship(back_populates="combatants")
     character: Mapped["Character | None"] = relationship()
+    combat_log_entries: Mapped[list["CombatLogEntry"]] = relationship(
+        back_populates="combatant", cascade="all, delete-orphan"
+    )
+
+
+class CombatLogEntry(Base):
+    """A single event in the combat log — damage, healing, death save, etc."""
+
+    __tablename__ = "combat_log_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    encounter_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("encounters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    combatant_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("combatants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    round_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Event type: 'damage', 'healing', 'death_save', 'condition_add',
+    # 'condition_remove', 'concentration_check', 'concentration_broken'
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    # JSON details — varies by event_type:
+    #   damage:  {"amount": 15, "damage_type": "fire", "source": "Fireball"}
+    #   healing: {"amount": 10, "source": "Cure Wounds"}
+    #   death_save: {"roll": 14, "success": true}
+    #   condition_add/remove: {"condition": "Blinded"}
+    #   concentration_check: {"dc": 10, "roll": 14, "total": 18, "passed": true}
+    #   concentration_broken: {"spell": "Fly", "trigger": "damage"}
+    details: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    encounter: Mapped["Encounter"] = relationship()
+    combatant: Mapped["Combatant"] = relationship(back_populates="combat_log_entries")
 
 
 class LLMUsageDailyAggregate(Base):

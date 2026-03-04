@@ -363,10 +363,13 @@ class CampaignOut(BaseModel):
     is_active: bool
     gm_discord_user_id: int | None = None
     schedule_mode: str = "fixed"
+    combat_tracker_depth: str = "standard"
     # Banking
     banking_enabled: bool = False
     player_banking_enabled: bool = False
     party_gold: float = 0.0
+    # Dice
+    allow_manual_dice_recording: bool = False
     created_by: int
     created_at: datetime
     deleted_at: datetime | None = None
@@ -392,8 +395,10 @@ class CampaignCreate(BaseModel):
     channel_id: str | int
     gm_discord_user_id: str | int | None = None
     schedule_mode: str = "fixed"
+    combat_tracker_depth: str = "standard"
     banking_enabled: bool = False
     player_banking_enabled: bool = False
+    allow_manual_dice_recording: bool = False
 
 
 class CampaignUpdate(BaseModel):
@@ -403,8 +408,10 @@ class CampaignUpdate(BaseModel):
     channel_id: str | int | None = None
     gm_discord_user_id: str | int | None = None
     schedule_mode: str | None = None
+    combat_tracker_depth: str | None = None
     banking_enabled: bool | None = None
     player_banking_enabled: bool | None = None
+    allow_manual_dice_recording: bool | None = None
 
 
 class CharacterCreate(BaseModel):
@@ -841,6 +848,17 @@ class DiceRollRequest(BaseModel):
     character_name: str | None = None
 
 
+class ManualDiceRecordRequest(BaseModel):
+    """Record a manual (physical) dice roll."""
+
+    expression: str  # e.g. "1d20+5" — what they rolled
+    total: int  # the result they got
+    roll_type: str = "general"
+    is_private: bool = False
+    context_note: str | None = None
+    character_name: str | None = None
+
+
 class DiceRollIndividual(BaseModel):
     """A single dice group result within a roll."""
 
@@ -893,6 +911,17 @@ class CombatantOut(BaseModel):
     is_enemy: bool = False
     sort_order: int = 0
     is_active: bool = True
+    # HP / AC (standard+ depth)
+    max_hp: int | None = None
+    current_hp: int | None = None
+    temp_hp: int = 0
+    armor_class: int | None = None
+    conditions: list[str] | None = None
+    save_modifiers: dict[str, int] | None = None
+    # Death saves & concentration (full depth)
+    death_save_successes: int = 0
+    death_save_failures: int = 0
+    concentration_spell: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -928,8 +957,94 @@ class EncounterCreate(BaseModel):
     channel_id: str | int | None = None
 
 
+class EncounterUpdate(BaseModel):
+    name: str
+
+
 class CombatantCreate(BaseModel):
     name: str
     initiative_modifier: int = 0
     is_enemy: bool = False
     character_id: int | None = None
+    max_hp: int | None = None
+    armor_class: int | None = None
+    save_modifiers: dict[str, int] | None = None
+
+
+class CombatantUpdate(BaseModel):
+    name: str | None = None
+
+
+class SetInitiativeBody(BaseModel):
+    """Body for manually setting a combatant's initiative roll value."""
+
+    initiative_roll: int
+
+
+class CombatLogEntryOut(BaseModel):
+    id: int
+    encounter_id: int
+    combatant_id: int
+    round_number: int
+    event_type: str
+    details: dict
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class DamageHealBody(BaseModel):
+    """Body for damage/heal API endpoints."""
+
+    combatant_ids: list[int]
+    amount: int
+    damage_type: str | None = None
+    source: str | None = None
+
+
+class SavingThrowBody(BaseModel):
+    """Body for the saving throw API endpoint."""
+
+    combatant_ids: list[int]
+    ability: str
+    dc: int
+
+
+class ConditionBody(BaseModel):
+    """Body for add/remove condition API endpoints."""
+
+    combatant_ids: list[int]
+    condition: str
+
+
+class ConcentrationBody(BaseModel):
+    """Body for setting concentration."""
+
+    spell: str | None = None
+
+
+class SavingThrowResult(BaseModel):
+    """Result of a single saving throw."""
+
+    combatant_id: int
+    combatant_name: str
+    roll: int
+    modifier: int
+    total: int
+    dc: int
+    passed: bool
+
+
+class MonsterSearchResult(BaseModel):
+    """Structured monster data returned by the monster search API."""
+
+    name: str
+    source: str
+    system: str
+    hp: int | None = None
+    ac: int | None = None
+    initiative_modifier: int | None = None
+    cr: str | None = None
+    size: str | None = None
+    type: str | None = None
+    save_modifiers: dict[str, int] | None = None

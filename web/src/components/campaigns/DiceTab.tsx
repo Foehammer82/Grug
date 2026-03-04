@@ -1,15 +1,18 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
+  Badge,
   Box,
   Button,
-  ButtonGroup,
   Chip,
   CircularProgress,
+  Collapse,
   Dialog,
   DialogContent,
   DialogTitle,
   Divider,
   IconButton,
+  MenuItem,
+  Select,
   Stack,
   TextField,
   Tooltip,
@@ -17,12 +20,13 @@ import {
 } from '@mui/material';
 import CasinoIcon from '@mui/icons-material/Casino';
 import CloseIcon from '@mui/icons-material/Close';
+import EditIcon from '@mui/icons-material/Edit';
 import LockIcon from '@mui/icons-material/Lock';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
-import type { DiceRoll } from '../../types';
+import type { Character, DiceRoll, DiceRollType } from '../../types';
 import { ROLL_TYPE_LABELS } from '../../types';
 
 interface DiceTabProps {
@@ -30,6 +34,7 @@ interface DiceTabProps {
   campaignId: number;
   isGm: boolean;
   currentUserId: string;
+  allowManualDiceRecording?: boolean;
 }
 
 const DICE_OPTIONS = [
@@ -55,21 +60,51 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-const DEFAULT_QUANTITY = 1;
-const DEFAULT_DIE = 20;
 const HISTORY_PREVIEW_COUNT = 5;
 
-export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: DiceTabProps) {
+export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allowManualDiceRecording = false }: DiceTabProps) {
   const qc = useQueryClient();
 
   // --- Roller state ---
-  const [quantity, setQuantity] = useState(DEFAULT_QUANTITY);
-  const [selectedDie, setSelectedDie] = useState(DEFAULT_DIE);
+  const [dicePool, setDicePool] = useState<Record<number, number>>({});
   const [modifier, setModifier] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [customExpr, setCustomExpr] = useState('');
   const [lastResult, setLastResult] = useState<DiceRoll | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedCharId, setSelectedCharId] = useState<number | null>(null);
+
+  // --- Characters in this campaign owned by the current user ---
+  const { data: allCharacters = [] } = useQuery<Character[]>({
+    queryKey: ['characters', guildId, campaignId],
+    queryFn: async () => {
+      const res = await client.get<Character[]>(
+        `/api/guilds/${guildId}/campaigns/${campaignId}/characters`,
+      );
+      return res.data;
+    },
+    staleTime: 60_000,
+  });
+  const myCharacters = allCharacters.filter(
+    (ch) => ch.owner_discord_user_id === currentUserId,
+  );
+
+  // Auto-select: pick the first character when characters load.
+  useEffect(() => {
+    if (myCharacters.length > 0 && selectedCharId === null) {
+      setSelectedCharId(myCharacters[0].id);
+    }
+  }, [myCharacters.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedChar = myCharacters.find((ch) => ch.id === selectedCharId) ?? myCharacters[0] ?? null;
+
+  // --- Manual roll state ---
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualExpr, setManualExpr] = useState('');
+  const [manualTotal, setManualTotal] = useState('');
+  const [manualType, setManualType] = useState<DiceRollType>('general');
+  const [manualNote, setManualNote] = useState('');
+  const [manualPrivate, setManualPrivate] = useState(false);
 
   // --- History ---
   const { data: history, isLoading: historyLoading } = useQuery<DiceRoll[]>({
@@ -86,7 +121,7 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: Di
 
   // --- Roll mutation ---
   const rollMutation = useMutation({
-    mutationFn: async (payload: { expression: string; is_private: boolean; roll_type?: string }) => {
+    mutationFn: async (payload: { expression: string; is_private: boolean; roll_type?: string; character_name?: string }) => {
       const res = await client.post<DiceRoll>(
         `/api/guilds/${guildId}/campaigns/${campaignId}/dice/roll`,
         payload,
@@ -100,41 +135,68 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: Di
   });
 
   const handleRoll = () => {
+    const charName = selectedChar?.name;
     const expr = customExpr.trim();
     if (expr) {
-      rollMutation.mutate({ expression: expr, is_private: isPrivate });
+      rollMutation.mutate({ expression: expr, is_private: isPrivate, character_name: charName });
       return;
     }
-    // Build expression from buttons
+    // Build expression from dice pool
+    const parts = Object.entries(dicePool)
+      .filter(([, cnt]) => cnt > 0)
+      .sort(([a], [b]) => Number(b) - Number(a))
+      .map(([sides, cnt]) => `${cnt}d${sides}`);
+    if (parts.length === 0) return;
     const mod = modifier.trim();
-    let expression = `${quantity}d${selectedDie}`;
     if (mod) {
-      // Allow "+5", "-2", or just "5" (treated as +5)
-      if (mod.startsWith('+') || mod.startsWith('-')) {
-        expression += mod;
-      } else {
-        expression += `+${mod}`;
-      }
+      parts.push(mod.startsWith('+') || mod.startsWith('-') ? mod : `+${mod}`);
     }
-    rollMutation.mutate({ expression, is_private: isPrivate });
+    rollMutation.mutate({ expression: parts.join('+'), is_private: isPrivate, character_name: charName });
   };
 
-  const handleQuickRoll = (sides: number) => {
-    const mod = modifier.trim();
-    let expression = `${quantity}d${sides}`;
-    if (mod) {
-      if (mod.startsWith('+') || mod.startsWith('-')) {
-        expression += mod;
-      } else {
-        expression += `+${mod}`;
-      }
-    }
-    rollMutation.mutate({ expression, is_private: isPrivate });
+  // --- Record manual roll mutation ---
+  const recordMutation = useMutation({
+    mutationFn: async (payload: {
+      expression: string;
+      total: number;
+      roll_type: string;
+      is_private: boolean;
+      context_note?: string;
+      character_name?: string;
+    }) => {
+      const res = await client.post<DiceRoll>(
+        `/api/guilds/${guildId}/campaigns/${campaignId}/dice/record`,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: (data) => {
+      setLastResult(data);
+      qc.invalidateQueries({ queryKey: ['dice-history', guildId, campaignId] });
+      setManualExpr('');
+      setManualTotal('');
+      setManualType('general');
+      setManualNote('');
+      setManualPrivate(false);
+      setManualOpen(false);
+    },
+  });
+
+  const handleRecordManual = () => {
+    const total = parseInt(manualTotal, 10);
+    if (isNaN(total)) return;
+    recordMutation.mutate({
+      expression: manualExpr.trim() || `manual`,
+      total,
+      roll_type: manualType,
+      is_private: manualPrivate,
+      character_name: selectedChar?.name,
+      ...(manualNote.trim() ? { context_note: manualNote.trim() } : {}),
+    });
   };
 
   const handleReset = () => {
-    setQuantity(DEFAULT_QUANTITY);
-    setSelectedDie(DEFAULT_DIE);
+    setDicePool({});
     setModifier('');
     setIsPrivate(false);
     setCustomExpr('');
@@ -146,50 +208,123 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: Di
     <Box>
       {/* ── Dice Roller ─────────────────────────────── */}
       <Stack spacing={1.5}>
-        {/* Quick-roll dice buttons */}
+        {/* Die selector buttons */}
         <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
           <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
-            Quick roll:
+            Add dice:
           </Typography>
-          {DICE_OPTIONS.map((d) => (
-            <Button
-              key={d.sides}
-              variant={selectedDie === d.sides ? 'contained' : 'outlined'}
-              size="small"
-              onClick={() => {
-                setSelectedDie(d.sides);
-                setCustomExpr('');
-                handleQuickRoll(d.sides);
-              }}
-              sx={{
-                minWidth: 48,
-                fontSize: '0.75rem',
-                fontWeight: 700,
-                borderColor: d.color,
-                color: selectedDie === d.sides ? '#fff' : d.color,
-                bgcolor: selectedDie === d.sides ? d.color : 'transparent',
-                '&:hover': { bgcolor: d.color, color: '#fff' },
-              }}
-            >
-              {d.label}
-            </Button>
-          ))}
+          {DICE_OPTIONS.map((d) => {
+            const count = dicePool[d.sides] ?? 0;
+            const active = count > 0;
+            return (
+              <Badge
+                key={d.sides}
+                badgeContent={count || null}
+                sx={{
+                  '& .MuiBadge-badge': {
+                    bgcolor: d.color,
+                    color: '#fff',
+                    fontWeight: 700,
+                    fontSize: '0.65rem',
+                  },
+                }}
+              >
+                <Button
+                  variant={active ? 'contained' : 'outlined'}
+                  size="small"
+                  onClick={() => {
+                    setDicePool((prev) => ({ ...prev, [d.sides]: (prev[d.sides] ?? 0) + 1 }));
+                    setCustomExpr('');
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    setDicePool((prev) => {
+                      const curr = prev[d.sides] ?? 0;
+                      if (curr <= 1) {
+                        const next = { ...prev };
+                        delete next[d.sides];
+                        return next;
+                      }
+                      return { ...prev, [d.sides]: curr - 1 };
+                    });
+                  }}
+                  sx={{
+                    minWidth: 48,
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    borderColor: d.color,
+                    color: active ? '#fff' : d.color,
+                    bgcolor: active ? d.color : 'transparent',
+                    '&:hover': { bgcolor: d.color, color: '#fff' },
+                  }}
+                >
+                  {d.label}
+                </Button>
+              </Badge>
+            );
+          })}
+          <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+            (right-click to remove one)
+          </Typography>
         </Stack>
+
+        {/* Active pool chips */}
+        {Object.keys(dicePool).length > 0 && (
+          <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Typography variant="caption" color="text.secondary">Rolling:</Typography>
+            {Object.entries(dicePool)
+              .sort(([a], [b]) => Number(b) - Number(a))
+              .map(([sides, count]) => (
+                <Chip
+                  key={sides}
+                  label={`${count}d${sides}`}
+                  size="small"
+                  onDelete={() =>
+                    setDicePool((prev) => {
+                      const next = { ...prev };
+                      delete next[Number(sides)];
+                      return next;
+                    })
+                  }
+                  sx={{
+                    height: 22,
+                    fontSize: '0.75rem',
+                    fontFamily: 'monospace',
+                    fontWeight: 600,
+                    bgcolor: DICE_OPTIONS.find((d) => d.sides === Number(sides))?.color + '33',
+                    borderColor: DICE_OPTIONS.find((d) => d.sides === Number(sides))?.color + '88',
+                    border: '1px solid',
+                    color: DICE_OPTIONS.find((d) => d.sides === Number(sides))?.color,
+                  }}
+                />
+              ))}
+          </Stack>
+        )}
+
+        {/* Character selector — shown when user has >1 character in this campaign */}
+        {myCharacters.length > 1 && (
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography variant="caption" color="text.secondary">Rolling as:</Typography>
+            <Select
+              size="small"
+              value={selectedCharId ?? ''}
+              onChange={(e) => setSelectedCharId(Number(e.target.value))}
+              sx={{ minWidth: 160, height: 32, fontSize: '0.8rem' }}
+            >
+              {myCharacters.map((ch) => (
+                <MenuItem key={ch.id} value={ch.id}>{ch.name}</MenuItem>
+              ))}
+            </Select>
+          </Stack>
+        )}
+        {myCharacters.length === 1 && (
+          <Typography variant="caption" color="text.secondary">
+            Rolling as <strong>{myCharacters[0].name}</strong>
+          </Typography>
+        )}
 
         {/* Controls row */}
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <ButtonGroup size="small" variant="outlined">
-            <Button onClick={() => setQuantity((q) => Math.max(1, q - 1))} disabled={quantity <= 1}>
-              −
-            </Button>
-            <Button disabled sx={{ minWidth: 36, fontWeight: 700 }}>
-              {quantity}
-            </Button>
-            <Button onClick={() => setQuantity((q) => Math.min(20, q + 1))} disabled={quantity >= 20}>
-              +
-            </Button>
-          </ButtonGroup>
-
           <TextField
             size="small"
             label="Modifier"
@@ -230,7 +365,7 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: Di
             size="small"
             startIcon={<CasinoIcon />}
             onClick={handleRoll}
-            disabled={rollMutation.isPending}
+            disabled={rollMutation.isPending || (Object.keys(dicePool).length === 0 && !customExpr.trim())}
           >
             {rollMutation.isPending ? 'Rolling…' : 'Roll'}
           </Button>
@@ -299,6 +434,89 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: Di
           </Typography>
         )}
       </Stack>
+
+      {/* ── Manual Roll Recording ───────────────────── */}      {allowManualDiceRecording && (      <Box sx={{ mt: 1 }}>
+        <Button
+          size="small"
+          variant="text"
+          startIcon={<EditIcon />}
+          onClick={() => setManualOpen(!manualOpen)}
+          sx={{ textTransform: 'none', color: 'text.secondary' }}
+        >
+          {manualOpen ? 'Hide' : 'Record a physical roll'}
+        </Button>
+        <Collapse in={manualOpen}>
+          <Box sx={{ mt: 1, p: 1.5, borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+              Rolled physical dice? Record the result here so it shows up in the campaign log.
+            </Typography>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <TextField
+                size="small"
+                label="What you rolled"
+                value={manualExpr}
+                onChange={(e) => setManualExpr(e.target.value)}
+                placeholder="1d20+5"
+                sx={{ width: 130 }}
+              />
+              <TextField
+                size="small"
+                label="Total *"
+                type="number"
+                value={manualTotal}
+                onChange={(e) => setManualTotal(e.target.value)}
+                placeholder="18"
+                sx={{ width: 80 }}
+                required
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && manualTotal.trim()) handleRecordManual();
+                }}
+              />
+              <Select
+                size="small"
+                value={manualType}
+                onChange={(e) => setManualType(e.target.value as DiceRollType)}
+                sx={{ minWidth: 120, height: 40 }}
+              >
+                {Object.entries(ROLL_TYPE_LABELS).map(([value, label]) => (
+                  <MenuItem key={value} value={value}>{label}</MenuItem>
+                ))}
+              </Select>
+              <TextField
+                size="small"
+                label="Note"
+                value={manualNote}
+                onChange={(e) => setManualNote(e.target.value)}
+                placeholder="STR save vs DC 15"
+                sx={{ width: 160 }}
+              />
+              <Tooltip title={manualPrivate ? 'Private — only you and GM see this' : 'Public — everyone sees this'}>
+                <IconButton
+                  size="small"
+                  onClick={() => setManualPrivate(!manualPrivate)}
+                  color={manualPrivate ? 'warning' : 'default'}
+                >
+                  {manualPrivate ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+                </IconButton>
+              </Tooltip>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleRecordManual}
+                disabled={!manualTotal.trim() || recordMutation.isPending}
+              >
+                {recordMutation.isPending ? 'Saving…' : 'Record'}
+              </Button>
+            </Stack>
+            {recordMutation.isError && (
+              <Typography variant="caption" color="error" sx={{ mt: 0.5, display: 'block' }}>
+                {(recordMutation.error as Error)?.message ?? 'Failed to record roll'}
+              </Typography>
+            )}
+          </Box>
+        </Collapse>
+      </Box>
+      )}
 
       {/* ── Roll History ────────────────────────────── */}
       <Divider sx={{ my: 2 }} />
@@ -428,6 +646,16 @@ function RollHistoryRow({ roll, currentUserId }: { roll: DiceRoll; currentUserId
       <Typography variant="body2" fontWeight={700} sx={{ minWidth: 36, textAlign: 'right' }}>
         {roll.total}
       </Typography>
+
+      {roll.individual_rolls?.[0]?.manual && (
+        <Tooltip title="Manually recorded roll">
+          <Chip
+            label="✋"
+            size="small"
+            sx={{ height: 18, fontSize: '0.65rem', px: 0.3, minWidth: 'auto' }}
+          />
+        </Tooltip>
+      )}
 
       {roll.is_private && (
         <Tooltip title="Private roll">

@@ -13,7 +13,7 @@ from api.deps import (
     get_db,
     is_guild_admin,
 )
-from api.schemas import DiceRollOut, DiceRollRequest
+from api.schemas import DiceRollOut, DiceRollRequest, ManualDiceRecordRequest
 from grug.db.models import Campaign, DiceRoll
 from grug.dice import DiceError, RollType, format_roll, roll
 
@@ -118,6 +118,64 @@ async def roll_dice(
 
     formatted = format_roll(result)
     return _serialize_roll(db_roll, formatted)
+
+
+@router.post(
+    "/api/guilds/{guild_id}/campaigns/{campaign_id}/dice/record",
+    response_model=DiceRollOut,
+)
+async def record_manual_roll(
+    guild_id: int,
+    campaign_id: int,
+    body: ManualDiceRecordRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DiceRollOut:
+    """Record a manual (physical) dice roll — the total is provided by the player."""
+    await assert_guild_member(guild_id, user)
+
+    campaign = (
+        await db.execute(
+            select(Campaign).where(
+                Campaign.id == campaign_id,
+                Campaign.guild_id == guild_id,
+                Campaign.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+
+    if not campaign.allow_manual_dice_recording:
+        raise HTTPException(
+            status_code=403,
+            detail="Manual dice recording is not enabled for this campaign.",
+        )
+
+    valid_types = {rt.value for rt in RollType}
+    roll_type = body.roll_type if body.roll_type in valid_types else "general"
+
+    user_id = int(user["id"])
+    display_name = user.get("username", str(user_id))
+
+    db_roll = DiceRoll(
+        guild_id=guild_id,
+        campaign_id=campaign_id,
+        roller_discord_user_id=user_id,
+        roller_display_name=display_name,
+        character_name=body.character_name,
+        expression=body.expression,
+        individual_rolls=[{"manual": True, "total": body.total}],
+        total=body.total,
+        roll_type=roll_type,
+        is_private=body.is_private,
+        context_note=body.context_note,
+    )
+    db.add(db_roll)
+    await db.commit()
+    await db.refresh(db_roll)
+
+    return _serialize_roll(db_roll, f"{body.expression} = {body.total} (manual)")
 
 
 @router.get(
