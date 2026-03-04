@@ -167,11 +167,28 @@ Transfer (move) a character between campaigns uses the existing `PATCH /api/guil
 ### Web UI
 
 - **Campaigns tab** — `adminOnly: false`.  Non-admins see a filtered read-only view (only campaigns they have a character in, no edit controls).  Admins get full CRUD.
-- **Characters tab** — **removed**.  All character management lives inside the Campaigns accordion.
+- **Characters tab** — **removed**.  `CharactersPage.tsx` is deleted; all character management lives inside each campaign card.
+- Layout: card-per-campaign (`CampaignCard`) with an always-visible `CharacterTable` underneath the header bar.  No accordions.
+- Each character row opens a combined `CharacterDialog` with three tabs: **Details** (name, owner, sheet upload, Pathbuilder import ID, move/copy), **Sheet** (parsed stats via `CharacterStatCard`), **Notes** (auto-saving textarea).
+- Batch delete via checkbox selection in `CharacterTable`; no per-row delete icon button.
+- **Pathbuilder is import-only.** There is no standalone "Sync from Pathbuilder" button. Pathbuilder ID is set during character create/edit and the sheet is fetched client-side via `fetchPathbuilderClientSide()` at that time. The `CharacterSheetPage` sync button has been removed.
 - Soft-delete shows an 8-second **Undo snackbar** allowing instant restore.
 - A collapsed **"Deleted campaigns"** section (admin-only) lists soft-deleted campaigns with per-row **Restore** and **Delete permanently** actions. Permanent delete has a separate confirmation dialog.
 - Each character row has a 3-dot menu with **Move to campaign…** and **Copy to campaign…** items (only shown when other campaigns exist).  Both open a dialog with an `Autocomplete` to pick the target campaign.
 - `CharacterSheetPage` back button navigates to `/guilds/:guildId/campaigns` (previously pointed to the removed `/characters` route).
+
+#### Component structure (`web/src/components/campaigns/`)
+
+| Component | Purpose |
+|---|---|
+| `CampaignCard` | Header bar (name, system chip, channel chip, character count, edit/delete) + embedded `CharacterTable` |
+| `CharacterTable` | MUI Table with checkbox column, batch toolbar, "Add character" button; opens `CharacterDialog` |
+| `CharacterDialog` | Combined tabbed dialog (Details · Sheet · Notes); handles create, edit, delete, move, copy |
+| `CharacterStatCard` | Compact parsed-stats card (headline, AC/HP/Speed, ability scores) |
+| `OwnerAutocomplete` | Autocomplete for picking a guild member or free-text owner; exports `UNASSIGNED_MEMBER` sentinel and `resolveOwnerPayload()` |
+| `GuildMemberCell` | Renders guild member avatar + display name with loading/error states |
+
+Shared constants live in `web/src/constants/character.ts` (`SYSTEM_OPTIONS`, `SYSTEM_LABELS`, `ABILITY_KEYS`, `SHEET_ACCEPTED`, `MAX_SHEET_MB`, `abilityMod()`).
 
 **Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:
 

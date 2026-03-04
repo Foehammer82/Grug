@@ -95,18 +95,47 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                 should_respond = True
             else:
                 from grug.bot.auto_respond import score_auto_respond
+                from grug.db.models import ConversationMessage
+                from grug.db.session import get_session_factory
+
+                # Fetch the last 5 messages in this channel as scored context.
+                recent_context: list[str] = []
+                try:
+                    _factory = get_session_factory()
+                    async with _factory() as _session:
+                        _result = await _session.execute(
+                            select(ConversationMessage)
+                            .where(
+                                ConversationMessage.channel_id == message.channel.id,
+                                ConversationMessage.archived.is_(False),
+                            )
+                            .order_by(ConversationMessage.created_at.desc())
+                            .limit(6)
+                        )
+                        _rows = list(reversed(_result.scalars().all()))
+                        # Drop the last row — it's the message we just passively saved.
+                        context_rows = _rows[:-1] if _rows else []
+                        recent_context = [
+                            f"{r.author_name or 'Grug'}: {r.content}"
+                            for r in context_rows
+                        ]
+                except Exception:
+                    logger.exception(
+                        "Failed to fetch recent context for auto-respond scorer"
+                    )
 
                 score = await score_auto_respond(
                     message_content=message.clean_content,
+                    recent_context=recent_context,
                     guild_id=message.guild.id,
                 )
                 should_respond = score >= auto_respond_threshold
-                logger.debug(
-                    "Auto-respond score %.2f vs threshold %.2f in channel %s → %s",
+                logger.info(
+                    "Auto-respond | score=%.3f threshold=%.3f → %s | %r",
                     score,
                     auto_respond_threshold,
-                    message.channel.id,
-                    "respond" if should_respond else "skip",
+                    "RESPOND" if should_respond else "skip",
+                    message.clean_content[:80],
                 )
 
         if not should_respond:

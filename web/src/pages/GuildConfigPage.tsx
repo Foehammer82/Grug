@@ -183,6 +183,23 @@ function ServerSettingsPanel({ guildId }: { guildId: string }) {
 // Sub-panel: Channel Settings
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Equally-spaced slider positions → real threshold values sent to the API.
+const THRESHOLD_STEPS: { value: number; label: string }[] = [
+  { value: 0, label: 'Always' },
+  { value: 0.1, label: 'Often' },
+  { value: 0.5, label: 'Sometimes' },
+  { value: 0.8, label: 'Selectively' },
+];
+/** Convert a real threshold to the nearest slider index (0–3). */
+function thresholdToIndex(t: number): number {
+  let best = 0;
+  let bestDist = Infinity;
+  THRESHOLD_STEPS.forEach((s, i) => {
+    const d = Math.abs(s.value - t);
+    if (d < bestDist) { bestDist = d; best = i; }
+  });
+  return best;
+}
 function ChannelSettingsPanel({ guildId }: { guildId: string }) {
   const qc = useQueryClient();
   const [filter, setFilter] = useState('');
@@ -297,7 +314,8 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                     const cfg = configMap.get(ch.id);
                     const autoRespond = cfg?.auto_respond ?? false;
                     const threshold =
-                      pendingThresholds[ch.id] ?? cfg?.auto_respond_threshold ?? 0.5;
+                      pendingThresholds[ch.id] ?? cfg?.auto_respond_threshold ?? 0.1;
+                    const sliderIndex = thresholdToIndex(threshold);
                     return (
                       <TableRow key={ch.id} hover>
                         <TableCell>
@@ -336,9 +354,6 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                             {autoRespond && (
                               <Box
                                 sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 1,
                                   pl: 0.5,
                                   pr: 1,
                                   pt: 1,
@@ -346,35 +361,22 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   maxWidth: 380,
                                 }}
                               >
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ whiteSpace: 'nowrap' }}
-                                >
-                                  Always
-                                </Typography>
                                 <Slider
                                   size="small"
                                   min={0}
-                                  max={1}
-                                  step={0.05}
-                                  value={threshold}
-                                  marks={[
-                                    { value: 0 },
-                                    { value: 0.25 },
-                                    { value: 0.5 },
-                                    { value: 0.75 },
-                                    { value: 1 },
-                                  ]}
-                                  valueLabelDisplay="on"
-                                  valueLabelFormat={(v) => `${Math.round((v as number) * 100)}%`}
+                                  max={3}
+                                  step={1}
+                                  value={sliderIndex}
+                                  marks={THRESHOLD_STEPS.map((s, i) => ({ value: i, label: s.label }))}
+                                  valueLabelDisplay="off"
                                   onChange={(_, v) =>
                                     setPendingThresholds((prev) => ({
                                       ...prev,
-                                      [ch.id]: v as number,
+                                      [ch.id]: THRESHOLD_STEPS[v as number].value,
                                     }))
                                   }
                                   onChangeCommitted={(_, v) => {
+                                    const realValue = THRESHOLD_STEPS[v as number].value;
                                     setPendingThresholds((prev) => {
                                       const next = { ...prev };
                                       delete next[ch.id];
@@ -382,19 +384,12 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                     });
                                     channelMutation.mutate({
                                       channelId: ch.id,
-                                      patch: { auto_respond_threshold: v },
+                                      patch: { auto_respond_threshold: realValue },
                                     });
                                   }}
                                   disabled={channelMutation.isPending || configsError}
-                                  sx={{ flex: 1, mt: 2 }}
+                                  sx={{ flex: 1, mt: 2, mb: 2 }}
                                 />
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ whiteSpace: 'nowrap' }}
-                                >
-                                  Selective
-                                </Typography>
                               </Box>
                             )}
                           </Stack>

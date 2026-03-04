@@ -14,6 +14,7 @@ Design principles:
 
 import json
 import logging
+import re
 
 from anthropic import AsyncAnthropic
 
@@ -26,16 +27,24 @@ _SCORER_SYSTEM = (
     "You are a relevance scorer deciding whether Grug — an AI assistant for "
     "TTRPG (tabletop role-playing game) Discord communities — should respond "
     "to a message.\n\n"
+    "HIGHEST PRIORITY SIGNAL: If the message contains the word 'grug' (any "
+    "capitalisation, e.g. 'Grug', 'GRUG'), score it 0.95 or above — the person "
+    "is directly addressing Grug by name.\n\n"
     "Grug SHOULD respond when the message:\n"
+    "- Contains 'grug' (any case) — person is directly addressing Grug\n"
     "- Asks a question of any kind\n"
     "- Is about TTRPGs, gaming, rules, lore, character building, or scheduling\n"
     "- Invites discussion or opinion\n"
     "- Directly addresses the group ('anyone know…', 'what do you all think…')\n"
-    "- Could benefit from an AI assistant's help\n\n"
+    "- Could benefit from an AI assistant's help\n"
+    "- Appears to continue or follow up a conversation Grug was already part of\n\n"
     "Grug should NOT respond to:\n"
-    "- Pure social chatter or inside jokes with no question or topic\n"
-    "- Messages clearly between just two humans about an unrelated personal topic\n"
+    "- Pure social chatter or inside jokes between humans with no question or invitation\n"
+    "- Messages clearly between two humans about an unrelated personal topic\n"
     "- One-word reactions or emoji-only messages\n\n"
+    "The recent context shows the last few messages prefixed with speaker names. "
+    "Use this to judge whether Grug is actively part of the conversation and "
+    "whether follow-up replies make sense.\n\n"
     "Output ONLY a JSON object with a single key 'confidence' and a float value "
     "between 0.0 (definitely do not respond) and 1.0 (definitely respond). "
     'Example: {"confidence": 0.85}'
@@ -82,7 +91,7 @@ async def score_auto_respond(
         client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         response = await client.messages.create(
             model="claude-haiku-4-5",
-            max_tokens=64,
+            max_tokens=128,
             system=_SCORER_SYSTEM,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -94,7 +103,20 @@ async def score_auto_respond(
             guild_id=guild_id,
         )
         text = response.content[0].text.strip()
-        data = json.loads(text)
+        if not text:
+            logger.warning(
+                "Auto-respond scorer returned empty response; defaulting to respond"
+            )
+            return 0.0
+        # Extract JSON object even if the model wraps it in markdown or adds preamble.
+        match = re.search(r"\{[^}]+\}", text)
+        if not match:
+            logger.warning(
+                "Auto-respond scorer returned no JSON object in %r; defaulting to respond",
+                text[:120],
+            )
+            return 0.0
+        data = json.loads(match.group())
         confidence = float(data["confidence"])
         return max(0.0, min(1.0, confidence))
     except Exception:

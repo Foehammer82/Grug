@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Accordion,
@@ -11,18 +11,15 @@ import {
   IconButton,
   Paper,
   Stack,
-  Tooltip,
   Typography,
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import SyncIcon from '@mui/icons-material/Sync';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { ABILITY_KEYS, SYSTEM_LABELS, abilityMod } from '../constants/character';
 import type { Character } from '../types';
-import { SYSTEM_LABELS } from '../constants';
 
-const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as const;
 
 /** PF2e proficiency rank labels (0 = untrained, 1 = trained, ...). */
 const PROF_RANKS = ['Untrained', 'Trained', 'Expert', 'Master', 'Legendary'] as const;
@@ -43,17 +40,10 @@ function profColor(rank: unknown): 'default' | 'info' | 'primary' | 'warning' | 
   return 'success'; // Legendary
 }
 
-function abilityMod(score: number | null | undefined): string {
-  if (score == null) return '—';
-  const mod = Math.floor((score - 10) / 2);
-  return mod >= 0 ? `+${mod}` : String(mod);
-}
-
 export default function CharacterSheetPage() {
   useAuth();
   const { guildId, characterId } = useParams<{ guildId: string; characterId: string }>();
   const navigate = useNavigate();
-  const qc = useQueryClient();
 
   const { data: character, isLoading } = useQuery<Character>({
     queryKey: ['character', guildId, characterId],
@@ -62,15 +52,6 @@ export default function CharacterSheetPage() {
       return res.data;
     },
     enabled: !!guildId && !!characterId,
-  });
-
-  const syncMutation = useMutation({
-    mutationFn: () =>
-      client.post(`/api/guilds/${guildId}/characters/${characterId}/sync-pathbuilder`),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['character', guildId, characterId] });
-      qc.invalidateQueries({ queryKey: ['guild-characters', guildId] });
-    },
   });
 
   if (isLoading) {
@@ -87,36 +68,36 @@ export default function CharacterSheetPage() {
     );
   }
 
-  const sd = character.structured_data as Record<string, unknown> | null;
-  const isPathbuilder = sd?._source === 'pathbuilder';
+  const sd = character.structured_data;
+  const isPathbuilder = (sd as Record<string, unknown> | null)?._source === 'pathbuilder';
 
   // Extract fields with fallback
   const charName = character.name;
-  const level = sd?.level as number | null | undefined;
-  const charClass = sd?.class_and_subclass as string | null | undefined;
-  const dualClass = sd?.dual_class as string | null | undefined;
-  const ancestry = sd?.race_or_ancestry as string | null | undefined;
-  const heritage = sd?.heritage as string | null | undefined;
-  const background = sd?.background as string | null | undefined;
-  const alignment = sd?.alignment as string | null | undefined;
-  const deity = sd?.deity as string | null | undefined;
-  const size = sd?.size as string | null | undefined;
-  const hp = sd?.hp as { current?: number | null; max?: number | null; temp?: number | null } | null | undefined;
-  const ac = sd?.armor_class as number | null | undefined;
-  const speed = sd?.speed as string | null | undefined;
-  const perception = sd?.perception as number | null | undefined;
-  const abilityScores = sd?.ability_scores as Record<string, number | null> | null | undefined;
-  const savingThrows = sd?.saving_throws as Record<string, number | null> | null | undefined;
-  const proficiencies = sd?.proficiencies as Record<string, number | null> | null | undefined;
-  const attacks = sd?.attacks as Array<Record<string, unknown>> | null | undefined;
-  const spells = sd?.spells as Array<Record<string, unknown>> | null | undefined;
-  const features = sd?.features_and_traits as string[] | null | undefined;
-  const inventory = sd?.inventory as string[] | null | undefined;
-  const loreSkills = sd?.lore_skills as Array<{ name: string; rank: number }> | null | undefined;
-  const armorList = sd?.armor as Array<Record<string, unknown>> | null | undefined;
-  const currency = sd?.currency as Record<string, number> | null | undefined;
-  const languages = sd?.languages as string[] | null | undefined;
-  const notes = sd?.notes as string | null | undefined;
+  const level = sd?.level;
+  const charClass = sd?.class_and_subclass;
+  const dualClass = sd?.dual_class;
+  const ancestry = sd?.race_or_ancestry;
+  const heritage = sd?.heritage;
+  const background = sd?.background;
+  const alignment = sd?.alignment;
+  const deity = sd?.deity;
+  const size = sd?.size;
+  const hp = sd?.hp;
+  const ac = sd?.armor_class;
+  const speed = sd?.speed;
+  const perception = sd?.perception;
+  const abilityScores = sd?.ability_scores;
+  const savingThrows = sd?.saving_throws;
+  const proficiencies = sd?.proficiencies;
+  const attacks = sd?.attacks;
+  const spells = sd?.spells;
+  const features = sd?.features_and_traits?.map(String);
+  const inventory = sd?.inventory?.map(String);
+  const loreSkills = sd?.lore_skills;
+  const armorList = sd?.armor;
+  const currency = sd?.currency;
+  const languages = sd?.languages;
+  const notes = sd?.notes;
 
   const headline = [
     level != null && `Level ${level}`,
@@ -142,17 +123,6 @@ export default function CharacterSheetPage() {
           color={character.system === 'pf2e' ? 'error' : character.system === 'dnd5e' ? 'primary' : 'default'}
           variant="outlined"
         />
-        {character.pathbuilder_id && (
-          <Tooltip title="Sync from Pathbuilder">
-            <IconButton
-              onClick={() => syncMutation.mutate()}
-              disabled={syncMutation.isPending}
-              size="small"
-            >
-              <SyncIcon />
-            </IconButton>
-          </Tooltip>
-        )}
       </Stack>
 
       {headline && (
@@ -185,13 +155,6 @@ export default function CharacterSheetPage() {
         )}
       </Stack>
 
-      {syncMutation.isError && (
-        <Typography variant="caption" color="error" display="block" mb={2}>
-          Sync failed:{' '}
-          {(syncMutation.error as { response?: { data?: { detail?: string } } })?.response?.data
-            ?.detail ?? 'Unknown error'}
-        </Typography>
-      )}
 
       {/* ── Combat Stats ────────────────────────────────────── */}
       <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>

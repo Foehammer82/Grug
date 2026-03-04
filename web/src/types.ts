@@ -207,25 +207,43 @@ export interface CharacterSheetAbilityScores {
 
 /** Structured data extracted from an uploaded character sheet. All fields optional. */
 export interface CharacterSheet {
+  _source?: string | null;
   system?: string | null;
   name?: string | null;
   player_name?: string | null;
   level?: number | null;
   class_and_subclass?: string | null;
+  dual_class?: string | null;
   race_or_ancestry?: string | null;
+  heritage?: string | null;
   background?: string | null;
   alignment?: string | null;
+  deity?: string | null;
+  size?: string | null;
+  key_ability?: string | null;
   hp?: CharacterSheetHP | null;
   ability_scores?: CharacterSheetAbilityScores | null;
   armor_class?: number | null;
   speed?: string | null;
   initiative?: number | null;
   proficiency_bonus?: number | null;
-  attacks?: unknown[] | null;
-  spells?: unknown[] | null;
+  /** PF2e saving throw proficiency ranks (0–4). */
+  saving_throws?: { fortitude?: number | null; reflex?: number | null; will?: number | null } | null;
+  /** PF2e perception proficiency rank (0–4). */
+  perception?: number | null;
+  /** Full PF2e proficiency map (skills, weapons, armor, casting, classDC, etc.). Values are ranks 0–4. */
+  proficiencies?: Record<string, number | null> | null;
+  /** PF2e lore skills with proficiency rank. */
+  lore_skills?: Array<{ name: string; rank: number }> | null;
+  attacks?: Array<Record<string, unknown>> | null;
+  /** Raw weapon data from Pathbuilder. */
+  weapons?: Array<Record<string, unknown>> | null;
+  /** Raw armor data from Pathbuilder. */
+  armor?: Array<Record<string, unknown>> | null;
+  spells?: Array<Record<string, unknown>> | null;
   features_and_traits?: unknown[] | null;
   inventory?: unknown[] | null;
-  currency?: Record<string, unknown> | null;
+  currency?: Record<string, number> | null;
   languages?: string[] | null;
   notes?: string | null;
   extra?: Record<string, unknown> | null;

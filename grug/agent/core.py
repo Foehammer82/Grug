@@ -82,11 +82,14 @@ def _build_agent() -> Agent[GrugDeps, str]:
     from grug.agent.tools.rules_tools import register_rules_tools
     from grug.agent.tools.scheduling_tools import register_scheduling_tools
 
+    from grug.agent.tools.notes_tools import register_notes_tools
+
     register_rag_tools(agent)
     register_scheduling_tools(agent)
     register_glossary_tools(agent)
     register_character_tools(agent)
     register_rules_tools(agent)
+    register_notes_tools(agent)
 
     @agent.tool
     async def get_current_time(ctx: RunContext[GrugDeps]) -> str:
@@ -180,6 +183,40 @@ class GrugAgent:
     def __init__(self) -> None:
         settings = get_settings()
         self._context_window: int = settings.agent_context_window
+
+    async def _fetch_notes(
+        self, guild_id: int, user_id: int, is_dm_session: bool
+    ) -> str | None:
+        """Fetch the relevant notes content for this session, or None if empty."""
+        from grug.db.models import GrugNote
+
+        factory = get_session_factory()
+        try:
+            async with factory() as session:
+                if is_dm_session:
+                    result = await session.execute(
+                        select(GrugNote).where(
+                            GrugNote.user_id == user_id,
+                            GrugNote.guild_id.is_(None),
+                        )
+                    )
+                else:
+                    result = await session.execute(
+                        select(GrugNote).where(
+                            GrugNote.guild_id == guild_id,
+                            GrugNote.user_id.is_(None),
+                        )
+                    )
+                note = result.scalar_one_or_none()
+        except Exception:
+            logger.exception(
+                "Failed to fetch notes for guild=%s user=%s", guild_id, user_id
+            )
+            return None
+
+        if note is None or not note.content.strip():
+            return None
+        return note.content
 
     async def _load_history(
         self,
@@ -283,8 +320,13 @@ class GrugAgent:
 
         for row in rows:
             if row.role == "user":
+                # Prefix with the speaker's name so Grug knows who said what
+                # in multi-user channels.
+                prefix = f"{row.author_name}: " if row.author_name else ""
                 messages.append(
-                    ModelRequest(parts=[UserPromptPart(content=row.content)])
+                    ModelRequest(
+                        parts=[UserPromptPart(content=f"{prefix}{row.content}")]
+                    )
                 )
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
@@ -369,6 +411,30 @@ class GrugAgent:
         except Exception as exc:
             logger.exception("Failed to load/save conversation history: %s", exc)
             history = []
+
+        # Inject notes (guild-scoped or personal) into the history so Grug
+        # always has them visible at the top of his context window.
+        notes_content = await self._fetch_notes(guild_id, user_id, is_dm_session)
+        if notes_content:
+            notes_messages: list[ModelRequest | ModelResponse] = [
+                ModelRequest(
+                    parts=[
+                        UserPromptPart(
+                            content=(
+                                f"[GRUG NOTES — read before responding]\n"
+                                f"{notes_content}\n"
+                                "[END NOTES]"
+                            )
+                        )
+                    ]
+                ),
+                ModelResponse(
+                    parts=[TextPart(content="Grug read notes. Grug remember.")]
+                ),
+            ]
+            # Insert after the voice-reminder exchange (first two items) so
+            # notes appear before the actual conversation history.
+            history = history[:2] + notes_messages + history[2:]
 
         deps = GrugDeps(
             guild_id=guild_id,

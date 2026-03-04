@@ -107,16 +107,11 @@ A web-based dice roller that optionally posts results to Discord.
 
 These are ideas that aren't planned yet but worth capturing.
 
-- **Web-based Grug AI chat:** Requires a new streaming endpoint (SSE/WebSocket),
-  web auth → agent deps mapping, conversation persistence outside Discord.
-  Significant new capability — defer until core character features are solid.
-- **D&D Beyond integration:** No public API. Would require per-user auth cookie
-  proxying, which is fragile and arguably a security concern. Probably not viable.
-- **Wanderer's Guide integration:** Open-source PF2e builder, but has no public
-  API yet. Monitor for upstream API development.
-- **HeroLab Online integration:** Closed, commercial, no API. Not viable.
-- **5e character builder integration:** No good public APIs exist in the 5e
-  ecosystem. The existing upload-and-parse path is the best option for 5e.
-- **Plug-in system model for rendering:** A component registry keyed by
-  `character.system` for system-specific sheet rendering. Only worth building
-  if we support 3+ systems.
+- **Party inventory management:** Track shared party loot / inventory per
+  campaign. Could be a simple list or a full item catalog with quantities.
+- **Party gold management (Grug as banker):** Let Grug track party funds,
+  split loot, and handle transactions. Natural language commands like "add 50gp
+  to the party fund" or "split 200gp four ways".
+- **GM designation:** Add a `gm_user_id` field to Campaign so Grug knows who
+  the GM is. Enables GM-only features (secret rolls, hidden notes, encounter
+  management) and context-aware responses.
