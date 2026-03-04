@@ -643,3 +643,30 @@ class RuleSourceTestResult(BaseModel):
 
     result: str
     error: bool = False
+
+
+# ── Grug Notes ──────────────────────────────────────────────────────────────
+
+
+class GrugNoteOut(BaseModel):
+    id: int
+    guild_id: int | None
+    user_id: int | None
+    content: str
+    updated_by: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id")
+    def serialize_guild_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
+    @field_serializer("user_id", "updated_by")
+    def serialize_snowflake(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
+
+class GrugNoteUpdate(BaseModel):
+    content: str

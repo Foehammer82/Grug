@@ -714,6 +714,41 @@ class GuildBuiltinOverride(Base):
     guild: Mapped["GuildConfig"] = relationship(back_populates="builtin_overrides")
 
 
+class GrugNote(Base):
+    """Grug's own notes — organically curated observations and reminders.
+
+    Two scopes:
+
+    * **Guild note** — ``guild_id`` set, ``user_id`` NULL.  Visible to guild
+      admins on the server's Notes page.
+    * **Personal note** — ``user_id`` set, ``guild_id`` NULL.  Visible to the
+      individual user in the personal Notes section.
+
+    Content is free-form Markdown maintained by Grug (and editable by admins /
+    the owning user via the web UI).
+    """
+
+    __tablename__ = "grug_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
+    user_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, index=True
+    )
+    content: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    updated_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class LLMUsageDailyAggregate(Base):
     """Daily aggregate of LLM API token usage, keyed by date, guild, user, model, and call type.
 

@@ -4,6 +4,7 @@ import { Outlet, useNavigate } from 'react-router-dom';
 const TABS = [
   { label: 'Config', path: 'config' },
   { label: 'Tasks', path: 'tasks' },
+  { label: 'Notes', path: 'notes' },
 ];
 
 export default function PersonalLayout() {
