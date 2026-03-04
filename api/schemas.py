@@ -173,22 +173,45 @@ class ScheduledTaskOut(BaseModel):
                 return self.fire_at
         elif self.type == "recurring" and self.cron_expression and self.enabled:
             try:
-                from apscheduler.triggers.cron import CronTrigger
+                from grug.scheduler.manager import unix_cron_to_trigger
 
-                parts = self.cron_expression.strip().split()
-                if len(parts) == 5:
-                    minute, hour, day, month, day_of_week = parts
-                    trigger = CronTrigger(
-                        minute=minute,
-                        hour=hour,
-                        day=day,
-                        month=month,
-                        day_of_week=day_of_week,
-                    )
-                    return trigger.get_next_fire_time(None, now)
+                trigger = unix_cron_to_trigger(self.cron_expression)
+                return trigger.get_next_fire_time(None, now)
             except Exception:
                 pass
         return None
+
+    @computed_field
+    @property
+    def upcoming_runs(self) -> list[datetime]:
+        """Return the next scheduled fire times for recurring tasks.
+
+        Returns up to 60 upcoming occurrences so the calendar can display all
+        instances within any visible date range (covers ~1 year of weekly tasks).
+        Only populated for enabled ``recurring`` tasks; always empty for
+        ``once`` tasks.
+        """
+        from datetime import timedelta
+
+        MAX_OCCURRENCES = 60
+        if self.type != "recurring" or not self.cron_expression or not self.enabled:
+            return []
+        try:
+            from grug.scheduler.manager import unix_cron_to_trigger
+
+            trigger = unix_cron_to_trigger(self.cron_expression)
+            now = datetime.now(timezone.utc)
+            results: list[datetime] = []
+            current = now
+            for _ in range(MAX_OCCURRENCES):
+                nxt = trigger.get_next_fire_time(None, current)
+                if nxt is None:
+                    break
+                results.append(nxt)
+                current = nxt + timedelta(seconds=1)
+            return results
+        except Exception:
+            return []
 
 
 class TaskToggle(BaseModel):
