@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
+import CasinoIcon from '@mui/icons-material/Casino';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EventIcon from '@mui/icons-material/Event';
@@ -13,6 +14,7 @@ import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
 import CharacterTable from './CharacterTable';
 import CampaignScheduleTab from './CampaignScheduleTab';
+import DiceTab from './DiceTab';
 import GoldLedgerDialog from './GoldLedgerDialog';
 import SessionNotesTab from './SessionNotesTab';
 import type { Campaign, DiscordChannel, GuildMember } from '../../types';
@@ -85,7 +87,7 @@ export default function CampaignCard({
   const [partyGoldOpen, setPartyGoldOpen] = useState(false);
   const [partyGoldAmount, setPartyGoldAmount] = useState('');
   const [partyGoldReason, setPartyGoldReason] = useState('');
-  const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'schedule'>('characters');
+  const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'schedule' | 'dice'>('characters');
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [goldMenuAnchor, setGoldMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -246,6 +248,13 @@ export default function CampaignCard({
             iconPosition="start"
             sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
           />
+          <Tab
+            value="dice"
+            label="Dice"
+            icon={<CasinoIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
         </Tabs>
       </Box>
 
@@ -284,6 +293,15 @@ export default function CampaignCard({
             timezone={timezone}
             channels={channels}
             campaignChannelId={c.channel_id ?? null}
+          />
+        )}
+        {activeTab === 'dice' && (
+          <DiceTab
+            guildId={c.guild_id}
+            campaignId={c.id}
+            isAdmin={isAdmin}
+            isGm={isGm}
+            currentUserId={currentUserId}
           />
         )}
       </Box>

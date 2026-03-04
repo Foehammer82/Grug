@@ -908,6 +908,54 @@ class GrugNote(Base):
     )
 
 
+class DiceRoll(Base):
+    """A persisted dice roll — every roll is stored for GM audit + session recaps.
+
+    Privacy rules:
+    - GM (``Campaign.gm_discord_user_id``) and guild admins can see all rolls.
+    - Players see their own rolls and any roll with ``is_private=False``.
+    """
+
+    __tablename__ = "dice_rolls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    campaign_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=True, index=True
+    )
+    # Discord snowflake of the person who rolled.
+    roller_discord_user_id: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True
+    )
+    roller_display_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Optional character name (for context — "Gandalf rolled…")
+    character_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # The raw dice expression as typed by the user, e.g. "2d6+3".
+    expression: Mapped[str] = mapped_column(String(256), nullable=False)
+    # JSON array of individual die results.
+    # Format: [{"sides": 6, "rolls": [4, 2], "kept": [4, 2], "total": 6}]
+    individual_rolls: Mapped[list] = mapped_column(JSON, nullable=False)
+    # Final numeric result.
+    total: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Categorises the roll purpose.
+    # Values: general, attack, damage, saving_throw, ability_check, initiative,
+    #         death_save, skill_check
+    roll_type: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="general", server_default="general"
+    )
+    # When True, only the roller and GM/admin can see this roll.
+    is_private: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Optional flavour text, e.g. "STR save vs Fireball DC 15"
+    context_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    campaign: Mapped["Campaign | None"] = relationship()
+
+
 class LLMUsageDailyAggregate(Base):
     """Daily aggregate of LLM API token usage, keyed by date, guild, user, model, and call type.
 

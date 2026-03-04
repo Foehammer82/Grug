@@ -65,6 +65,7 @@ async def main() -> None:
     await bot.load_extension("grug.bot.cogs.glossary")
     await bot.load_extension("grug.bot.cogs.campaigns")
     await bot.load_extension("grug.bot.cogs.characters")
+    await bot.load_extension("grug.bot.cogs.dice")
 
     # Pre-warm the agent so any init errors surface at startup, not on first message.
     logger.info("Pre-warming agent...")

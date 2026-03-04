@@ -353,6 +353,57 @@ export interface GrugNote {
   updated_at: string;
 }
 
+/* ── Dice Rolls ───────────────────────────────────────────────────── */
+
+export type DiceRollType =
+  | 'general'
+  | 'attack'
+  | 'damage'
+  | 'saving_throw'
+  | 'ability_check'
+  | 'initiative'
+  | 'death_save'
+  | 'skill_check';
+
+export const ROLL_TYPE_LABELS: Record<DiceRollType, string> = {
+  general: 'General',
+  attack: 'Attack',
+  damage: 'Damage',
+  saving_throw: 'Saving Throw',
+  ability_check: 'Ability Check',
+  initiative: 'Initiative',
+  death_save: 'Death Save',
+  skill_check: 'Skill Check',
+};
+
+export interface DiceRollIndividual {
+  expression?: string;
+  sides?: number;
+  rolls?: number[];
+  kept?: number[];
+  total?: number;
+  sign: number;
+  constant?: number;
+}
+
+export interface DiceRoll {
+  id: number;
+  guild_id: string;
+  campaign_id: number | null;
+  roller_discord_user_id: string;
+  roller_display_name: string;
+  character_name: string | null;
+  expression: string;
+  individual_rolls: DiceRollIndividual[];
+  total: number;
+  roll_type: DiceRollType;
+  is_private: boolean;
+  context_note: string | null;
+  formatted: string;
+  created_at: string;
+}
+
+
 /* ── Datetime helpers ─────────────────────────────────────────────── */
 
 /** Convert ISO UTC datetime string to datetime-local input value (e.g. "2026-03-01T20:00"). */

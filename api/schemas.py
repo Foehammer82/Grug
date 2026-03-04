@@ -824,3 +824,57 @@ class SessionNoteRagTestRequest(BaseModel):
 
     query: str
     k: int = 5
+
+
+# --------------------------------------------------------------------------- #
+# Dice rolling schemas                                                         #
+# --------------------------------------------------------------------------- #
+
+
+class DiceRollRequest(BaseModel):
+    """Roll dice via the API."""
+
+    expression: str
+    roll_type: str = "general"
+    is_private: bool = False
+    context_note: str | None = None
+    character_name: str | None = None
+
+
+class DiceRollIndividual(BaseModel):
+    """A single dice group result within a roll."""
+
+    expression: str
+    sides: int
+    rolls: list[int]
+    kept: list[int]
+    total: int
+
+
+class DiceRollOut(BaseModel):
+    """A persisted dice roll record."""
+
+    id: int
+    guild_id: int
+    campaign_id: int | None = None
+    roller_discord_user_id: int
+    roller_display_name: str
+    character_name: str | None = None
+    expression: str
+    individual_rolls: list[dict]
+    total: int
+    roll_type: str
+    is_private: bool
+    context_note: str | None = None
+    formatted: str = ""
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("roller_discord_user_id")
+    def serialize_roller_id(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("guild_id")
+    def serialize_guild_id(self, v: int) -> str:
+        return str(v)
