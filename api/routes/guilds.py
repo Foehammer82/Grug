@@ -1,5 +1,6 @@
 """Guild routes — list guilds, config CRUD, and channel proxy."""
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any
@@ -40,19 +41,64 @@ async def list_guilds(
     db: AsyncSession = Depends(get_db),
 ) -> list[GuildOut]:
     """Return guilds where the user AND the bot are both members."""
-    user_guild_ids = {int(g["id"]) for g in user.get("guilds", [])}
     result = await db.execute(select(GuildConfig))
     configs = result.scalars().all()
-    bot_guild_ids = {c.guild_id for c in configs}
-    shared = user_guild_ids & bot_guild_ids
+    if not configs:
+        return []
+
+    user_id = str(user.get("sub", user.get("id", "")))
+    bot_token = get_bot_token()
+
+    async def _check_member(guild_id: int) -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as http:
+                resp = await http.get(
+                    f"https://discord.com/api/v10/guilds/{guild_id}/members/{user_id}",
+                    headers={"Authorization": f"Bot {bot_token}"},
+                )
+            return resp.status_code == 200
+        except Exception:
+            return False
+
+    async def _fetch_guild_info(guild_id: int) -> dict | None:
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as http:
+                resp = await http.get(
+                    f"https://discord.com/api/v10/guilds/{guild_id}",
+                    headers={"Authorization": f"Bot {bot_token}"},
+                )
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception:
+            pass
+        return None
+
+    # Parallel membership checks across all bot-joined guilds
+    memberships = await asyncio.gather(
+        *[_check_member(cfg.guild_id) for cfg in configs]
+    )
+    member_configs = [cfg for cfg, ok in zip(configs, memberships) if ok]
+    if not member_configs:
+        return []
+
+    # Parallel guild-info fetches for confirmed members
+    guild_infos = await asyncio.gather(
+        *[_fetch_guild_info(cfg.guild_id) for cfg in member_configs]
+    )
 
     guilds: list[GuildOut] = []
-    for g in user.get("guilds", []):
-        if int(g["id"]) in shared:
-            admin = await is_guild_admin(g["id"], user)
-            guilds.append(
-                GuildOut(id=g["id"], name=g["name"], icon=g.get("icon"), is_admin=admin)
+    for cfg, info in zip(member_configs, guild_infos):
+        if info is None:
+            continue
+        admin = await is_guild_admin(cfg.guild_id, user)
+        guilds.append(
+            GuildOut(
+                id=str(cfg.guild_id),
+                name=info["name"],
+                icon=info.get("icon"),
+                is_admin=admin,
             )
+        )
     return guilds
 
 
@@ -67,7 +113,7 @@ async def get_guild_config(
     If announce_channel_id is not set, attempts to auto-populate it from the
     guild's system messages channel as configured in Discord.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     cfg = await get_or_404(
         db,
         GuildConfig,
@@ -111,7 +157,7 @@ async def update_guild_config(
     db: AsyncSession = Depends(get_db),
 ) -> GuildConfig:
     """Update guild configuration fields."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     cfg = await get_or_404(
         db,
@@ -138,7 +184,7 @@ async def list_guild_channels(
     user: dict[str, Any] = Depends(get_current_user),
 ) -> list[DiscordChannelOut]:
     """Proxy Discord's channel list so the web UI can display channel names."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     bot_token = get_bot_token()
     async with httpx.AsyncClient() as http:
         resp = await http.get(
@@ -277,7 +323,7 @@ async def list_channel_configs(
     db: AsyncSession = Depends(get_db),
 ) -> list[ChannelConfig]:
     """Return all per-channel configs that exist for this guild."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(ChannelConfig).where(ChannelConfig.guild_id == guild_id)
     )

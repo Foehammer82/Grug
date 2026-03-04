@@ -93,7 +93,7 @@ async def list_session_notes(
     db: AsyncSession = Depends(get_db),
 ) -> list[SessionNote]:
     """List all session notes for a campaign."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     campaign = await get_or_404(
         db,
         Campaign,
@@ -130,7 +130,7 @@ async def get_session_note(
     db: AsyncSession = Depends(get_db),
 ) -> SessionNote:
     """Fetch a single session note including raw and clean content."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     campaign = await get_or_404(
         db,
         Campaign,
@@ -169,7 +169,7 @@ async def create_session_note_route(
     db: AsyncSession = Depends(get_db),
 ) -> SessionNote:
     """Submit raw session notes as JSON text.  Synthesis runs in the background."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     campaign = await get_or_404(
         db,
         Campaign,
@@ -216,7 +216,7 @@ async def upload_session_note(
     db: AsyncSession = Depends(get_db),
 ) -> SessionNote:
     """Upload a text file as session notes.  Synthesis runs in the background."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     campaign = await get_or_404(
         db,
         Campaign,
@@ -299,7 +299,7 @@ async def update_session_note(
     db: AsyncSession = Depends(get_db),
 ) -> SessionNote:
     """Update a session note's title, date, or raw notes (using model_fields_set)."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         Campaign,
@@ -352,7 +352,7 @@ async def synthesize_session_note(
 
     Resets synthesis status to 'pending' and launches a background task.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         Campaign,
@@ -396,7 +396,7 @@ async def delete_session_note_route(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a session note and its RAG index entry."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         Campaign,
@@ -438,7 +438,7 @@ async def test_session_notes_rag(
     Admin-only.  Returns the top-k matching chunks so admins can verify that
     session notes have been indexed correctly and are retrievable.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     await get_or_404(
         db,

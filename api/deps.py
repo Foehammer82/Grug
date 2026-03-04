@@ -54,6 +54,12 @@ class _BoundedTTLCache:
 
 _ROLE_CACHE = _BoundedTTLCache(maxsize=_ROLE_CACHE_MAXSIZE, ttl=_ROLE_CACHE_TTL)
 
+# ---------------------------------------------------------------------------
+# Bounded in-memory cache for guild membership checks.
+# Key: (guild_id, user_id) -> (is_member: bool, timestamp: float)
+# ---------------------------------------------------------------------------
+_MEMBER_CACHE: dict[tuple[str, str], tuple[bool, float]] = {}
+
 
 async def get_current_user(
     session: str | None = Cookie(default=None),
@@ -87,12 +93,59 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         yield session
 
 
-def assert_guild_member(guild_id: int | str, user: dict[str, Any]) -> None:
-    """Raise 403 if the user is not a member of the given guild."""
-    guild_ids = {g["id"] for g in user.get("guilds", [])}
-    if str(guild_id) not in guild_ids:
+async def assert_guild_member(guild_id: int | str, user: dict[str, Any]) -> None:
+    """Raise 403 if the user is not a member of the given guild.
+
+    Uses the Discord bot token to verify membership live, with a 5-minute
+    in-process cache to avoid hammering the Discord API.  Super-admins bypass
+    the check entirely.
+    """
+    if is_super_admin(user):
+        return
+
+    guild_id_str = str(guild_id)
+    user_id = str(user.get("sub", user.get("id", "")))
+    cache_key = (guild_id_str, user_id)
+    now = time.time()
+
+    cached = _MEMBER_CACHE.get(cache_key)
+    if cached is not None and (now - cached[1]) < _ROLE_CACHE_TTL:
+        if not cached[0]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not a member of this guild",
+            )
+        return
+
+    try:
+        bot_token = get_bot_token()
+        async with httpx.AsyncClient(timeout=3.0) as http:
+            resp = await http.get(
+                f"https://discord.com/api/v10/guilds/{guild_id_str}/members/{user_id}",
+                headers={"Authorization": f"Bot {bot_token}"},
+            )
+        is_member = resp.status_code == 200
+    except HTTPException:
+        return  # Bot token not configured — fail open
+    except Exception:
+        logger.warning(
+            "Failed to check guild membership for user %s in guild %s",
+            user_id,
+            guild_id_str,
+            exc_info=True,
+        )
+        return  # Fail open on transient errors
+
+    # Evict oldest entry if cache is full
+    if cache_key not in _MEMBER_CACHE and len(_MEMBER_CACHE) >= _ROLE_CACHE_MAXSIZE:
+        oldest = next(iter(_MEMBER_CACHE))
+        del _MEMBER_CACHE[oldest]
+    _MEMBER_CACHE[cache_key] = (is_member, now)
+
+    if not is_member:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this guild"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this guild",
         )
 
 

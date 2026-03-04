@@ -71,7 +71,7 @@ async def list_campaigns(
     to also include soft-deleted campaigns.  Non-admin members see only campaigns
     that contain at least one of their own characters (deleted campaigns excluded).
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     admin = await is_guild_admin(guild_id, user)
 
     stmt = (
@@ -282,7 +282,7 @@ async def list_campaign_characters(
     db: AsyncSession = Depends(get_db),
 ) -> list[Character]:
     """List characters associated with a campaign."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     admin = await is_guild_admin(guild_id, user)
     user_id = int(user["id"])
     # Verify the campaign belongs to the guild
@@ -326,7 +326,7 @@ async def create_campaign_character(
     may optionally specify ``owner_discord_user_id`` and/or
     ``owner_display_name`` to create characters for other users or NPCs.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     admin = await is_guild_admin(guild_id, user)
     await get_or_404(
         db,
@@ -376,7 +376,7 @@ async def update_campaign_character(
     Guild members can update their own characters (name, system, notes).
     Admins can update any character and may also reassign the owner.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     admin = await is_guild_admin(guild_id, user)
     user_id = int(user["id"])
     # Verify campaign ownership
@@ -435,7 +435,7 @@ async def delete_campaign_character(
 
     The character owner or any guild admin may delete the character.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     admin = await is_guild_admin(guild_id, user)
     user_id = int(user["id"])
     await get_or_404(
@@ -689,7 +689,7 @@ async def sync_campaign_pathbuilder(
     are fetched from the Pathbuilder API and updated.  Returns a summary
     with counts of synced and skipped characters.
     """
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await get_or_404(
         db,
         Campaign,

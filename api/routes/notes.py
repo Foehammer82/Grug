@@ -35,7 +35,7 @@ async def get_guild_notes(
     db: AsyncSession = Depends(get_db),
 ) -> GrugNote:
     """Return the guild's Grug notes (single document per guild)."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     result = await db.execute(
         select(GrugNote).where(
             GrugNote.guild_id == guild_id,
@@ -59,7 +59,7 @@ async def update_guild_notes(
     db: AsyncSession = Depends(get_db),
 ) -> GrugNote:
     """Update the guild's Grug notes (admin-only)."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     result = await db.execute(
         select(GrugNote).where(

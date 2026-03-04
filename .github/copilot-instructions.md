@@ -111,6 +111,15 @@ For guild channels, context history is always bounded by the rolling window `now
 
 **The Discord ADMINISTRATOR permission bit is NOT read from the JWT** for authorization decisions.  JWT guild data no longer includes `permissions` at all.  Discord server admins who are not Grug super-admins must be assigned the `grug-admin` role via guild config.
 
+### OAuth scope and guild membership
+
+The Discord OAuth scope is **`identify` only** — the `guilds` scope is not requested.  The JWT payload never contains the user's guild list.
+
+Guild membership is verified live via the Discord **bot token** instead:
+
+- **`assert_guild_member(guild_id, user)`** — async helper in `api/deps.py`.  Calls `GET /guilds/{id}/members/{user_id}` with the bot token (HTTP 200 = member, 404 = not a member).  Results are cached 5 min in `_MEMBER_CACHE` (plain dict, max 2048 entries, same TTL constant as `_ROLE_CACHE`).  Super-admins bypass the check entirely.  All call sites must `await` it.
+- **`GET /api/guilds`** — iterates over all `GuildConfig` rows (guilds Grug is in) and checks membership for each in parallel.  Guild name and icon are fetched from `GET /guilds/{id}` via bot token for confirmed members.
+
 ### ChannelConfig model
 
 `ChannelConfig` (table `channel_configs`) stores per-channel settings:

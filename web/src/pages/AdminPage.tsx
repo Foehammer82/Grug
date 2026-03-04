@@ -255,7 +255,7 @@ export default function AdminPage() {
         <>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">
-              Manage Discord users and their privileges. Super-admin can be granted here (DB) or set via
+              Manage Discord users and their privileges. Super-admin can be granted here or set via
               the <code>GRUG_SUPER_ADMIN_IDS</code> environment variable (env-locked).
             </Typography>
             <Button

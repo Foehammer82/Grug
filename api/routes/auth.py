@@ -9,7 +9,6 @@ from api.auth import (
     build_discord_oauth_url,
     create_jwt,
     exchange_code,
-    fetch_discord_guilds,
     fetch_discord_user,
     generate_state,
     revoke_token,
@@ -64,21 +63,12 @@ async def discord_callback(
     token_data = await exchange_code(code)
     access_token = token_data["access_token"]
     user = await fetch_discord_user(access_token)
-    guilds = await fetch_discord_guilds(access_token)
 
     payload: dict[str, Any] = {
         "sub": user["id"],
         "username": user["username"],
         "discriminator": user.get("discriminator", "0"),
         "avatar": user.get("avatar"),
-        "guilds": [
-            {
-                "id": g["id"],
-                "name": g["name"],
-                "icon": g.get("icon"),
-            }
-            for g in guilds
-        ],
     }
     jwt_token = create_jwt(payload)
     redirect = RedirectResponse(

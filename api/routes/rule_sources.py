@@ -40,7 +40,7 @@ async def list_builtin_sources(
     db: AsyncSession = Depends(get_db),
 ) -> list[BuiltinRuleSourceOut]:
     """Return all built-in rule sources with their effective enabled state for this guild."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
 
     result = await db.execute(
         select(GuildBuiltinOverride).where(GuildBuiltinOverride.guild_id == guild_id)
@@ -74,7 +74,7 @@ async def update_builtin_source(
     db: AsyncSession = Depends(get_db),
 ) -> BuiltinRuleSourceOut:
     """Enable or disable a built-in rule source for this guild."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
 
     from grug.rules.sources import BUILTIN_SOURCES_BY_ID
@@ -128,7 +128,7 @@ async def test_rule_source(
     user: dict[str, Any] = Depends(get_current_user),
 ) -> RuleSourceTestResult:
     """Run a live test query against a single rule source and return raw text."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
 
     from grug.agent.tools.rules_tools import (
         _fetch_aon_pf2e,
