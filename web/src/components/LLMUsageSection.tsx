@@ -131,6 +131,7 @@ const CALL_TYPE_LABELS: Record<string, string> = {
   character_parse: 'Character Parse',
   cron_parse: 'Cron Parse',
   auto_respond_score: 'Auto-Respond Score',
+  session_note_synthesis: 'Session Note Synthesis',
 };
 
 const HEADER_SX = { fontWeight: 700, color: 'text.secondary', fontSize: '0.72rem', textTransform: 'uppercase' } as const;
