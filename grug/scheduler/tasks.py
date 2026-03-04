@@ -2,10 +2,48 @@
 
 import logging
 
+import discord
+from sqlalchemy import select
+
+from grug.db.models import CalendarEvent
+from grug.db.session import get_session_factory as _get_factory
+
 logger = logging.getLogger(__name__)
 
 # Sentinel guild_id used for personal (DM) tasks created outside a Discord guild.
 _DM_GUILD_ID = 0
+
+
+async def _build_event_reminder_embed(
+    event_id: int, prompt: str
+) -> tuple[discord.Embed | None, discord.ui.View]:
+    """Build a reminder embed + RSVP view for an event-linked task.
+
+    Returns ``(None, ...)`` if the event no longer exists.
+    """
+    from grug.bot.views.event_rsvp import build_event_embed, create_rsvp_view
+
+    factory = _get_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(CalendarEvent).where(CalendarEvent.id == event_id)
+        )
+        event = result.scalar_one_or_none()
+        if event is None:
+            return None, discord.ui.View()
+        await session.refresh(event, ["rsvps"])
+
+        # Derive a friendly label from the prompt — e.g. "starts in 1 hour"
+        reminder_label = None
+        prompt_lower = prompt.lower()
+        if "1 h" in prompt_lower or "1 hour" in prompt_lower:
+            reminder_label = "Starts in 1 hour!"
+        elif "24 h" in prompt_lower or "24 hour" in prompt_lower:
+            reminder_label = "Starts in 24 hours"
+
+        embed = await build_event_embed(event, reminder_label=reminder_label)
+        view = create_rsvp_view(event_id)
+        return embed, view
 
 
 async def _send_dm_rest(user_id: int, content: str) -> None:
@@ -65,13 +103,10 @@ async def execute_scheduled_task(task_id: int) -> None:
     """
     from datetime import datetime, timezone
 
-    from sqlalchemy import select
-
     from grug.agent.core import GrugAgent
     from grug.db.models import ScheduledTask
-    from grug.db.session import get_session_factory
 
-    factory = get_session_factory()
+    factory = _get_factory()
 
     # Load the task
     async with factory() as session:
@@ -88,6 +123,7 @@ async def execute_scheduled_task(task_id: int) -> None:
         prompt = task.prompt
         user_id = task.user_id or 0
         task_type = task.type
+        linked_event_id = task.event_id
 
     agent = GrugAgent()
     execution_message = (
@@ -132,6 +168,17 @@ async def execute_scheduled_task(task_id: int) -> None:
                 return
         await channel.send(response)
 
+        # For event-linked reminders, also send a rich embed with RSVP buttons.
+        if linked_event_id:
+            try:
+                embed, view = await _build_event_reminder_embed(linked_event_id, prompt)
+                if embed is not None:
+                    await channel.send(embed=embed, view=view)
+            except Exception:
+                logger.exception(
+                    "Failed to send RSVP embed for event %d", linked_event_id
+                )
+
     # Update task state
     now = datetime.now(timezone.utc)
     async with factory() as session:
@@ -140,7 +187,6 @@ async def execute_scheduled_task(task_id: int) -> None:
         )
         task = result.scalar_one_or_none()
         if task:
-            linked_event_id = task.event_id
             if task_type == "once":
                 # One-shot tasks are deleted after firing to keep history clean.
                 await session.delete(task)
@@ -160,4 +206,15 @@ async def execute_scheduled_task(task_id: int) -> None:
                         "Failed to refresh reminders for event %d after task %d fired",
                         linked_event_id,
                         task_id,
+                    )
+                # Auto-create an availability poll if the campaign uses poll
+                # scheduling (non-blocking — failures are logged, not raised).
+                try:
+                    from grug.event_reminders import maybe_create_schedule_poll
+
+                    await maybe_create_schedule_poll(linked_event_id)
+                except Exception:
+                    logger.exception(
+                        "Failed to create schedule poll for event %d",
+                        linked_event_id,
                     )

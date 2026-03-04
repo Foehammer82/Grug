@@ -25,6 +25,8 @@ from api.schemas import (
     CronFromTextOut,
     CronFromTextRequest,
     EventNoteCreate,
+    RruleFromTextOut,
+    RruleFromTextRequest,
     EventNoteOut,
     EventNoteUpdate,
     EventOccurrenceOverrideOut,
@@ -835,6 +837,22 @@ async def guild_cron_from_text(
 
     cron_expr = await parse_cron_from_text(body.text)
     return CronFromTextOut(cron_expression=cron_expr)
+
+
+@router.post(
+    "/api/guilds/{guild_id}/events/rrule-from-text", response_model=RruleFromTextOut
+)
+async def guild_rrule_from_text(
+    guild_id: int,
+    body: RruleFromTextRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> RruleFromTextOut:
+    """Convert a plain-English recurrence description to an iCal RRULE string."""
+    assert_guild_member(guild_id, user)
+    from api.services import parse_rrule_from_text
+
+    rrule = await parse_rrule_from_text(body.text)
+    return RruleFromTextOut(rrule=rrule)
 
 
 @router.post(

@@ -6,10 +6,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Select,
   TextField,
   Typography,
 } from '@mui/material';
@@ -17,6 +13,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import client from '../api/client';
+import RRuleBuilder from './RRuleBuilder';
+import type { Campaign } from '../types';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -36,18 +34,6 @@ interface Props {
 }
 
 /* ------------------------------------------------------------------ */
-/* Recurrence presets → RRULE strings                                  */
-/* ------------------------------------------------------------------ */
-
-const RECURRENCE_PRESETS: { label: string; rrule: string }[] = [
-  { label: 'Does not repeat', rrule: '' },
-  { label: 'Every week', rrule: 'FREQ=WEEKLY' },
-  { label: 'Every 2 weeks', rrule: 'FREQ=WEEKLY;INTERVAL=2' },
-  { label: 'Every month', rrule: 'FREQ=MONTHLY' },
-  { label: 'Custom…', rrule: '__custom__' },
-];
-
-/* ------------------------------------------------------------------ */
 /* Component                                                           */
 /* ------------------------------------------------------------------ */
 
@@ -57,9 +43,9 @@ const EMPTY_FORM = {
   start_time: '',
   end_time: '',
   location: '',
-  rrulePreset: '',
-  rruleCustom: '',
+  rrule: '',
   channel_id: null as string | null,
+  campaign_id: null as number | null,
 };
 
 export default function EventCreateModal({ open, onClose, defaultStart }: Props) {
@@ -86,19 +72,28 @@ export default function EventCreateModal({ open, onClose, defaultStart }: Props)
     enabled: !!guildId && open,
   });
 
+  const { data: campaigns } = useQuery<Campaign[]>({
+    queryKey: ['campaigns', guildId],
+    queryFn: async () => {
+      const res = await client.get<Campaign[]>(`/api/guilds/${guildId}/campaigns`);
+      return res.data;
+    },
+    enabled: !!guildId && open,
+  });
+
+  const activeCampaigns = campaigns?.filter((c) => c.is_active && !c.deleted_at) ?? [];
+
   const createMutation = useMutation({
     mutationFn: async () => {
-      const rrule =
-        form.rrulePreset === '__custom__' ? form.rruleCustom || null : form.rrulePreset || null;
-
       const payload: Record<string, unknown> = {
         title: form.title,
         description: form.description || null,
         start_time: form.start_time ? new Date(form.start_time).toISOString() : null,
         end_time: form.end_time ? new Date(form.end_time).toISOString() : null,
-        rrule: rrule,
+        rrule: form.rrule || null,
         location: form.location || null,
         channel_id: form.channel_id ?? null,
+        campaign_id: form.campaign_id ?? null,
       };
       await client.post(`/api/guilds/${guildId}/events`, payload);
     },
@@ -109,6 +104,7 @@ export default function EventCreateModal({ open, onClose, defaultStart }: Props)
   });
 
   const selectedChannel = channels?.find((c) => c.id === form.channel_id) ?? null;
+  const selectedCampaign = activeCampaigns.find((c) => c.id === form.campaign_id) ?? null;
   const isFormValid = form.title.trim().length > 0 && !!form.start_time;
 
   return (
@@ -166,32 +162,11 @@ export default function EventCreateModal({ open, onClose, defaultStart }: Props)
           />
         </Box>
 
-        <FormControl size="small" fullWidth>
-          <InputLabel>Recurrence</InputLabel>
-          <Select
-            label="Recurrence"
-            value={form.rrulePreset}
-            onChange={(e) => setForm((f) => ({ ...f, rrulePreset: e.target.value }))}
-          >
-            {RECURRENCE_PRESETS.map((p) => (
-              <MenuItem key={p.rrule} value={p.rrule}>
-                {p.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-
-        {form.rrulePreset === '__custom__' && (
-          <TextField
-            label="Custom RRULE"
-            value={form.rruleCustom}
-            onChange={(e) => setForm((f) => ({ ...f, rruleCustom: e.target.value }))}
-            fullWidth
-            size="small"
-            helperText='iCal RRULE — e.g. "FREQ=WEEKLY;INTERVAL=2;BYDAY=TH"'
-            inputProps={{ style: { fontFamily: 'monospace' } }}
-          />
-        )}
+        <RRuleBuilder
+          guildId={guildId!}
+          value={form.rrule}
+          onChange={(v) => setForm((f) => ({ ...f, rrule: v }))}
+        />
 
         <Autocomplete
           size="small"
@@ -210,6 +185,25 @@ export default function EventCreateModal({ open, onClose, defaultStart }: Props)
             />
           )}
         />
+
+        {activeCampaigns.length > 0 && (
+          <Autocomplete
+            size="small"
+            fullWidth
+            options={activeCampaigns}
+            value={selectedCampaign}
+            onChange={(_, c) => setForm((f) => ({ ...f, campaign_id: c?.id ?? null }))}
+            getOptionLabel={(c) => c.name}
+            isOptionEqualToValue={(a, b) => a.id === b.id}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Campaign (optional)"
+                helperText="Link this event as a session for a campaign."
+              />
+            )}
+          />
+        )}
 
         {createMutation.isError && (
           <Typography color="error" variant="body2">

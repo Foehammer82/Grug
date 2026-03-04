@@ -136,6 +136,12 @@ class AdminCog(GrugCogBase, name="Admin"):
         self.bot = bot
         self._ready_synced = False
 
+    async def cog_load(self) -> None:
+        """Register persistent RSVP buttons so they survive restarts."""
+        from grug.bot.views.event_rsvp import RSVPButton
+
+        self.bot.add_dynamic_items(RSVPButton)
+
     @commands.Cog.listener()
     async def on_ready(self) -> None:
         """On (re)connect, ensure the announce channel is enabled for every guild."""

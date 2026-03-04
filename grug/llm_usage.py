@@ -74,6 +74,7 @@ class CallType(StrEnum):
     HISTORY_ARCHIVE = "history_archive"
     CHARACTER_PARSE = "character_parse"
     CRON_PARSE = "cron_parse"
+    RRULE_PARSE = "rrule_parse"
     AUTO_RESPOND_SCORE = "auto_respond_score"
     SESSION_NOTE_SYNTHESIS = "session_note_synthesis"
 

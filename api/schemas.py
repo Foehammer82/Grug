@@ -243,6 +243,14 @@ class CronFromTextOut(BaseModel):
     cron_expression: str
 
 
+class RruleFromTextRequest(BaseModel):
+    text: str
+
+
+class RruleFromTextOut(BaseModel):
+    rrule: str
+
+
 class DocumentOut(BaseModel):
     id: int
     guild_id: int

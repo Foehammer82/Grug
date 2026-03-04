@@ -15,7 +15,13 @@ from api.auth import create_jwt, decode_jwt
 
 def _admin(user_id: str = "42") -> dict:
     """Return a minimal JWT-style user dict for a super-admin."""
-    return {"sub": user_id, "id": user_id, "username": "admin", "discriminator": "0", "avatar": "abc"}
+    return {
+        "sub": user_id,
+        "id": user_id,
+        "username": "admin",
+        "discriminator": "0",
+        "avatar": "abc",
+    }
 
 
 def _impersonating_user(admin_id: str = "42", target_id: str = "999") -> dict:
@@ -255,7 +261,9 @@ class TestStopImpersonation:
         assert "impersonator" not in decoded
 
     @pytest.mark.asyncio
-    async def test_stop_fails_if_no_longer_super_admin(self, monkeypatch, mock_db_session):
+    async def test_stop_fails_if_no_longer_super_admin(
+        self, monkeypatch, mock_db_session
+    ):
         """Should raise 403 if original user lost super-admin status."""
         monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "")
         import grug.config.settings as s

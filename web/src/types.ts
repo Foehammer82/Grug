@@ -29,6 +29,7 @@ export interface ScheduledTask {
   last_run: string | null;
   next_run: string | null;
   upcoming_runs: string[];
+  event_id: number | null;
   created_by: string;
   created_at: string;
 }
@@ -46,6 +47,7 @@ export interface CalendarEvent {
   all_day: boolean;
   rrule: string | null;
   channel_id: string | null;
+  campaign_id: number | null;
   occurrence_start?: string;
   occurrence_end?: string;
   /** original_start is present for recurring event occurrences */
@@ -184,6 +186,7 @@ export interface Campaign {
   system: string;
   is_active: boolean;
   gm_discord_user_id: string | null;
+  schedule_mode: 'fixed' | 'poll';
   banking_enabled: boolean;
   player_banking_enabled: boolean;
   party_gold: number;

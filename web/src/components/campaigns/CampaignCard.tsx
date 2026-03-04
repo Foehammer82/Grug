@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EventIcon from '@mui/icons-material/Event';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import PeopleIcon from '@mui/icons-material/People';
@@ -11,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
 import CharacterTable from './CharacterTable';
+import CampaignScheduleTab from './CampaignScheduleTab';
 import GoldLedgerDialog from './GoldLedgerDialog';
 import SessionNotesTab from './SessionNotesTab';
 import type { Campaign, DiscordChannel, GuildMember } from '../../types';
@@ -21,6 +23,7 @@ interface CampaignCardProps {
   isAdmin: boolean;
   currentUserId: string;
   allCampaigns: Campaign[];
+  timezone: string;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
 }
@@ -69,6 +72,7 @@ export default function CampaignCard({
   isAdmin,
   currentUserId,
   allCampaigns,
+  timezone,
   onEdit,
   onDelete,
 }: CampaignCardProps) {
@@ -81,7 +85,7 @@ export default function CampaignCard({
   const [partyGoldOpen, setPartyGoldOpen] = useState(false);
   const [partyGoldAmount, setPartyGoldAmount] = useState('');
   const [partyGoldReason, setPartyGoldReason] = useState('');
-  const [activeTab, setActiveTab] = useState<'characters' | 'notes'>('characters');
+  const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'schedule'>('characters');
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [goldMenuAnchor, setGoldMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -235,6 +239,13 @@ export default function CampaignCard({
             iconPosition="start"
             sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
           />
+          <Tab
+            value="schedule"
+            label="Schedule"
+            icon={<EventIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
         </Tabs>
       </Box>
 
@@ -260,6 +271,16 @@ export default function CampaignCard({
             campaignId={c.id}
             isAdmin={isAdmin}
             currentUserId={currentUserId}
+          />
+        )}
+        {activeTab === 'schedule' && (
+          <CampaignScheduleTab
+            guildId={c.guild_id}
+            campaignId={c.id}
+            campaignName={c.name}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            timezone={timezone}
           />
         )}
       </Box>

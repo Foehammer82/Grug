@@ -27,7 +27,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
-from grug.db.models import CalendarEvent, ScheduledTask
+from grug.db.models import AvailabilityPoll, CalendarEvent, Campaign, ScheduledTask
 from grug.db.session import get_session_factory
 from grug.scheduler.manager import add_date_job, remove_job
 
@@ -170,3 +170,88 @@ async def _delete_reminders_in_session(session, event_id: int) -> int:
         remove_job(f"task_{task.id}")
         await session.delete(task)
     return len(tasks)
+
+
+async def maybe_create_schedule_poll(event_id: int) -> int | None:
+    """Auto-create an availability poll if the event's campaign uses poll scheduling.
+
+    Called after a session event reminder fires and the next occurrence is
+    computed.  Generates 3 date-option slots around the event's ``start_time``
+    (same weekday, ±1 week) so players can vote on the best session date.
+
+    Returns the poll ID if created, else ``None``.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        event = (
+            await session.execute(
+                select(CalendarEvent).where(CalendarEvent.id == event_id)
+            )
+        ).scalar_one_or_none()
+        if event is None or event.campaign_id is None:
+            return None
+
+        campaign = (
+            await session.execute(
+                select(Campaign).where(Campaign.id == event.campaign_id)
+            )
+        ).scalar_one_or_none()
+        if campaign is None or campaign.schedule_mode != "poll":
+            return None
+
+        # Don't create duplicate polls for the same event
+        existing = (
+            await session.execute(
+                select(AvailabilityPoll).where(
+                    AvailabilityPoll.event_id == event_id,
+                    AvailabilityPoll.winner_option_id.is_(None),
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            logger.info(
+                "Poll already exists for event %d (poll %d), skipping",
+                event_id,
+                existing.id,
+            )
+            return existing.id
+
+        # Generate 3 options: same time on -1 week / same day / +1 week
+        base = event.start_time
+        duration = (
+            (event.end_time - event.start_time)
+            if event.end_time
+            else timedelta(hours=3)
+        )
+        options = []
+        for i, delta_weeks in enumerate([-1, 0, 1]):
+            start = base + timedelta(weeks=delta_weeks)
+            end = start + duration
+            options.append(
+                {
+                    "id": i,
+                    "label": start.strftime("%A %b %d, %I:%M %p"),
+                    "start_time": start.isoformat(),
+                    "end_time": end.isoformat(),
+                }
+            )
+
+        poll = AvailabilityPoll(
+            guild_id=event.guild_id,
+            event_id=event_id,
+            title=f"When should we play next? ({event.title})",
+            options=options,
+            closes_at=base - timedelta(days=2),  # close voting 2 days before earliest
+            created_by=0,  # system sentinel
+        )
+        session.add(poll)
+        await session.commit()
+        await session.refresh(poll)
+
+        logger.info(
+            "Auto-created availability poll %d for event %d (campaign %d, poll mode)",
+            poll.id,
+            event_id,
+            campaign.id,
+        )
+        return poll.id

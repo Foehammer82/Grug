@@ -53,7 +53,9 @@ def _convert_unix_dow_field(dow_expr: str) -> str:
                 converted = f"{_convert_unix_dow_token(base)}/{step}"
         elif "-" in part:
             start, end = part.split("-", 1)
-            converted = f"{_convert_unix_dow_token(start)}-{_convert_unix_dow_token(end)}"
+            converted = (
+                f"{_convert_unix_dow_token(start)}-{_convert_unix_dow_token(end)}"
+            )
         else:
             converted = _convert_unix_dow_token(part)
         result_parts.append(converted)

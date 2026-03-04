@@ -332,7 +332,9 @@ async def hourly_llm_usage_rollup() -> None:
     # lower bound means the WHERE clause ``date >= since_date`` covers both days,
     # handling timezone edge-cases that fall near midnight UTC.
     since_date = (now - timedelta(days=1)).date()
-    since_dt = datetime(since_date.year, since_date.month, since_date.day, tzinfo=timezone.utc)
+    since_dt = datetime(
+        since_date.year, since_date.month, since_date.day, tzinfo=timezone.utc
+    )
 
     try:
         factory = get_session_factory()
@@ -404,4 +406,6 @@ def schedule_hourly_llm_usage_rollup() -> None:
         replace_existing=True,
         misfire_grace_time=300,
     )
-    logger.info("LLM usage hourly rollup scheduled at :00 each hour (job id: %s).", job_id)
+    logger.info(
+        "LLM usage hourly rollup scheduled at :00 each hour (job id: %s).", job_id
+    )
