@@ -48,14 +48,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import { fetchPathbuilderClientSide } from '../utils/pathbuilder';
 import type { Campaign, Character, CharacterSheet, DiscordChannel, GuildMember } from '../types';
-
-// Suggested systems shown in the autocomplete dropdown — users may still type
-// any free-form value for unsupported systems.
-const SYSTEM_OPTIONS = ['pf2e', 'dnd5e'];
-const SYSTEM_LABELS: Record<string, string> = {
-  pf2e: 'Pathfinder 2E',
-  dnd5e: 'D&D 5e',
-};
+import { SYSTEM_LABELS, SYSTEM_OPTIONS } from '../constants';
 
 const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as const;
 
