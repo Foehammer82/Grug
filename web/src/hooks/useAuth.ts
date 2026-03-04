@@ -10,6 +10,10 @@ export interface User {
   avatar: string | null;
   is_super_admin: boolean;
   can_invite: boolean;
+  // Impersonation fields — only populated when a super-admin is impersonating.
+  impersonating: boolean;
+  impersonator_id: string | null;
+  impersonator_username: string | null;
 }
 
 export function useAuth() {

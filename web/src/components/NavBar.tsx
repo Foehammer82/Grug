@@ -18,7 +18,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBotInfo } from '../hooks/useBotAvatar';
@@ -43,6 +43,7 @@ const THEME_LABEL: Record<ThemePreference, string> = {
 export default function NavBar() {
   const { data: user } = useAuth();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const { preference, setPreference } = useThemePreference();
   const { name: botName, avatarUrl: botAvatar } = useBotInfo();
 
@@ -55,6 +56,16 @@ export default function NavBar() {
       return res.data;
     },
     enabled: !!canInvite,
+  });
+
+  const stopImpersonating = useMutation({
+    mutationFn: async () => {
+      await client.post('/api/admin/stop-impersonate');
+    },
+    onSuccess: () => {
+      qc.invalidateQueries();
+      navigate('/admin');
+    },
   });
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
@@ -176,6 +187,39 @@ export default function NavBar() {
         </Toolbar>
       </AppBar>
 
+      {/* Impersonation banner */}
+      {user?.impersonating && (
+        <Box
+          sx={{
+            bgcolor: 'warning.main',
+            color: 'warning.contrastText',
+            px: 2,
+            py: 0.75,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 2,
+          }}
+        >
+          <Typography variant="body2" fontWeight={600}>
+            Impersonating {user.username} — viewing as this user
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => stopImpersonating.mutate()}
+            disabled={stopImpersonating.isPending}
+            sx={{
+              color: 'inherit',
+              borderColor: 'inherit',
+              '&:hover': { borderColor: 'inherit', bgcolor: 'rgba(0,0,0,0.1)' },
+              textTransform: 'none',
+            }}
+          >
+            Stop Impersonating
+          </Button>
+        </Box>
+      )}
     </>
   );
 }

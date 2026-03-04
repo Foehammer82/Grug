@@ -11,16 +11,18 @@ from typing import Any
 from urllib.parse import quote
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.auth import create_jwt
 from api.deps import (
     assert_can_invite,
     assert_super_admin,
     get_bot_token,
     get_current_user,
     get_db,
+    is_super_admin_full,
 )
 from api.schemas import (
     DiscordMemberOut,
@@ -375,3 +377,114 @@ async def get_discord_user(
         avatar_url=avatar_url,
         profile_url=f"https://discord.com/users/{uid}",
     )
+
+
+# --------------------------------------------------------------------------- #
+# Impersonation (super-admin only)                                             #
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/api/admin/impersonate/{discord_user_id}")
+async def start_impersonation(
+    discord_user_id: str,
+    response: Response,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, str]:
+    """Start impersonating another user. Super-admin only.
+
+    Creates a new session cookie containing the target user's identity with
+    an ``impersonator`` claim that stores the original admin's identity so the
+    session can be restored later.  Nested impersonation is not allowed.
+    """
+    await assert_super_admin(user)
+
+    # Prevent nested impersonation
+    if user.get("impersonator"):
+        raise HTTPException(
+            status_code=400,
+            detail="Already impersonating — stop the current session first",
+        )
+
+    # Cannot impersonate yourself
+    admin_id = str(user.get("sub", user.get("id", "")))
+    if admin_id == discord_user_id:
+        raise HTTPException(status_code=400, detail="Cannot impersonate yourself")
+
+    # Look up the target user's Discord profile via bot token
+    bot_token = get_bot_token()
+    async with httpx.AsyncClient(timeout=5.0) as http:
+        resp = await http.get(
+            f"https://discord.com/api/v10/users/{discord_user_id}",
+            headers={"Authorization": f"Bot {bot_token}"},
+        )
+
+    if resp.status_code == 404:
+        raise HTTPException(status_code=404, detail="Discord user not found")
+    if resp.status_code != 200:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Discord API returned {resp.status_code}",
+        )
+
+    target = resp.json()
+    payload: dict[str, Any] = {
+        "sub": target["id"],
+        "username": target["username"],
+        "discriminator": target.get("discriminator", "0"),
+        "avatar": target.get("avatar"),
+        "impersonator": {
+            "sub": user["sub"],
+            "username": user["username"],
+            "discriminator": user.get("discriminator", "0"),
+            "avatar": user.get("avatar"),
+        },
+    }
+    jwt_token = create_jwt(payload)
+    response.set_cookie(
+        key="session",
+        value=jwt_token,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        max_age=86400,
+    )
+    return {"status": "ok", "impersonating": target["username"]}
+
+
+@router.post("/api/admin/stop-impersonate")
+async def stop_impersonation(
+    response: Response,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, str]:
+    """Stop impersonating and restore the original super-admin session.
+
+    Reads the ``impersonator`` claim from the current JWT, validates that the
+    original user is still a super-admin, and creates a fresh session cookie
+    with their identity.
+    """
+    impersonator = user.get("impersonator")
+    if not impersonator:
+        raise HTTPException(status_code=400, detail="Not currently impersonating")
+
+    # Verify the original user is still a super-admin
+    if not await is_super_admin_full(impersonator):
+        raise HTTPException(
+            status_code=403, detail="Original user is no longer a super-admin"
+        )
+
+    payload: dict[str, Any] = {
+        "sub": impersonator["sub"],
+        "username": impersonator["username"],
+        "discriminator": impersonator.get("discriminator", "0"),
+        "avatar": impersonator.get("avatar"),
+    }
+    jwt_token = create_jwt(payload)
+    response.set_cookie(
+        key="session",
+        value=jwt_token,
+        httponly=True,
+        samesite="lax",
+        secure=True,
+        max_age=86400,
+    )
+    return {"status": "ok", "restored": impersonator["username"]}

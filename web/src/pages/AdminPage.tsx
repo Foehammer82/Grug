@@ -31,9 +31,11 @@ import {
 import DeleteIcon from '@mui/icons-material/Delete';
 import LockIcon from '@mui/icons-material/Lock';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import LLMUsageSection from '../components/LLMUsageSection';
+import { useNavigate } from 'react-router-dom';
 
 /* ------------------------------------------------------------------ */
 /* Types                                                               */
@@ -141,6 +143,7 @@ const HEADER_SX = {
 export default function AdminPage() {
   const { data: me } = useAuth();
   const qc = useQueryClient();
+  const navigate = useNavigate();
   const [addOpen, setAddOpen] = useState(false);
   const [tab, setTab] = useState(0);
   const [newUserId, setNewUserId] = useState('');
@@ -220,6 +223,17 @@ export default function AdminPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-users'] });
       handleClose();
+    },
+  });
+
+  /* ---- Impersonate user ---- */
+  const impersonateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await client.post(`/api/admin/impersonate/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries();
+      navigate('/dashboard');
     },
   });
 
@@ -327,18 +341,31 @@ export default function AdminPage() {
                   </TableCell>
                   <TableCell>{new Date(u.created_at).toLocaleDateString()}</TableCell>
                   <TableCell>
-                    {!u.is_env_super_admin && (
-                      <Tooltip title="Remove user">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => deleteMutation.mutate(u.discord_user_id)}
-                          disabled={deleteMutation.isPending}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
+                    <Stack direction="row" spacing={0.5}>
+                      {u.discord_user_id !== me?.id && (
+                        <Tooltip title="Impersonate user">
+                          <IconButton
+                            size="small"
+                            onClick={() => impersonateMutation.mutate(u.discord_user_id)}
+                            disabled={impersonateMutation.isPending}
+                          >
+                            <SupervisorAccountIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {!u.is_env_super_admin && (
+                        <Tooltip title="Remove user">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => deleteMutation.mutate(u.discord_user_id)}
+                            disabled={deleteMutation.isPending}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))}
