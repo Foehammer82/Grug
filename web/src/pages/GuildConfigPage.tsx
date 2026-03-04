@@ -348,9 +348,6 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                             {autoRespond && (
                               <Box
                                 sx={{
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  gap: 1,
                                   pl: 0.5,
                                   pr: 1,
                                   pt: 1,
@@ -358,28 +355,18 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   maxWidth: 380,
                                 }}
                               >
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ whiteSpace: 'nowrap' }}
-                                >
-                                  Always
-                                </Typography>
                                 <Slider
                                   size="small"
                                   min={0}
-                                  max={1}
-                                  step={0.05}
+                                  max={0.5}
+                                  step={null}
                                   value={threshold}
                                   marks={[
-                                    { value: 0 },
-                                    { value: 0.25 },
-                                    { value: 0.5 },
-                                    { value: 0.75 },
-                                    { value: 1 },
+                                    { value: 0, label: 'Always' },
+                                    { value: 0.25, label: 'Sometimes' },
+                                    { value: 0.5, label: 'Selective' },
                                   ]}
-                                  valueLabelDisplay="on"
-                                  valueLabelFormat={(v) => `${Math.round((v as number) * 100)}%`}
+                                  valueLabelDisplay="off"
                                   onChange={(_, v) =>
                                     setPendingThresholds((prev) => ({
                                       ...prev,
@@ -398,15 +385,8 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                     });
                                   }}
                                   disabled={channelMutation.isPending || configsError}
-                                  sx={{ flex: 1, mt: 2 }}
+                                  sx={{ flex: 1, mt: 2, mb: 2 }}
                                 />
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ whiteSpace: 'nowrap' }}
-                                >
-                                  Selective
-                                </Typography>
                               </Box>
                             )}
                           </Stack>

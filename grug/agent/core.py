@@ -283,8 +283,13 @@ class GrugAgent:
 
         for row in rows:
             if row.role == "user":
+                # Prefix with the speaker's name so Grug knows who said what
+                # in multi-user channels.
+                prefix = f"{row.author_name}: " if row.author_name else ""
                 messages.append(
-                    ModelRequest(parts=[UserPromptPart(content=row.content)])
+                    ModelRequest(
+                        parts=[UserPromptPart(content=f"{prefix}{row.content}")]
+                    )
                 )
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
