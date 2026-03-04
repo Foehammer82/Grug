@@ -26,7 +26,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
 import { SYSTEM_OPTIONS, SYSTEM_LABELS } from '../constants/character';
 import CampaignCard from '../components/campaigns/CampaignCard';
-import type { Campaign, DiscordChannel } from '../types';
+import type { Campaign, DiscordChannel, GuildMember } from '../types';
 
 // ── Main page ─────────────────────────────────────────────────────────────
 
@@ -49,6 +49,10 @@ export default function CampaignsPage() {
   const [editSystem, setEditSystem] = useState('');
   const [editChannel, setEditChannel] = useState<DiscordChannel | null>(null);
   const [editActive, setEditActive] = useState(true);
+  const [editGmMember, setEditGmMember] = useState<GuildMember | null>(null);
+
+  // Create GM state
+  const [newGmMember, setNewGmMember] = useState<GuildMember | null>(null);
 
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -70,6 +74,15 @@ export default function CampaignsPage() {
     enabled: !!guildId,
   });
 
+  const { data: guildMembers = [], isLoading: membersLoading } = useQuery<GuildMember[]>({
+    queryKey: ['guild-members', guildId],
+    queryFn: async () => {
+      const res = await client.get<GuildMember[]>(`/api/guilds/${guildId}/members`);
+      return res.data;
+    },
+    enabled: !!guildId && isAdmin,
+  });
+
   const { data: campaigns = [], isLoading } = useQuery<Campaign[]>({
     queryKey: ['campaigns', guildId],
     queryFn: async () => {
@@ -89,6 +102,7 @@ export default function CampaignsPage() {
         name: newName,
         system: newSystem || 'unknown',
         channel_id: newChannel?.id ?? null,
+        gm_discord_user_id: newGmMember?.discord_user_id ?? null,
       });
     },
     onSuccess: () => {
@@ -96,6 +110,7 @@ export default function CampaignsPage() {
       setNewName('');
       setNewSystem('');
       setNewChannel(null);
+      setNewGmMember(null);
       setShowForm(false);
     },
   });
@@ -107,6 +122,7 @@ export default function CampaignsPage() {
         system: editSystem,
         channel_id: editChannel?.id ?? null,
         is_active: editActive,
+        gm_discord_user_id: editGmMember?.discord_user_id ?? null,
       });
     },
     onSuccess: () => {
@@ -153,6 +169,7 @@ export default function CampaignsPage() {
     setEditSystem(c.system);
     setEditChannel(channels.find((ch) => ch.id === c.channel_id) ?? null);
     setEditActive(c.is_active);
+    setEditGmMember(guildMembers.find((m) => m.discord_user_id === c.gm_discord_user_id) ?? null);
   }
 
   function cancelEdit() {
@@ -161,6 +178,7 @@ export default function CampaignsPage() {
     setEditSystem('');
     setEditChannel(null);
     setEditActive(true);
+    setEditGmMember(null);
   }
 
   const activeCampaigns = campaigns.filter((c) => !c.deleted_at);
@@ -257,6 +275,27 @@ export default function CampaignsPage() {
               )}
               renderInput={(params) => (
                 <TextField {...params} label="Channel" />
+              )}
+            />
+            <Autocomplete
+              size="small"
+              fullWidth
+              options={guildMembers}
+              loading={membersLoading}
+              value={newGmMember}
+              onChange={(_, m) => setNewGmMember(m)}
+              getOptionLabel={(m) => m.display_name}
+              isOptionEqualToValue={(a, b) => a.discord_user_id === b.discord_user_id}
+              filterOptions={(opts, { inputValue }) => {
+                const q = inputValue.toLowerCase();
+                return opts.filter(
+                  (m) =>
+                    m.display_name.toLowerCase().includes(q) ||
+                    m.username.toLowerCase().includes(q),
+                );
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Game Master (optional)" />
               )}
             />
             <Box>
@@ -433,6 +472,27 @@ export default function CampaignsPage() {
                 Click to toggle
               </Typography>
             </Box>
+            <Autocomplete
+              size="small"
+              fullWidth
+              options={guildMembers}
+              loading={membersLoading}
+              value={editGmMember}
+              onChange={(_, m) => setEditGmMember(m)}
+              getOptionLabel={(m) => m.display_name}
+              isOptionEqualToValue={(a, b) => a.discord_user_id === b.discord_user_id}
+              filterOptions={(opts, { inputValue }) => {
+                const q = inputValue.toLowerCase();
+                return opts.filter(
+                  (m) =>
+                    m.display_name.toLowerCase().includes(q) ||
+                    m.username.toLowerCase().includes(q),
+                );
+              }}
+              renderInput={(params) => (
+                <TextField {...params} label="Game Master (optional)" />
+              )}
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

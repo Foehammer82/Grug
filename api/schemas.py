@@ -310,6 +310,7 @@ class CampaignOut(BaseModel):
     name: str
     system: str
     is_active: bool
+    gm_discord_user_id: int | None = None
     created_by: int
     created_at: datetime
     deleted_at: datetime | None = None
@@ -322,12 +323,18 @@ class CampaignOut(BaseModel):
         """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
         return str(v)
 
+    @field_serializer("gm_discord_user_id")
+    def serialize_gm_id(self, v: int | None) -> str | None:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v) if v is not None else None
+
 
 class CampaignCreate(BaseModel):
     name: str
     system: str = "unknown"
     # Accept string or int to avoid JS precision loss on large Discord snowflake IDs
     channel_id: str | int
+    gm_discord_user_id: str | int | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -335,6 +342,7 @@ class CampaignUpdate(BaseModel):
     system: str | None = None
     is_active: bool | None = None
     channel_id: str | int | None = None
+    gm_discord_user_id: str | int | None = None
 
 
 class CharacterCreate(BaseModel):

@@ -127,6 +127,12 @@ class Campaign(Base):
     # Detected or manually set system tag, e.g. 'dnd5e', 'pf2e', 'unknown'.
     system: Mapped[str] = mapped_column(String(128), default="unknown")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Discord snowflake of the GM for this campaign.  GMs can view all character
+    # sheets in the campaign — same level of access as a guild admin, scoped to
+    # this campaign only.  NULL means no GM is assigned.
+    gm_discord_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True, default=None
+    )
     created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

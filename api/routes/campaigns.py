@@ -105,6 +105,7 @@ async def list_campaigns(
             name=c.name,
             system=c.system,
             is_active=c.is_active,
+            gm_discord_user_id=c.gm_discord_user_id,
             created_by=c.created_by,
             created_at=c.created_at,
             deleted_at=c.deleted_at,
@@ -133,6 +134,9 @@ async def create_campaign(
         name=body.name,
         system=body.system,
         is_active=True,
+        gm_discord_user_id=int(body.gm_discord_user_id)
+        if body.gm_discord_user_id
+        else None,
         created_by=int(user["id"]),
         created_at=datetime.now(timezone.utc),
     )
@@ -170,6 +174,10 @@ async def update_campaign(
         campaign.is_active = body.is_active  # type: ignore[assignment]
     if "channel_id" in body.model_fields_set:
         campaign.channel_id = int(body.channel_id)  # type: ignore[assignment]
+    if "gm_discord_user_id" in body.model_fields_set:
+        campaign.gm_discord_user_id = (  # type: ignore[assignment]
+            int(body.gm_discord_user_id) if body.gm_discord_user_id else None
+        )
     await db.commit()
     await db.refresh(campaign)
     return campaign

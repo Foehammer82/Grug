@@ -1,9 +1,11 @@
-import { Box, Chip, IconButton, Stack, Tooltip, Typography } from '@mui/material';
+import { Avatar, Box, Chip, IconButton, Skeleton, Stack, Tooltip, Typography } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import { useQuery } from '@tanstack/react-query';
+import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
 import CharacterTable from './CharacterTable';
-import type { Campaign, DiscordChannel } from '../../types';
+import type { Campaign, DiscordChannel, GuildMember } from '../../types';
 
 interface CampaignCardProps {
   campaign: Campaign;
@@ -13,6 +15,43 @@ interface CampaignCardProps {
   allCampaigns: Campaign[];
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+}
+
+/** A compact header Chip showing the campaign's Game Master. */
+function GmChip({ guildId, userId }: { guildId: string; userId: string }) {
+  const { data, isLoading } = useQuery<GuildMember>({
+    queryKey: ['guild-member', guildId, userId],
+    queryFn: async () => {
+      const res = await client.get<GuildMember>(`/api/guilds/${guildId}/members/${userId}`);
+      return res.data;
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (isLoading) {
+    return <Skeleton variant="rounded" width={80} height={20} />;
+  }
+
+  const label = data?.display_name ?? userId;
+  const avatarSrc = data?.avatar_url ?? undefined;
+  const initials = (data?.display_name ?? userId)[0]?.toUpperCase();
+
+  return (
+    <Tooltip title="Game Master" placement="top">
+      <Chip
+        size="small"
+        variant="outlined"
+        label={label}
+        avatar={
+          <Avatar src={avatarSrc} sx={{ bgcolor: 'primary.main', fontSize: '0.55rem' }}>
+            {initials}
+          </Avatar>
+        }
+        sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0 }}
+      />
+    </Tooltip>
+  );
 }
 
 /** Renders a single campaign card with its header bar and always-visible character table. */
@@ -78,6 +117,9 @@ export default function CampaignCard({
             variant="outlined"
             sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, color: 'text.secondary' }}
           />
+        )}
+        {c.gm_discord_user_id && (
+          <GmChip guildId={c.guild_id} userId={c.gm_discord_user_id} />
         )}
         <Chip
           label={c.is_active ? 'Active' : 'Inactive'}

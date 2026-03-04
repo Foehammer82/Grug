@@ -98,9 +98,9 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
     async def get_campaign_info(ctx: RunContext[GrugDeps]) -> str:
         """Get information about this channel's campaign.
 
-        Returns the campaign name, game system, active status, and a roster
-        of characters (name, level, class, ancestry).  Use when a player
-        asks about the campaign, the party, or who is playing.
+        Returns the campaign name, game system, active status, the Game Master
+        (if assigned), and a roster of characters (name, level, class, ancestry).
+        Use when a player asks about the campaign, the party, the GM, or who is playing.
         """
         from grug.db.models import Campaign, Character
         from grug.db.session import get_session_factory
@@ -136,6 +136,10 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
             f"Campaign: {campaign.name}",
             f"System: {campaign.system}",
             f"Status: {'active' if campaign.is_active else 'inactive'}",
+        ]
+        if campaign.gm_discord_user_id:
+            lines.append(f"Game Master: <@{campaign.gm_discord_user_id}>")
+        lines += [
             "",
             "Party roster:",
         ]
@@ -216,12 +220,32 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
             names = ", ".join(c.name for c in chars)
             return f"No character matching '{character_name}' found. Available: {names}"
 
-        # Check access: own character or admin can see full details.
+        # Check access: own character, guild admin, or campaign GM can see full details.
         is_owner = match.owner_discord_user_id == ctx.deps.user_id
-        admin = await _is_admin(ctx) if not is_owner else False
+        if not is_owner:
+            admin = await _is_admin(ctx)
+            # Also check if the requesting user is the GM for this campaign.
+            if not admin:
+                from grug.db.models import Campaign
+
+                async with factory() as session:
+                    campaign = (
+                        await session.execute(
+                            select(Campaign).where(Campaign.id == campaign_id)
+                        )
+                    ).scalar_one_or_none()
+                    is_gm = (
+                        campaign is not None
+                        and campaign.gm_discord_user_id == ctx.deps.user_id
+                    )
+            else:
+                is_gm = False
+        else:
+            admin = False
+            is_gm = False
 
         sd = match.structured_data or {}
-        if is_owner or admin:
+        if is_owner or admin or is_gm:
             # Full details
             lines = [
                 f"Character: {match.name}",
@@ -250,5 +274,5 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
             return (
                 f"Character: {match.name} — Lvl {level} {cls} {ancestry}"
                 f"{hp_str}{ac_str}\n"
-                f"(Full details are only available to the character's owner.)"
+                f"(Full details are only available to the character's owner, GM, or an admin.)"
             )

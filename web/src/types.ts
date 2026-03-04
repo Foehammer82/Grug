@@ -182,6 +182,7 @@ export interface Campaign {
   name: string;
   system: string;
   is_active: boolean;
+  gm_discord_user_id: string | null;
   created_by: string;
   created_at: string;
   deleted_at: string | null;
