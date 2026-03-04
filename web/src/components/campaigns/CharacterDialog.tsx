@@ -46,6 +46,7 @@ interface CharacterDialogProps {
   campaignId: number;
   campaignSystem: string;
   isAdmin: boolean;
+  isGm: boolean;
   currentUserId: string;
   /** All active campaigns — for the move/copy actions on the Details tab. */
   allCampaigns: Campaign[];
@@ -66,6 +67,7 @@ export default function CharacterDialog({
   campaignId,
   campaignSystem,
   isAdmin,
+  isGm,
   currentUserId,
   allCampaigns,
   onSuccess,
@@ -73,7 +75,7 @@ export default function CharacterDialog({
 }: CharacterDialogProps) {
   const qc = useQueryClient();
   const isCreate = mode === 'create';
-  const canEdit = isCreate || isAdmin || character?.owner_discord_user_id === currentUserId;
+  const canEdit = isCreate || isGm || character?.owner_discord_user_id === currentUserId;
 
   // ── Tab state ─────────────────────────────────────────────────────────
   const [tab, setTab] = useState(isCreate ? 0 : initialTab);
@@ -108,7 +110,7 @@ export default function CharacterDialog({
       const res = await client.get<GuildMember[]>(`/api/guilds/${guildId}/members`);
       return res.data;
     },
-    enabled: isAdmin && !!guildId && open,
+    enabled: isGm && !!guildId && open,
     staleTime: 60_000,
   });
 
@@ -176,7 +178,7 @@ export default function CharacterDialog({
   const createMutation = useMutation({
     mutationFn: async () => {
       const payload: Record<string, unknown> = { name, system: campaignSystem };
-      if (isAdmin) Object.assign(payload, resolveOwnerPayload(owner));
+      if (isGm) Object.assign(payload, resolveOwnerPayload(owner));
 
       // When importing from Pathbuilder the name will be overwritten by the
       // link step, so use a placeholder if the user left the field blank.
@@ -226,7 +228,7 @@ export default function CharacterDialog({
     mutationFn: async () => {
       if (!character) return;
       const payload: Record<string, unknown> = { name };
-      if (isAdmin) Object.assign(payload, resolveOwnerPayload(owner));
+      if (isGm) Object.assign(payload, resolveOwnerPayload(owner));
 
       await client.patch(
         `/api/guilds/${guildId}/campaigns/${campaignId}/characters/${character.id}`,
@@ -376,7 +378,7 @@ export default function CharacterDialog({
               placeholder={pathbuilderId.trim() ? 'Will be imported from Pathbuilder' : undefined}
             />
 
-            {isAdmin && (
+            {isGm && (
               <OwnerAutocomplete
                 guildMembers={guildMembers}
                 loading={guildMembersLoading}
@@ -575,12 +577,12 @@ export default function CharacterDialog({
         {/* ── Tab 2: Notes ──────────────────────────────────── */}
         {!isCreate && tab === 2 && character && (() => {
           const isOwner = character.owner_discord_user_id === currentUserId;
-          const hasHiddenNotes = !isOwner && isAdmin && !!character.notes;
+          const hasHiddenNotes = !isOwner && isGm && !!character.notes;
           return (
             <Box sx={{ pt: 1 }}>
               <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
                 <Typography variant="caption" color="text.secondary">
-                  Private — only visible to the owner and admins.
+                  Private — only visible to the owner and GMs.
                 </Typography>
                 {saveNotesMutation.isPending && <CircularProgress size={14} />}
               </Stack>
@@ -606,7 +608,7 @@ export default function CharacterDialog({
                     placeholder="Jot down anything about this character — backstory, session notes, secrets…"
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    disabled={!isOwner && !isAdmin}
+                    disabled={!isOwner && !isGm}
                   />
                   {hasHiddenNotes && notesRevealed && (
                     <Box sx={{ mt: 0.5 }}>

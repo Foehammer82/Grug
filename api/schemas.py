@@ -878,3 +878,58 @@ class DiceRollOut(BaseModel):
     @field_serializer("guild_id")
     def serialize_guild_id(self, v: int) -> str:
         return str(v)
+
+
+# ── Encounters / Initiative ──────────────────────────────────────────
+
+
+class CombatantOut(BaseModel):
+    id: int
+    encounter_id: int
+    character_id: int | None = None
+    name: str
+    initiative_roll: int | None = None
+    initiative_modifier: int = 0
+    is_enemy: bool = False
+    sort_order: int = 0
+    is_active: bool = True
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EncounterOut(BaseModel):
+    id: int
+    campaign_id: int
+    guild_id: int
+    name: str
+    status: str
+    current_turn_index: int = 0
+    round_number: int = 1
+    channel_id: int | None = None
+    created_by: int
+    created_at: datetime
+    ended_at: datetime | None = None
+    combatants: list[CombatantOut] = []
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id", "created_by")
+    def serialize_snowflakes(self, v: int) -> str:
+        return str(v)
+
+    @field_serializer("channel_id")
+    def serialize_channel_id(self, v: int | None) -> str | None:
+        return str(v) if v is not None else None
+
+
+class EncounterCreate(BaseModel):
+    name: str
+    channel_id: str | int | None = None
+
+
+class CombatantCreate(BaseModel):
+    name: str
+    initiative_modifier: int = 0
+    is_enemy: bool = False
+    character_id: int | None = None

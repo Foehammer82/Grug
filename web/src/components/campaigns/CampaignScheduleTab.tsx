@@ -46,7 +46,7 @@ interface CampaignScheduleTabProps {
   campaignName: string;
   /** From Campaign.schedule_mode — passed so the dialog can toggle it. */
   scheduleMode: 'fixed' | 'poll';
-  isAdmin: boolean;
+  isGm: boolean;
   currentUserId: string;
   timezone: string;
   channels: DiscordChannel[];
@@ -325,7 +325,7 @@ export default function CampaignScheduleTab({
   campaignId,
   campaignName,
   scheduleMode,
-  isAdmin,
+  isGm,
   currentUserId,
   timezone,
   channels,
@@ -462,7 +462,7 @@ export default function CampaignScheduleTab({
             : `Next ${upcoming.length} upcoming session${upcoming.length !== 1 ? 's' : ''}`}
         </Typography>
 
-        {isAdmin && (
+        {isGm && (
           <Stack direction="row" spacing={0.5} alignItems="center">
             <Button
               size="small"

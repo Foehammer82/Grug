@@ -69,11 +69,11 @@ interface CharacterTableProps {
   campaignId: number;
   campaignSystem: string;
   isAdmin: boolean;
+  isGm: boolean;
   currentUserId: string;
   allCampaigns: Campaign[];
   bankingEnabled?: boolean;
   playerBankingEnabled?: boolean;
-  campaignGmId?: string;
   partyGold?: number;
 }
 
@@ -82,11 +82,11 @@ export default function CharacterTable({
   campaignId,
   campaignSystem,
   isAdmin,
+  isGm,
   currentUserId,
   allCampaigns,
   bankingEnabled = false,
   playerBankingEnabled = false,
-  campaignGmId,
   partyGold = 0,
 }: CharacterTableProps) {
   const qc = useQueryClient();
@@ -164,9 +164,9 @@ export default function CharacterTable({
     setDialogOpen(true);
   }
 
-  // Only admins (or owners of at least one selected character) can batch-delete
+  // Only GMs/admins (or owners of at least one selected character) can batch-delete
   const canBatchDelete =
-    isAdmin ||
+    isGm ||
     [...selected].every((id) => {
       const ch = characters.find((c) => c.id === id);
       return ch?.owner_discord_user_id === currentUserId;
@@ -212,7 +212,7 @@ export default function CharacterTable({
         <Table size="small" sx={{ '& td, & th': { borderColor: 'divider' } }}>
           <TableHead>
             <TableRow>
-              {(isAdmin || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
+              {(isGm || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
                 <TableCell padding="checkbox" sx={{ width: 42 }}>
                   <Checkbox
                     size="small"
@@ -230,7 +230,7 @@ export default function CharacterTable({
           </TableHead>
           <TableBody>
             {characters.map((ch) => {
-              const canEdit = isAdmin || ch.owner_discord_user_id === currentUserId;
+              const canEdit = isGm || ch.owner_discord_user_id === currentUserId;
               return (
                 <TableRow
                   key={ch.id}
@@ -238,7 +238,7 @@ export default function CharacterTable({
                   sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 0 } }}
                   onClick={() => openCharacter(ch, canEdit ? 0 : 1)}
                 >
-                  {(isAdmin || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
+                  {(isGm || characters.some((c) => c.owner_discord_user_id === currentUserId)) && (
                     <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
                       {canEdit && (
                         <Checkbox
@@ -280,7 +280,7 @@ export default function CharacterTable({
                     />
                   </TableCell>
                   {bankingEnabled && (() => {
-                    const isAdminOrGm = isAdmin || campaignGmId === currentUserId;
+                    const isAdminOrGm = isGm;
                     const isOwner = ch.owner_discord_user_id === currentUserId;
                     const canSee = isAdminOrGm || isOwner;
                     const canManage = isAdminOrGm || (isOwner && playerBankingEnabled);
@@ -343,6 +343,7 @@ export default function CharacterTable({
         campaignId={campaignId}
         campaignSystem={campaignSystem}
         isAdmin={isAdmin}
+        isGm={isGm}
         currentUserId={currentUserId}
         allCampaigns={allCampaigns}
         initialTab={dialogTab}
@@ -356,7 +357,7 @@ export default function CharacterTable({
           guildId={guildId}
           campaignId={campaignId}
           character={goldChar}
-          isAdminOrGm={isAdmin || campaignGmId === currentUserId}
+          isAdminOrGm={isGm}
           playerBankingEnabled={playerBankingEnabled}
           partyGold={partyGold}
         />

@@ -28,7 +28,6 @@ import { ROLL_TYPE_LABELS } from '../../types';
 interface DiceTabProps {
   guildId: string;
   campaignId: number;
-  isAdmin: boolean;
   isGm: boolean;
   currentUserId: string;
 }
@@ -60,7 +59,7 @@ const DEFAULT_QUANTITY = 1;
 const DEFAULT_DIE = 20;
 const HISTORY_PREVIEW_COUNT = 5;
 
-export default function DiceTab({ guildId, campaignId, isAdmin, isGm, currentUserId }: DiceTabProps) {
+export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: DiceTabProps) {
   const qc = useQueryClient();
 
   // --- Roller state ---
@@ -305,7 +304,7 @@ export default function DiceTab({ guildId, campaignId, isAdmin, isGm, currentUse
       <Divider sx={{ my: 2 }} />
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
         <Typography variant="subtitle2" color="text.secondary">
-          Recent Rolls {isAdmin || isGm ? '(all rolls)' : '(your rolls + public)'}
+          Recent Rolls {isGm ? '(all rolls)' : '(your rolls + public)'}
         </Typography>
         {(history?.length ?? 0) > HISTORY_PREVIEW_COUNT && (
           <Button size="small" onClick={() => setHistoryOpen(true)}>

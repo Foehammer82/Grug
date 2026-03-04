@@ -184,6 +184,9 @@ class Campaign(Base):
     session_notes: Mapped[list["SessionNote"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
     )
+    encounters: Mapped[list["Encounter"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
     events: Mapped[list["CalendarEvent"]] = relationship(
         back_populates="campaign",
         foreign_keys="CalendarEvent.campaign_id",
@@ -954,6 +957,78 @@ class DiceRoll(Base):
     )
 
     campaign: Mapped["Campaign | None"] = relationship()
+
+
+class Encounter(Base):
+    """An initiative encounter within a campaign."""
+
+    __tablename__ = "encounters"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=False, index=True
+    )
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="preparing", server_default="preparing"
+    )
+    current_turn_index: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    round_number: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
+
+    campaign: Mapped["Campaign"] = relationship(back_populates="encounters")
+    combatants: Mapped[list["Combatant"]] = relationship(
+        back_populates="encounter", cascade="all, delete-orphan"
+    )
+
+
+class Combatant(Base):
+    """A participant in an initiative encounter."""
+
+    __tablename__ = "combatants"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    encounter_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("encounters.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    character_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("characters.id"), nullable=True, index=True
+    )
+    name: Mapped[str] = mapped_column(String(256), nullable=False)
+    initiative_roll: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    initiative_modifier: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    is_enemy: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    sort_order: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="true", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    encounter: Mapped["Encounter"] = relationship(back_populates="combatants")
+    character: Mapped["Character | None"] = relationship()
 
 
 class LLMUsageDailyAggregate(Base):

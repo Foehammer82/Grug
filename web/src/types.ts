@@ -403,6 +403,38 @@ export interface DiceRoll {
   created_at: string;
 }
 
+/* ── Encounters / Initiative ──────────────────────────────────────── */
+
+export type EncounterStatus = 'preparing' | 'active' | 'ended';
+
+export interface Combatant {
+  id: number;
+  encounter_id: number;
+  character_id: number | null;
+  name: string;
+  initiative_roll: number | null;
+  initiative_modifier: number;
+  is_enemy: boolean;
+  sort_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface Encounter {
+  id: number;
+  campaign_id: number;
+  guild_id: string;
+  name: string;
+  status: EncounterStatus;
+  current_turn_index: number;
+  round_number: number;
+  channel_id: string | null;
+  created_by: string;
+  created_at: string;
+  ended_at: string | null;
+  combatants: Combatant[];
+}
+
 
 /* ── Datetime helpers ─────────────────────────────────────────────── */
 
