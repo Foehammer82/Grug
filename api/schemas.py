@@ -377,9 +377,25 @@ class CharacterOut(BaseModel):
 
 
 class PathbuilderLinkRequest(BaseModel):
-    """Request body for linking a Pathbuilder 2e character by ID."""
+    """Request body for linking a Pathbuilder 2e character by ID.
+
+    When ``pathbuilder_data`` is provided (pre-fetched by the browser, which
+    bypasses Cloudflare bot protection on the Pathbuilder endpoint), the server
+    normalises it directly without making an outbound HTTP request.
+    """
 
     pathbuilder_id: int
+    pathbuilder_data: dict | None = None
+
+
+class SyncPathbuilderRequest(BaseModel):
+    """Optional request body for re-syncing a Pathbuilder-linked character.
+
+    Pass ``pathbuilder_data`` (the raw JSON fetched client-side) to skip the
+    server-side fetch, which is blocked by Cloudflare bot protection.
+    """
+
+    pathbuilder_data: dict | None = None
 
 
 class CharacterCopyRequest(BaseModel):

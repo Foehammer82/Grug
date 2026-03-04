@@ -25,12 +25,49 @@ class PathbuilderError(Exception):
     """Raised when a Pathbuilder fetch fails."""
 
 
+def parse_pathbuilder_response(
+    data: dict[str, Any], pathbuilder_id: int
+) -> dict[str, Any]:
+    """Normalise a pre-fetched Pathbuilder JSON response.
+
+    Accepts the raw response dict ``{"success": bool, "build": {...}}`` as
+    returned by the Pathbuilder ``json.php`` endpoint and returns the
+    normalised build dict ready for storage in ``Character.structured_data``.
+
+    This is separated from :func:`fetch_pathbuilder_character` so that callers
+    who already have the raw JSON (e.g. fetched client-side in the browser to
+    bypass Cloudflare bot protection) can normalise it without a server-side
+    HTTP request.
+
+    Raises
+    ------
+    PathbuilderError
+        If ``data`` is missing required fields or ``success`` is false.
+    """
+    if not data.get("success"):
+        raise PathbuilderError(
+            "Pathbuilder returned success=false — character not found or private"
+        )
+
+    build = data.get("build")
+    if not isinstance(build, dict):
+        raise PathbuilderError("Pathbuilder response missing 'build' object")
+
+    return _normalise_build(build, pathbuilder_id)
+
+
 async def fetch_pathbuilder_character(pathbuilder_id: int) -> dict[str, Any]:
     """Fetch a character from Pathbuilder by ID and return the build dict.
 
     Returns the raw ``build`` object from the Pathbuilder response, wrapped
     with a ``_source: "pathbuilder"`` marker and the original ID for
     re-sync purposes.
+
+    .. note::
+        The Pathbuilder ``json.php`` endpoint is behind Cloudflare bot
+        protection that blocks server-side HTTP clients.  Prefer passing
+        pre-fetched data (fetched client-side in the browser) via
+        :func:`parse_pathbuilder_response` when possible.
 
     Raises
     ------
@@ -54,16 +91,7 @@ async def fetch_pathbuilder_character(pathbuilder_id: int) -> dict[str, Any]:
     except Exception as exc:
         raise PathbuilderError("Pathbuilder returned invalid JSON") from exc
 
-    if not data.get("success"):
-        raise PathbuilderError(
-            "Pathbuilder returned success=false — character not found or private"
-        )
-
-    build = data.get("build")
-    if not isinstance(build, dict):
-        raise PathbuilderError("Pathbuilder response missing 'build' object")
-
-    return _normalise_build(build, pathbuilder_id)
+    return parse_pathbuilder_response(data, pathbuilder_id)
 
 
 def _normalise_build(build: dict[str, Any], pathbuilder_id: int) -> dict[str, Any]:

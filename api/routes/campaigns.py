@@ -30,7 +30,11 @@ from api.schemas import (
 )
 from grug.character.indexer import CharacterIndexer
 from grug.character.parser import CharacterSheetParser
-from grug.character.pathbuilder import PathbuilderError, fetch_pathbuilder_character
+from grug.character.pathbuilder import (
+    PathbuilderError,
+    fetch_pathbuilder_character,
+    parse_pathbuilder_response,
+)
 from grug.config.settings import get_settings
 from grug.db.models import Campaign, Character
 
@@ -620,7 +624,13 @@ async def link_campaign_character_pathbuilder(
     )
 
     try:
-        structured_data = await fetch_pathbuilder_character(body.pathbuilder_id)
+        if body.pathbuilder_data is not None:
+            # Client pre-fetched the data (bypasses Cloudflare bot protection).
+            structured_data = parse_pathbuilder_response(
+                body.pathbuilder_data, body.pathbuilder_id
+            )
+        else:
+            structured_data = await fetch_pathbuilder_character(body.pathbuilder_id)
     except PathbuilderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

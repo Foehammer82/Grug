@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,8 +19,13 @@ from api.schemas import (
     CharacterOut,
     CharacterUpdate,
     PathbuilderLinkRequest,
+    SyncPathbuilderRequest,
 )
-from grug.character.pathbuilder import PathbuilderError, fetch_pathbuilder_character
+from grug.character.pathbuilder import (
+    PathbuilderError,
+    fetch_pathbuilder_character,
+    parse_pathbuilder_response,
+)
 from grug.db.models import Campaign, Character, UserProfile
 
 logger = logging.getLogger(__name__)
@@ -273,7 +278,13 @@ async def link_pathbuilder(
     user_id = int(user["id"])
 
     try:
-        structured_data = await fetch_pathbuilder_character(body.pathbuilder_id)
+        if body.pathbuilder_data is not None:
+            # Client pre-fetched the data (bypasses Cloudflare bot protection).
+            structured_data = parse_pathbuilder_response(
+                body.pathbuilder_data, body.pathbuilder_id
+            )
+        else:
+            structured_data = await fetch_pathbuilder_character(body.pathbuilder_id)
     except PathbuilderError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -300,12 +311,15 @@ async def link_pathbuilder(
 async def sync_pathbuilder(
     guild_id: int,
     character_id: int,
+    body: SyncPathbuilderRequest = Body(default_factory=SyncPathbuilderRequest),
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Character:
     """Re-sync a character's data from Pathbuilder.
 
-    Fetches the latest build from Pathbuilder and updates structured_data.
+    Pass ``pathbuilder_data`` in the request body (pre-fetched client-side in
+    the browser, which bypasses Cloudflare bot protection) to avoid a
+    server-side HTTP request.  Falls back to a server-side fetch when omitted.
     Only works for characters that have a pathbuilder_id set.
     """
     assert_guild_member(guild_id, user)
@@ -319,18 +333,31 @@ async def sync_pathbuilder(
             detail="This character is not linked to Pathbuilder",
         )
 
-    # 5-minute global cooldown — return current data if synced too recently.
-    _cooldown = timedelta(minutes=5)
-    if (
-        character.pathbuilder_synced_at is not None
-        and (datetime.now(timezone.utc) - character.pathbuilder_synced_at) < _cooldown
-    ):
-        return character
+    # When client provides pre-fetched data, skip the cooldown check so the
+    # user always gets fresh data on an explicit sync action.
+    if body.pathbuilder_data is not None:
+        try:
+            structured_data = parse_pathbuilder_response(
+                body.pathbuilder_data, character.pathbuilder_id
+            )
+        except PathbuilderError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+    else:
+        # 5-minute global cooldown — return current data if synced too recently.
+        _cooldown = timedelta(minutes=5)
+        if (
+            character.pathbuilder_synced_at is not None
+            and (datetime.now(timezone.utc) - character.pathbuilder_synced_at)
+            < _cooldown
+        ):
+            return character
 
-    try:
-        structured_data = await fetch_pathbuilder_character(character.pathbuilder_id)
-    except PathbuilderError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        try:
+            structured_data = await fetch_pathbuilder_character(
+                character.pathbuilder_id
+            )
+        except PathbuilderError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
 
     character.structured_data = structured_data  # type: ignore[assignment]
     # Update name if it changed in Pathbuilder

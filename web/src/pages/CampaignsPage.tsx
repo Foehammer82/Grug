@@ -26,6 +26,8 @@ import {
   Skeleton,
   Snackbar,
   Stack,
+  Tab,
+  Tabs,
   TextField,
   Tooltip,
   Typography,
@@ -38,11 +40,13 @@ import EditIcon from '@mui/icons-material/Edit';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import SyncIcon from '@mui/icons-material/Sync';
 import CallSplitIcon from '@mui/icons-material/CallSplit';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
+import { fetchPathbuilderClientSide } from '../utils/pathbuilder';
 import type { Campaign, Character, CharacterSheet, DiscordChannel, GuildMember } from '../types';
 
 // Suggested systems shown in the autocomplete dropdown — users may still type
@@ -335,8 +339,6 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
   const [editChar, setEditChar] = useState<Character | null>(null);
   const [editName, setEditName] = useState('');
   const [editOwner, setEditOwner] = useState<GuildMember | string>(UNASSIGNED_MEMBER);
-  const [editNotes, setEditNotes] = useState('');
-  const [editNotesRevealed, setEditNotesRevealed] = useState(false);
   const [editFile, setEditFile] = useState<File | null>(null);
   const [editPathbuilderId, setEditPathbuilderId] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
@@ -345,8 +347,12 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
   // ── Delete confirm ──────────────────────────────────────────────────────
   const [deleteCharId, setDeleteCharId] = useState<number | null>(null);
 
-  // ── Sheet detail modal ──────────────────────────────────────────────────
-  const [sheetDetailChar, setSheetDetailChar] = useState<Character | null>(null);
+  // ── Notebook modal (sheet + notes) ──────────────────────────────────────
+  const [notebookChar, setNotebookChar] = useState<Character | null>(null);
+  const [notebookTab, setNotebookTab] = useState(0);
+  const [notebookNotes, setNotebookNotes] = useState('');
+  const [notebookNotesRevealed, setNotebookNotesRevealed] = useState(false);
+  const notebookNotesInitRef = useRef('');
 
   // ── Transfer / copy dialog ──────────────────────────────────────────────
   const [transferOpen, setTransferOpen] = useState(false);
@@ -384,17 +390,16 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
     qc.invalidateQueries({ queryKey: ['campaign-characters', guildId, campaignId] });
 
   // Auto-sync all Pathbuilder-linked characters when the panel first reveals them.
+  // NOTE: The Pathbuilder endpoint is behind Cloudflare bot protection that blocks
+  // server-side fetches. The per-character Sync button below fetches client-side
+  // instead. Bulk auto-sync is intentionally disabled.
   const syncCampaignMutation = useMutation({
-    mutationFn: () =>
-      client.post(`/api/guilds/${guildId}/campaigns/${campaignId}/sync-pathbuilder`),
-    onSuccess: () => { invalidate(); },
+    mutationFn: () => Promise.resolve(),
   });
+  void syncCampaignMutation; // suppress unused-var lint warning
 
   useEffect(() => {
-    if (characters.length > 0 && characters.some((c) => c.pathbuilder_id != null)) {
-      syncCampaignMutation.mutate();
-    }
-    // Only run when characters first load (not on every mutation-triggered refetch).
+    // Auto-sync disabled: server cannot reach Pathbuilder due to Cloudflare bot protection.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characters.length > 0]);
 
@@ -423,9 +428,11 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
       } else if (createPathbuilderId.trim()) {
         const pbId = parseInt(createPathbuilderId, 10);
         if (!isNaN(pbId)) {
+          // Fetch Pathbuilder data client-side (browser bypasses Cloudflare bot protection).
+          const pbData = await fetchPathbuilderClientSide(pbId);
           await client.post(
             `/api/guilds/${guildId}/campaigns/${campaignId}/characters/${charId}/link-pathbuilder`,
-            { pathbuilder_id: pbId }
+            { pathbuilder_id: pbId, pathbuilder_data: pbData }
           );
         }
       }
@@ -451,9 +458,6 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
       if (isAdmin) {
         Object.assign(payload, resolveOwnerPayload(editOwner));
       }
-      // Notes
-      payload.notes = editNotes || null;
-
       await client.patch(
         `/api/guilds/${guildId}/campaigns/${campaignId}/characters/${editChar.id}`,
         payload
@@ -474,9 +478,11 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
       ) {
         const pbId = parseInt(editPathbuilderId, 10);
         if (!isNaN(pbId)) {
+          // Fetch Pathbuilder data client-side (browser bypasses Cloudflare bot protection).
+          const pbData = await fetchPathbuilderClientSide(pbId);
           await client.post(
             `/api/guilds/${guildId}/campaigns/${campaignId}/characters/${editChar.id}/link-pathbuilder`,
-            { pathbuilder_id: pbId }
+            { pathbuilder_id: pbId, pathbuilder_data: pbData }
           );
         }
       }
@@ -505,8 +511,15 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
   });
 
   const syncPathbuilderMutation = useMutation({
-    mutationFn: (charId: number) =>
-      client.post(`/api/guilds/${guildId}/characters/${charId}/sync-pathbuilder`),
+    mutationFn: async ({ id, pathbuilder_id }: { id: number; pathbuilder_id: number }) => {
+      // Fetch Pathbuilder data client-side so the browser (not the server) makes
+      // the request — the Pathbuilder endpoint blocks server-side clients via
+      // Cloudflare bot protection.
+      const pbData = await fetchPathbuilderClientSide(pathbuilder_id);
+      return client.post(`/api/guilds/${guildId}/characters/${id}/sync-pathbuilder`, {
+        pathbuilder_data: pbData,
+      });
+    },
     onSuccess: () => {
       invalidate();
     },
@@ -538,6 +551,28 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
     },
   });
 
+  // ── Save notes mutation (notebook auto-save) ───────────────────────────
+  const saveNotesMutation = useMutation({
+    mutationFn: async ({ charId, notes }: { charId: number; notes: string | null }) =>
+      client.patch(
+        `/api/guilds/${guildId}/campaigns/${campaignId}/characters/${charId}`,
+        { notes }
+      ),
+    onSuccess: () => invalidate(),
+  });
+
+  // Debounced auto-save — fires 800 ms after the user stops typing
+  useEffect(() => {
+    if (!notebookChar) return;
+    if (notebookNotes === notebookNotesInitRef.current) return;
+    const timer = setTimeout(() => {
+      saveNotesMutation.mutate({ charId: notebookChar.id, notes: notebookNotes || null });
+      notebookNotesInitRef.current = notebookNotes;
+    }, 800);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notebookNotes, notebookChar?.id]);
+
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   function openCreateDialog() {
@@ -564,14 +599,11 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
   function openEditDialog(ch: Character) {
     setEditChar(ch);
     setEditName(ch.name);
-    setEditNotes(ch.notes ?? '');
     setEditFile(null);
     setEditPathbuilderId(ch.pathbuilder_id?.toString() ?? '');
     setEditError(null);
     if (editFileRef.current) editFileRef.current.value = '';
 
-    const isOwner = ch.owner_discord_user_id === currentUserId;
-    setEditNotesRevealed(isOwner || !ch.notes);
     if (ch.owner_discord_user_id) {
       const member = guildMembers.find((m) => m.discord_user_id === ch.owner_discord_user_id)
         ?? { discord_user_id: ch.owner_discord_user_id, display_name: ch.owner_discord_user_id, username: '', avatar_url: null };
@@ -587,6 +619,20 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
     setEditChar(null);
     setEditError(null);
     if (editFileRef.current) editFileRef.current.value = '';
+  }
+
+  function openNotebook(ch: Character, tab = 0) {
+    setNotebookChar(ch);
+    setNotebookTab(tab);
+    const notes = ch.notes ?? '';
+    setNotebookNotes(notes);
+    notebookNotesInitRef.current = notes;
+    const isOwner = ch.owner_discord_user_id === currentUserId;
+    setNotebookNotesRevealed(isOwner || !ch.notes);
+  }
+
+  function closeNotebook() {
+    setNotebookChar(null);
   }
 
   function openTransferMenu(e: React.MouseEvent<HTMLElement>, charId: number) {
@@ -662,7 +708,7 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
                               size="small"
                               color="secondary"
                               variant="outlined"
-                              onClick={ch.structured_data ? () => setSheetDetailChar(ch) : undefined}
+                              onClick={ch.structured_data ? () => openNotebook(ch, 0) : undefined}
                               sx={ch.structured_data ? { cursor: 'pointer' } : undefined}
                             />
                           </Tooltip>
@@ -674,7 +720,7 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
                               size="small"
                               color="info"
                               variant="outlined"
-                              onClick={ch.structured_data ? () => setSheetDetailChar(ch) : undefined}
+                              onClick={ch.structured_data ? () => openNotebook(ch, 0) : undefined}
                               sx={ch.structured_data ? { cursor: 'pointer' } : undefined}
                             />
                           </Tooltip>
@@ -686,7 +732,7 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
                             <Tooltip title="Sync Pathbuilder">
                               <IconButton
                                 size="small"
-                                onClick={() => syncPathbuilderMutation.mutate(ch.id)}
+                                onClick={() => syncPathbuilderMutation.mutate({ id: ch.id, pathbuilder_id: ch.pathbuilder_id! })}
                                 disabled={syncPathbuilderMutation.isPending}
                               >
                                 <SyncIcon fontSize="small" />
@@ -698,6 +744,14 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
                             <Tooltip title="Move / Copy">
                               <IconButton size="small" onClick={(e) => openTransferMenu(e, ch.id)}>
                                 <CallSplitIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
+                          {/* Notebook — sheet + notes; owner or admin */}
+                          {editable && (
+                            <Tooltip title="Sheet & Notes">
+                              <IconButton size="small" onClick={() => openNotebook(ch)}>
+                                <MenuBookIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                           )}
@@ -943,49 +997,6 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
               </Box>
             )}
 
-            {/* Private notes section */}
-            {editChar && (() => {
-              const isOwner = editChar.owner_discord_user_id === currentUserId;
-              const hasHiddenNotes = !isOwner && isAdmin && !!editChar.notes;
-              return (
-                <Box>
-                  <FormLabel component="legend" sx={{ mb: 0.5 }}>
-                    Private Notes
-                    {hasHiddenNotes && !editNotesRevealed && (
-                      <Tooltip title="This character has private notes. Click to reveal.">
-                        <IconButton size="small" sx={{ ml: 0.5 }} onClick={() => setEditNotesRevealed(true)}>
-                          <VisibilityIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    {hasHiddenNotes && editNotesRevealed && (
-                      <Tooltip title="Hide notes">
-                        <IconButton size="small" sx={{ ml: 0.5 }} onClick={() => setEditNotesRevealed(false)}>
-                          <VisibilityOffIcon fontSize="small" />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </FormLabel>
-                  {(isOwner || !hasHiddenNotes || editNotesRevealed) ? (
-                    <TextField
-                      multiline
-                      minRows={2}
-                      maxRows={6}
-                      size="small"
-                      fullWidth
-                      placeholder="Only visible to the character owner (and admins who choose to look)."
-                      value={editNotes}
-                      onChange={(e) => setEditNotes(e.target.value)}
-                    />
-                  ) : (
-                    <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
-                      Notes hidden — click the eye icon to reveal.
-                    </Typography>
-                  )}
-                </Box>
-              );
-            })()}
-
             {editError && (
               <Typography variant="caption" color="error">{editError}</Typography>
             )}
@@ -1028,27 +1039,79 @@ function CharactersPanel({ guildId, campaignId, campaignSystem, isAdmin, current
         </DialogActions>
       </Dialog>
 
-      {/* ── Sheet detail modal (read-only stat card) ─────────────────────── */}
-      <Dialog
-        open={sheetDetailChar !== null}
-        onClose={() => setSheetDetailChar(null)}
-        maxWidth="xs"
-        fullWidth
-      >
-        <DialogTitle>
-          {sheetDetailChar?.name ?? 'Character Sheet'}
-        </DialogTitle>
+      {/* ── Notebook dialog (sheet + notes) ──────────────────────────────── */}
+      <Dialog open={notebookChar !== null} onClose={closeNotebook} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ pb: 0 }}>{notebookChar?.name ?? 'Character'}</DialogTitle>
+        <Tabs
+          value={notebookTab}
+          onChange={(_, v) => setNotebookTab(v as number)}
+          sx={{ px: 2, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="Sheet" />
+          <Tab label="Notes" />
+        </Tabs>
         <DialogContent>
-          {sheetDetailChar?.structured_data ? (
-            <CharacterStatCard sheet={sheetDetailChar.structured_data} />
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              No parsed sheet data available.
-            </Typography>
+          {notebookTab === 0 && (
+            notebookChar?.structured_data ? (
+              <CharacterStatCard sheet={notebookChar.structured_data} />
+            ) : (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+                No parsed sheet data available.
+              </Typography>
+            )
           )}
+          {notebookTab === 1 && notebookChar && (() => {
+            const isOwner = notebookChar.owner_discord_user_id === currentUserId;
+            const hasHiddenNotes = !isOwner && isAdmin && !!notebookChar.notes;
+            return (
+              <Box sx={{ pt: 1 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Private — only visible to the owner and admins.
+                  </Typography>
+                  {saveNotesMutation.isPending && <CircularProgress size={14} />}
+                </Stack>
+                {hasHiddenNotes && !notebookNotesRevealed ? (
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                      Notes hidden.
+                    </Typography>
+                    <Tooltip title="Reveal notes">
+                      <IconButton size="small" onClick={() => setNotebookNotesRevealed(true)}>
+                        <VisibilityIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                ) : (
+                  <>
+                    <TextField
+                      multiline
+                      minRows={5}
+                      maxRows={14}
+                      size="small"
+                      fullWidth
+                      placeholder="Jot down anything about this character — backstory, session notes, secrets…"
+                      value={notebookNotes}
+                      onChange={(e) => setNotebookNotes(e.target.value)}
+                      disabled={!isOwner && !isAdmin}
+                    />
+                    {hasHiddenNotes && notebookNotesRevealed && (
+                      <Box sx={{ mt: 0.5 }}>
+                        <Tooltip title="Hide notes">
+                          <IconButton size="small" onClick={() => setNotebookNotesRevealed(false)}>
+                            <VisibilityOffIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    )}
+                  </>
+                )}
+              </Box>
+            );
+          })()}
         </DialogContent>
         <DialogActions>
-          <Button size="small" onClick={() => setSheetDetailChar(null)}>Close</Button>
+          <Button size="small" onClick={closeNotebook}>Close</Button>
         </DialogActions>
       </Dialog>
 

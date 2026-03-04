@@ -26,6 +26,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { useGuildContext } from '../hooks/useGuildContext';
+import { fetchPathbuilderClientSide } from '../utils/pathbuilder';
 import type { Character } from '../types';
 
 const SYSTEM_LABELS: Record<string, string> = {
@@ -64,8 +65,11 @@ export default function CharactersPage() {
     mutationFn: async () => {
       const id = parseInt(pathbuilderId, 10);
       if (isNaN(id)) throw new Error('Invalid Pathbuilder ID');
+      // Fetch Pathbuilder data client-side (browser bypasses Cloudflare bot protection).
+      const pbData = await fetchPathbuilderClientSide(id);
       await client.post(`/api/guilds/${guildId}/characters/link-pathbuilder`, {
         pathbuilder_id: id,
+        pathbuilder_data: pbData,
       });
     },
     onSuccess: () => {
@@ -84,8 +88,14 @@ export default function CharactersPage() {
   });
 
   const syncMutation = useMutation({
-    mutationFn: (id: number) =>
-      client.post(`/api/guilds/${guildId}/characters/${id}/sync-pathbuilder`),
+    mutationFn: async (ch: Character) => {
+      if (!ch.pathbuilder_id) throw new Error('No Pathbuilder ID on this character');
+      // Fetch Pathbuilder data client-side (browser bypasses Cloudflare bot protection).
+      const pbData = await fetchPathbuilderClientSide(ch.pathbuilder_id);
+      return client.post(`/api/guilds/${guildId}/characters/${ch.id}/sync-pathbuilder`, {
+        pathbuilder_data: pbData,
+      });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['guild-characters', guildId] });
     },
@@ -266,7 +276,7 @@ export default function CharactersPage() {
                         size="small"
                         onClick={(e) => {
                           e.stopPropagation();
-                          syncMutation.mutate(ch.id);
+                          syncMutation.mutate(ch);
                         }}
                         disabled={syncMutation.isPending}
                       >
