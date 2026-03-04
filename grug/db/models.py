@@ -165,6 +165,9 @@ class Campaign(Base):
     gold_transactions: Mapped[list["GoldTransaction"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan"
     )
+    session_notes: Mapped[list["SessionNote"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan"
+    )
 
 
 class Character(Base):
@@ -303,6 +306,53 @@ class Document(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
+
+
+class SessionNote(Base):
+    """A session note log entry for a campaign.
+
+    Users submit raw notes (pasted text or uploaded file) which are then
+    cleaned and synthesized by an LLM into ``clean_notes``.  The clean notes
+    are indexed into the RAG vector store so Grug can answer questions about
+    past sessions.
+    """
+
+    __tablename__ = "session_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    campaign_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("campaigns.id"), nullable=False, index=True
+    )
+    # Denormalised for efficient RAG scoping queries without a join.
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    # Optional session date — the in-world or real-world date of the session.
+    session_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    # Raw notes as submitted by the user (unmodified, may be messy).
+    raw_notes: Mapped[str] = mapped_column(Text, nullable=False)
+    # LLM-synthesized clean version of raw_notes.  NULL until synthesis completes.
+    clean_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Lifecycle: 'pending' → 'processing' → 'done' | 'failed'
+    synthesis_status: Mapped[str] = mapped_column(
+        String(32), default="pending", server_default="pending", nullable=False
+    )
+    synthesis_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # documents.id of the indexed RAG entry for clean_notes.  NULL until synthesis.
+    # No FK constraint — consistent with Document.campaign_id pattern.
+    rag_document_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, index=True
+    )
+    submitted_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    campaign: Mapped["Campaign"] = relationship(back_populates="session_notes")
 
 
 class CalendarEvent(Base):

@@ -1,6 +1,6 @@
 """Pydantic response schemas for the API."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from pydantic import BaseModel, computed_field, field_serializer
 
@@ -728,3 +728,45 @@ class GrugNoteOut(BaseModel):
 
 class GrugNoteUpdate(BaseModel):
     content: str
+
+
+class SessionNoteOut(BaseModel):
+    id: int
+    campaign_id: int
+    guild_id: int
+    session_date: date | None = None
+    title: str | None = None
+    raw_notes: str
+    clean_notes: str | None = None
+    synthesis_status: str
+    synthesis_error: str | None = None
+    rag_document_id: int | None = None
+    submitted_by: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("submitted_by", "guild_id")
+    def serialize_snowflakes(self, v: int) -> str:
+        """Return as string to avoid JS precision loss on large Discord snowflake IDs."""
+        return str(v)
+
+
+class SessionNoteCreate(BaseModel):
+    raw_notes: str
+    session_date: date | None = None
+    title: str | None = None
+
+
+class SessionNoteUpdate(BaseModel):
+    raw_notes: str | None = None
+    session_date: date | None = None
+    title: str | None = None
+
+
+class SessionNoteRagTestRequest(BaseModel):
+    """Payload for a live RAG test against indexed session notes."""
+
+    query: str
+    k: int = 5

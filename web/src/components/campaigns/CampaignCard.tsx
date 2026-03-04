@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, TextField, Tooltip, Typography } from '@mui/material';
+import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TuneIcon from '@mui/icons-material/Tune';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,6 +12,7 @@ import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
 import CharacterTable from './CharacterTable';
 import GoldLedgerDialog from './GoldLedgerDialog';
+import SessionNotesTab from './SessionNotesTab';
 import type { Campaign, DiscordChannel, GuildMember } from '../../types';
 
 interface CampaignCardProps {
@@ -78,6 +81,7 @@ export default function CampaignCard({
   const [partyGoldOpen, setPartyGoldOpen] = useState(false);
   const [partyGoldAmount, setPartyGoldAmount] = useState('');
   const [partyGoldReason, setPartyGoldReason] = useState('');
+  const [activeTab, setActiveTab] = useState<'characters' | 'notes'>('characters');
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [goldMenuAnchor, setGoldMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -208,20 +212,56 @@ export default function CampaignCard({
         )}
       </Stack>
 
-      {/* Character table — always visible */}
+      {/* Tab bar */}
+      <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', px: 2 }}>
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          textColor="inherit"
+          TabIndicatorProps={{ style: { height: 2 } }}
+          sx={{ minHeight: 36 }}
+        >
+          <Tab
+            value="characters"
+            label="Characters"
+            icon={<PeopleIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
+          <Tab
+            value="notes"
+            label="Session Notes"
+            icon={<MenuBookIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
+        </Tabs>
+      </Box>
+
+      {/* Tab panels */}
       <Box sx={{ px: 2, py: 1.5 }}>
-        <CharacterTable
-          guildId={c.guild_id}
-          campaignId={c.id}
-          campaignSystem={c.system}
-          isAdmin={isAdmin}
-          currentUserId={currentUserId}
-          allCampaigns={allCampaigns}
-          bankingEnabled={c.banking_enabled}
-          playerBankingEnabled={c.player_banking_enabled}
-          campaignGmId={c.gm_discord_user_id ?? undefined}
-          partyGold={c.party_gold}
-        />
+        {activeTab === 'characters' && (
+          <CharacterTable
+            guildId={c.guild_id}
+            campaignId={c.id}
+            campaignSystem={c.system}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+            allCampaigns={allCampaigns}
+            bankingEnabled={c.banking_enabled}
+            playerBankingEnabled={c.player_banking_enabled}
+            campaignGmId={c.gm_discord_user_id ?? undefined}
+            partyGold={c.party_gold}
+          />
+        )}
+        {activeTab === 'notes' && (
+          <SessionNotesTab
+            guildId={c.guild_id}
+            campaignId={c.id}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
+          />
+        )}
       </Box>
 
       {/* Party gold adjust dialog */}

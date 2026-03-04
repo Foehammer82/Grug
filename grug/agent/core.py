@@ -121,6 +121,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     from grug.agent.tools.scheduling_tools import register_scheduling_tools
 
     from grug.agent.tools.notes_tools import register_notes_tools
+    from grug.agent.tools.session_notes_tools import register_session_notes_tools
 
     register_rag_tools(agent)
     register_scheduling_tools(agent)
@@ -130,6 +131,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_banking_tools(agent)
     register_rules_tools(agent)
     register_notes_tools(agent)
+    register_session_notes_tools(agent)
 
     @agent.tool
     async def get_current_time(ctx: RunContext[GrugDeps]) -> str:

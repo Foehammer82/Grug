@@ -33,8 +33,12 @@ def _extract_text(file_path: Path) -> str:
     For PDFs: uses pypdf for text-layer extraction first.  If the result is
     sparse (scanned/image-only PDF), falls back to tesseract OCR via
     pdf2image + pytesseract.
+
+    For .docx / .doc: uses python-docx to extract paragraph text.
     """
-    if file_path.suffix.lower() == ".pdf":
+    suffix = file_path.suffix.lower()
+
+    if suffix == ".pdf":
         import pypdf
 
         reader = pypdf.PdfReader(io.BytesIO(file_path.read_bytes()))
@@ -50,6 +54,13 @@ def _extract_text(file_path: Path) -> str:
             text = _pdf_ocr(file_path)
 
         return text
+
+    if suffix in {".docx", ".doc"}:
+        import docx
+
+        doc = docx.Document(str(file_path))
+        paragraphs = [p.text for p in doc.paragraphs]
+        return "\n".join(paragraphs)
 
     # Plain text formats (.txt, .md, .rst, etc.)
     return file_path.read_text(encoding="utf-8", errors="replace")

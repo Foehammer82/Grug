@@ -192,6 +192,26 @@ export interface Campaign {
   character_count: number;
 }
 
+/* ── Session Notes ────────────────────────────────────────────────── */
+
+export type SynthesisStatus = 'pending' | 'processing' | 'done' | 'failed';
+
+export interface SessionNote {
+  id: number;
+  campaign_id: number;
+  guild_id: string;
+  session_date: string | null;
+  title: string | null;
+  raw_notes: string;
+  clean_notes: string | null;
+  synthesis_status: SynthesisStatus;
+  synthesis_error: string | null;
+  rag_document_id: number | null;
+  submitted_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 /* ── Characters ───────────────────────────────────────────────────── */
 
 export interface CharacterSheetHP {
