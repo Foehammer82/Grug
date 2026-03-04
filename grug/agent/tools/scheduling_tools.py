@@ -109,7 +109,7 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
             parts.append(f"Recurrence: {rrule}")
         if location:
             parts.append(f"Location: {location}")
-        parts.append("Automatic reminders set for 24 h and 1 h before.")
+        parts.append("Automatic reminders scheduled based on the server's default reminder settings.")
         return "  ".join(parts)
 
     @agent.tool
