@@ -19,7 +19,6 @@ import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { ABILITY_KEYS, SYSTEM_LABELS, abilityMod } from '../constants/character';
 import type { Character } from '../types';
-import { SYSTEM_LABELS } from '../constants';
 
 
 /** PF2e proficiency rank labels (0 = untrained, 1 = trained, ...). */
