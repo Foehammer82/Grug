@@ -10,7 +10,7 @@ from sqlalchemy import select
 
 from grug.bot.cogs.base import GrugCogBase
 from grug.config.settings import get_settings
-from grug.db.models import CalendarEvent, GuildConfig, ScheduledTask
+from grug.db.models import CalendarEvent, ChannelConfig, GuildConfig, ScheduledTask
 from grug.db.session import get_session_factory
 from grug.scheduler.manager import get_scheduler, remove_job
 from grug.utils import ensure_guild
@@ -72,11 +72,85 @@ async def ensure_grug_admin_role(guild: discord.Guild) -> None:
             await session.commit()
 
 
+async def _ensure_announce_channel_enabled(guild: discord.Guild) -> None:
+    """Ensure the guild's announce (default) channel has an enabled ChannelConfig.
+
+    If ``announce_channel_id`` is not yet set on the GuildConfig, falls back to
+    the guild's Discord system channel.  The row is created with ``enabled=True``
+    if it doesn't exist, or updated if it exists but is disabled.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(
+            select(GuildConfig).where(GuildConfig.guild_id == guild.id)
+        )
+        guild_cfg = result.scalar_one_or_none()
+        if guild_cfg is None:
+            return
+
+        # Determine the channel to enable: stored announce_channel_id first,
+        # then fall back to the Discord system channel.
+        channel_id = guild_cfg.announce_channel_id
+        if channel_id is None and guild.system_channel is not None:
+            channel_id = guild.system_channel.id
+            guild_cfg.announce_channel_id = channel_id
+            guild_cfg.updated_at = datetime.now(timezone.utc)
+
+        if channel_id is None:
+            return  # No default channel to enable
+
+        ch_result = await session.execute(
+            select(ChannelConfig).where(ChannelConfig.channel_id == channel_id)
+        )
+        ch_cfg = ch_result.scalar_one_or_none()
+        if ch_cfg is None:
+            ch_cfg = ChannelConfig(
+                guild_id=guild.id,
+                channel_id=channel_id,
+                enabled=True,
+            )
+            session.add(ch_cfg)
+            logger.info(
+                "Auto-enabled announce channel %d for guild %d (%s).",
+                channel_id,
+                guild.id,
+                guild.name,
+            )
+        elif not ch_cfg.enabled:
+            ch_cfg.enabled = True
+            ch_cfg.updated_at = datetime.now(timezone.utc)
+            logger.info(
+                "Re-enabled announce channel %d for guild %d (%s).",
+                channel_id,
+                guild.id,
+                guild.name,
+            )
+
+        await session.commit()
+
+
 class AdminCog(GrugCogBase, name="Admin"):
     """Administrative commands for configuring Grug."""
 
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
+        self._ready_synced = False
+
+    @commands.Cog.listener()
+    async def on_ready(self) -> None:
+        """On (re)connect, ensure the announce channel is enabled for every guild."""
+        if self._ready_synced:
+            return
+        self._ready_synced = True
+        for guild in self.bot.guilds:
+            try:
+                await _ensure_announce_channel_enabled(guild)
+            except Exception:
+                logger.exception(
+                    "Failed to sync announce channel for guild %d (%s)",
+                    guild.id,
+                    guild.name,
+                )
 
     @commands.Cog.listener()
     async def on_guild_join(self, guild: discord.Guild) -> None:
@@ -88,6 +162,16 @@ class AdminCog(GrugCogBase, name="Admin"):
             )
         except Exception:
             logger.exception("Failed to create guild config for guild %d", guild.id)
+
+        # Ensure the guild's default (system) channel is enabled for Grug.
+        try:
+            await _ensure_announce_channel_enabled(guild)
+        except Exception:
+            logger.exception(
+                "Failed to enable announce channel for guild %d (%s)",
+                guild.id,
+                guild.name,
+            )
 
         # Create the grug-admin role (non-fatal if it fails)
         await ensure_grug_admin_role(guild)

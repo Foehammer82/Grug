@@ -69,6 +69,10 @@ class GuildConfig(Base):
 class ChannelConfig(Base):
     """Per-channel configuration — persists settings that would otherwise live in memory.
 
+    ``enabled`` gates Grug's participation in a channel entirely.  When False,
+    Grug ignores all messages in that channel (no passive logging, no responses).
+    When True, the normal auto-respond / @mention logic applies.
+
     ``auto_respond`` enables intelligent auto-response in a channel.  When the
     threshold is 0.0 Grug responds to every message (equivalent to the old
     ``always_respond=True``).  When threshold > 0.0 a lightweight LLM scores
@@ -86,6 +90,11 @@ class ChannelConfig(Base):
     )
     channel_id: Mapped[int] = mapped_column(
         BigInteger, unique=True, nullable=False, index=True
+    )
+    # Master switch — when False, Grug ignores this channel entirely.
+    # Defaults to False; the announce_channel_id for a guild is auto-enabled on setup.
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
     )
     # When True, Grug considers responding to every message here (not just @mentions).
     # When threshold == 0.0, Grug always responds; when threshold > 0.0, a lightweight

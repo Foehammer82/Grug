@@ -54,26 +54,31 @@ async def _is_admin(ctx: RunContext[GrugDeps]) -> bool:
         if grug_user is not None and grug_user.is_super_admin:
             return True
 
-        # Check grug-admin role via Discord bot cache.
+        # Check guild owner + grug-admin role via Discord bot cache.
         guild_cfg = (
             await session.execute(
                 select(GuildConfig).where(GuildConfig.guild_id == guild_id)
             )
         ).scalar_one_or_none()
-        if guild_cfg is not None and guild_cfg.grug_admin_role_id:
+
+        try:
+            import discord
+
+            bot: discord.Client | None = None
             try:
-                import discord
+                from grug.bot.client import get_bot
 
-                bot: discord.Client | None = None
-                try:
-                    from grug.bot.client import get_bot
-
-                    bot = get_bot()
-                except Exception:
-                    pass
-                if bot is not None:
-                    guild = bot.get_guild(guild_id)
-                    if guild is not None:
+                bot = get_bot()
+            except Exception:
+                pass
+            if bot is not None:
+                guild = bot.get_guild(guild_id)
+                if guild is not None:
+                    # Guild owner always has admin rights.
+                    if guild.owner_id == user_id:
+                        return True
+                    # Check grug-admin role if one is configured.
+                    if guild_cfg is not None and guild_cfg.grug_admin_role_id:
                         member = guild.get_member(user_id)
                         if member is not None:
                             if any(
@@ -81,13 +86,13 @@ async def _is_admin(ctx: RunContext[GrugDeps]) -> bool:
                                 for r in member.roles
                             ):
                                 return True
-            except Exception:
-                logger.debug(
-                    "Could not check grug-admin role for user %d in guild %d",
-                    user_id,
-                    guild_id,
-                    exc_info=True,
-                )
+        except Exception:
+            logger.debug(
+                "Could not check guild owner / grug-admin role for user %d in guild %d",
+                user_id,
+                guild_id,
+                exc_info=True,
+            )
     return False
 
 

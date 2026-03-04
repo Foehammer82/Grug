@@ -36,6 +36,7 @@ import { SYSTEM_OPTIONS, systemLabel } from '../constants';
 interface ChannelConfig {
   channel_id: string;
   guild_id: string;
+  enabled: boolean;
   auto_respond: boolean;
   auto_respond_threshold: number;
   updated_at: string;
@@ -232,6 +233,13 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
     enabled: !!guildId,
   });
 
+  // Fetch guild config to identify the default (announce) channel.
+  const { data: guildConfig } = useQuery<GuildConfig>({
+    queryKey: ['config', guildId],
+    queryFn: async () => (await client.get<GuildConfig>(`/api/guilds/${guildId}/config`)).data,
+    enabled: !!guildId,
+  });
+
   const configMap = useMemo(
     () => new Map((channelConfigs ?? []).map((c) => [c.channel_id, c])),
     [channelConfigs],
@@ -299,6 +307,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               <TableHead>
                 <TableRow>
                   <TableCell>Channel</TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap', width: 110 }}>Enabled</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap', width: '55%', minWidth: 320 }}>
                     Auto Respond
                   </TableCell>
@@ -307,7 +316,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               <TableBody>
                 {filtered.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={2}>
+                    <TableCell colSpan={3}>
                       <Typography variant="body2" color="text.secondary">
                         No channels found.
                       </Typography>
@@ -316,17 +325,47 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                 ) : (
                   filtered.map((ch) => {
                     const cfg = configMap.get(ch.id);
+                    const isEnabled = cfg?.enabled ?? false;
                     const autoRespond = cfg?.auto_respond ?? false;
                     const threshold =
                       pendingThresholds[ch.id] ?? cfg?.auto_respond_threshold ?? 0.1;
                     const sliderIndex = thresholdToIndex(threshold);
+                    const isDefault = ch.id === guildConfig?.announce_channel_id;
                     return (
                       <TableRow key={ch.id} hover>
                         <TableCell>
-                          <Typography variant="body2">#{ch.name}</Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                            <Typography variant="body2">#{ch.name}</Typography>
+                            {isDefault && (
+                              <Chip label="Default" size="small" color="primary" variant="outlined" />
+                            )}
+                          </Box>
                         </TableCell>
+                        {/* Enabled master switch */}
                         <TableCell sx={{ py: 1 }}>
-                          <Stack spacing={0}>
+                          <Tooltip
+                            title={
+                              isEnabled
+                                ? 'Grug is active in this channel'
+                                : 'Grug ignores this channel (even @mentions)'
+                            }
+                          >
+                            <Switch
+                              size="small"
+                              checked={isEnabled}
+                              onChange={(_, checked) =>
+                                channelMutation.mutate({
+                                  channelId: ch.id,
+                                  patch: { enabled: checked },
+                                })
+                              }
+                              disabled={channelMutation.isPending || !!configsError}
+                            />
+                          </Tooltip>
+                        </TableCell>
+                        {/* Auto-respond (only relevant when enabled) */}
+                        <TableCell sx={{ py: 1 }}>
+                          <Stack spacing={0} sx={{ opacity: isEnabled ? 1 : 0.35 }}>
                             {/* Toggle row */}
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Tooltip
@@ -345,7 +384,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                       patch: { auto_respond: checked },
                                     })
                                   }
-                                  disabled={channelMutation.isPending || configsError}
+                                  disabled={!isEnabled || channelMutation.isPending || !!configsError}
                                 />
                               </Tooltip>
                               <Typography variant="caption" color="text.secondary">
@@ -353,7 +392,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                               </Typography>
                             </Box>
                             {/* Slider row — only when on */}
-                            {autoRespond && (
+                            {autoRespond && isEnabled && (
                               <Box
                                 sx={{
                                   // Indent to align with switch thumb centre;
@@ -392,7 +431,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                       patch: { auto_respond_threshold: realValue },
                                     });
                                   }}
-                                  disabled={channelMutation.isPending || configsError}
+                                  disabled={channelMutation.isPending || !!configsError}
                                 />
                               </Box>
                             )}

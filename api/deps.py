@@ -55,6 +55,12 @@ class _BoundedTTLCache:
 _ROLE_CACHE = _BoundedTTLCache(maxsize=_ROLE_CACHE_MAXSIZE, ttl=_ROLE_CACHE_TTL)
 
 # ---------------------------------------------------------------------------
+# Bounded in-memory cache for guild owner lookups.
+# Key: guild_id_str -> (owner_id_str, timestamp)
+# ---------------------------------------------------------------------------
+_GUILD_OWNER_CACHE: dict[str, tuple[str, float]] = {}
+
+# ---------------------------------------------------------------------------
 # Bounded in-memory cache for guild membership checks.
 # Key: (guild_id, user_id) -> (is_member: bool, timestamp: float)
 # ---------------------------------------------------------------------------
@@ -296,20 +302,62 @@ async def _check_role_match(guild_id_str: str, member_roles: list[str]) -> bool:
         return str(role_id) in member_roles
 
 
+async def _is_guild_owner(guild_id: int | str, user_id: str) -> bool:
+    """Return True if *user_id* is the owner of *guild_id*.
+
+    Fetches the guild from the Discord API and caches the ``owner_id`` for
+    5 minutes to avoid repeated lookups.
+    """
+    guild_id_str = str(guild_id)
+    now = time.time()
+
+    cached = _GUILD_OWNER_CACHE.get(guild_id_str)
+    if cached is not None and (now - cached[1]) < _ROLE_CACHE_TTL:
+        return cached[0] == user_id
+
+    try:
+        bot_token = get_bot_token()
+        async with httpx.AsyncClient(timeout=3.0) as http:
+            resp = await http.get(
+                f"https://discord.com/api/v10/guilds/{guild_id_str}",
+                headers={"Authorization": f"Bot {bot_token}"},
+            )
+        if resp.status_code == 200:
+            owner_id = str(resp.json().get("owner_id", ""))
+            if len(_GUILD_OWNER_CACHE) >= _ROLE_CACHE_MAXSIZE:
+                del _GUILD_OWNER_CACHE[next(iter(_GUILD_OWNER_CACHE))]
+            _GUILD_OWNER_CACHE[guild_id_str] = (owner_id, now)
+            return owner_id == user_id
+    except HTTPException:
+        pass  # Bot token not configured
+    except Exception:
+        logger.warning(
+            "Failed to check guild owner for guild %s",
+            guild_id_str,
+            exc_info=True,
+        )
+
+    return False
+
+
 async def is_guild_admin(guild_id: int | str, user: dict[str, Any]) -> bool:
     """Check if the user has admin access to a guild.
 
     Admin access is granted if any of the following are true:
     1. The user is a Grug super-admin (env var or DB flag).
-    2. The user has the ``grug-admin`` role in the Discord guild (live check).
+    2. The user is the Discord guild owner.
+    3. The user has the ``grug-admin`` role in the Discord guild (live check).
 
     Note: Discord ADMINISTRATOR permission bits are no longer read from the JWT
     to avoid stale-permission escalation.  Discord server admins who are not
-    Grug super-admins must be assigned the ``grug-admin`` role via guild config.
+    the guild owner or a Grug super-admin must be assigned the ``grug-admin``
+    role via guild config.
     """
     if await is_super_admin_full(user):
         return True
     user_id = str(user.get("sub", user.get("id", "")))
+    if await _is_guild_owner(guild_id, user_id):
+        return True
     return await _has_grug_admin_role(guild_id, user_id)
 
 

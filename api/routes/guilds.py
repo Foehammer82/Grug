@@ -137,6 +137,23 @@ async def get_guild_config(
                     cfg.updated_at = datetime.now(timezone.utc)
                     await db.commit()
                     await db.refresh(cfg)
+                    # Auto-enable the default channel so Grug responds there immediately.
+                    ch_result = await db.execute(
+                        select(ChannelConfig).where(
+                            ChannelConfig.channel_id == cfg.announce_channel_id
+                        )
+                    )
+                    ch_cfg = ch_result.scalar_one_or_none()
+                    if ch_cfg is None:
+                        ch_cfg = ChannelConfig(
+                            guild_id=guild_id,
+                            channel_id=cfg.announce_channel_id,
+                            enabled=True,
+                        )
+                        db.add(ch_cfg)
+                    else:
+                        ch_cfg.enabled = True
+                    await db.commit()
         except HTTPException:
             pass  # Bot token not configured — non-fatal
         except Exception:
@@ -175,6 +192,27 @@ async def update_guild_config(
     cfg.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(cfg)
+
+    # Auto-enable the announce_channel_id whenever it's set so Grug can
+    # respond in his default channel out of the box.
+    if "announce_channel_id" in body.model_fields_set and cfg.announce_channel_id:
+        result = await db.execute(
+            select(ChannelConfig).where(
+                ChannelConfig.channel_id == cfg.announce_channel_id
+            )
+        )
+        ch_cfg = result.scalar_one_or_none()
+        if ch_cfg is None:
+            ch_cfg = ChannelConfig(
+                guild_id=guild_id,
+                channel_id=cfg.announce_channel_id,
+                enabled=True,
+            )
+            db.add(ch_cfg)
+        else:
+            ch_cfg.enabled = True
+        await db.commit()
+
     return cfg
 
 
@@ -387,6 +425,8 @@ async def update_channel_config(
         await ensure_guild(guild_id)
         cfg = ChannelConfig(guild_id=guild_id, channel_id=channel_id)
         db.add(cfg)
+    if "enabled" in body.model_fields_set:
+        cfg.enabled = body.enabled
     if "auto_respond" in body.model_fields_set:
         cfg.auto_respond = body.auto_respond
     if (

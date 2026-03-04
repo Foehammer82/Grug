@@ -59,6 +59,7 @@ class GuildConfigUpdate(BaseModel):
 class ChannelConfigOut(BaseModel):
     channel_id: int
     guild_id: int
+    enabled: bool
     auto_respond: bool
     auto_respond_threshold: float
     updated_at: datetime
@@ -71,6 +72,8 @@ class ChannelConfigOut(BaseModel):
 
 
 class ChannelConfigUpdate(BaseModel):
+    # Master switch — when False, Grug ignores this channel entirely.
+    enabled: bool | None = None
     auto_respond: bool | None = None
     # Must be in the range [0.0, 1.0].
     auto_respond_threshold: float | None = None

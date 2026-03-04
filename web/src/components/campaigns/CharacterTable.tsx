@@ -10,7 +10,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  IconButton,
   Stack,
   Table,
   TableBody,
@@ -20,7 +19,7 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material';
-import EditIcon from '@mui/icons-material/Edit';
+import MonetizationOnIcon from '@mui/icons-material/MonetizationOn'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import client from '../../api/client';
 import GuildMemberCell from './GuildMemberCell';
@@ -288,22 +287,32 @@ export default function CharacterTable({
                     return (
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         {canSee ? (
-                          <Stack direction="row" alignItems="center" spacing={0.25}>
-                            <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                              {(ch.gold ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} gp
-                            </Typography>
-                            {canManage && (
-                              <Tooltip title="Manage gold" placement="top">
-                                <IconButton
-                                  size="small"
-                                  sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, p: 0.25 }}
-                                  onClick={() => setGoldChar(ch)}
-                                >
-                                  <EditIcon sx={{ fontSize: 12 }} />
-                                </IconButton>
-                              </Tooltip>
-                            )}
-                          </Stack>
+                          <Tooltip
+                            title={canManage ? 'Manage gold' : ''}
+                            placement="top"
+                          >
+                            <Chip
+                              size="small"
+                              variant="outlined"
+                              icon={
+                                <MonetizationOnIcon
+                                  sx={{ fontSize: '13px !important', color: 'warning.main !important' }}
+                                />
+                              }
+                              label={
+                                `${(ch.gold ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })} gp`
+                              }
+                              onClick={canManage ? () => setGoldChar(ch) : undefined}
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                fontVariantNumeric: 'tabular-nums',
+                                color: 'warning.main',
+                                borderColor: 'warning.main',
+                                cursor: canManage ? 'pointer' : 'default',
+                              }}
+                            />
+                          </Tooltip>
                         ) : (
                           <Typography variant="body2" color="text.disabled">&mdash;</Typography>
                         )}
