@@ -664,7 +664,7 @@ class GrugNoteOut(BaseModel):
         return str(v) if v is not None else None
 
     @field_serializer("user_id", "updated_by")
-    def serialize_snowflake(self, v: int | None) -> str | None:
+    def serialize_user_ids(self, v: int | None) -> str | None:
         return str(v) if v is not None else None
 
 
