@@ -268,19 +268,67 @@ class TestIsGuildAdmin:
 
 
 class TestAssertGuildMember:
-    def test_passes_for_member(self):
+    def setup_method(self):
+        """Clear the member cache before each test to avoid state leakage."""
+        import api.deps as deps
+
+        deps._MEMBER_CACHE.clear()
+
+    @pytest.mark.asyncio
+    async def test_passes_for_member(self, monkeypatch):
+        monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "")
+        import grug.config.settings as s
+
+        s.get_settings.cache_clear()
         from api.deps import assert_guild_member
 
-        user = _user(guilds=[_guild("999")])
-        assert_guild_member("999", user)  # should not raise
+        user = _user()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        with (
+            patch("api.deps.httpx.AsyncClient", return_value=mock_client),
+            patch("api.deps.get_bot_token", return_value="fake-token"),
+        ):
+            await assert_guild_member("999", user)  # should not raise
 
-    def test_raises_403_for_non_member(self):
+    @pytest.mark.asyncio
+    async def test_raises_403_for_non_member(self, monkeypatch):
+        monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "")
+        import grug.config.settings as s
+
+        s.get_settings.cache_clear()
         from api.deps import assert_guild_member
 
-        user = _user(guilds=[_guild("111")])
-        with pytest.raises(HTTPException) as exc_info:
-            assert_guild_member("999", user)
-        assert exc_info.value.status_code == 403
+        user = _user()
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        with (
+            patch("api.deps.httpx.AsyncClient", return_value=mock_client),
+            patch("api.deps.get_bot_token", return_value="fake-token"),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                await assert_guild_member("999", user)
+            assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_super_admin_bypasses_check(self, monkeypatch):
+        monkeypatch.setenv("GRUG_SUPER_ADMIN_IDS", "42")
+        import grug.config.settings as s
+
+        s.get_settings.cache_clear()
+        from api.deps import assert_guild_member
+
+        user = _user("42")
+        # No bot token needed — super-admins bypass the Discord check entirely
+        await assert_guild_member("999", user)  # should not raise
 
 
 # ---------------------------------------------------------------------------

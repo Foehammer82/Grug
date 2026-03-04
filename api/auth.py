@@ -42,7 +42,7 @@ def build_discord_oauth_url(state: str) -> str:
         f"client_id={settings.discord_client_id}"
         f"&redirect_uri={settings.discord_redirect_uri}"
         "&response_type=code"
-        f"&scope=identify+guilds"
+        "&scope=identify"
         f"&state={state}"
     )
     return f"https://discord.com/api/oauth2/authorize?{params}"
@@ -72,17 +72,6 @@ async def fetch_discord_user(access_token: str) -> dict[str, Any]:
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{DISCORD_API}/users/@me",
-            headers={"Authorization": f"Bearer {access_token}"},
-        )
-        resp.raise_for_status()
-        return resp.json()
-
-
-async def fetch_discord_guilds(access_token: str) -> list[dict[str, Any]]:
-    """Fetch the guilds the authenticated user belongs to."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            f"{DISCORD_API}/users/@me/guilds",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         resp.raise_for_status()

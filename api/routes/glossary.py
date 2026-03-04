@@ -33,7 +33,7 @@ async def list_glossary_terms(
     db: AsyncSession = Depends(get_db),
 ) -> list[GlossaryTerm]:
     """List glossary terms for a guild. Pass ``?channel_id=`` to scope by channel."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     stmt = select(GlossaryTerm).where(GlossaryTerm.guild_id == guild_id)
     if channel_id is not None:
         stmt = stmt.where(GlossaryTerm.channel_id == channel_id)
@@ -52,7 +52,7 @@ async def create_glossary_term(
     db: AsyncSession = Depends(get_db),
 ) -> GlossaryTerm:
     """Create a human-authored glossary term."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     now = datetime.now(timezone.utc)
     term = GlossaryTerm(
@@ -82,7 +82,7 @@ async def update_glossary_term(
     db: AsyncSession = Depends(get_db),
 ) -> GlossaryTerm:
     """Update a glossary term — saves a history snapshot and clears ai_generated."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     term = await get_or_404(
         db,
@@ -123,7 +123,7 @@ async def delete_glossary_term(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a glossary term."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     term = await get_or_404(
         db,
@@ -147,7 +147,7 @@ async def get_glossary_term_history(
     db: AsyncSession = Depends(get_db),
 ) -> list[GlossaryTermHistory]:
     """Retrieve the full change history for a glossary term."""
-    assert_guild_member(guild_id, user)
+    await assert_guild_member(guild_id, user)
     # Verify the term exists
     await get_or_404(
         db,
