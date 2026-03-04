@@ -6,7 +6,6 @@ import {
   Autocomplete,
   Box,
   Button,
-  Chip,
   CircularProgress,
   Collapse,
   Dialog,
@@ -449,14 +448,30 @@ export default function CampaignsPage() {
         <DialogTitle>Edit Campaign</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Name"
-              size="small"
-              required
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              fullWidth
-            />
+            <Stack direction="row" spacing={2} alignItems="center">
+              <TextField
+                label="Name"
+                size="small"
+                required
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+                sx={{ flex: 1 }}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={editActive}
+                    onChange={(e) => setEditActive(e.target.checked)}
+                  />
+                }
+                label={editActive ? 'Active' : 'Inactive'}
+                slotProps={{ typography: { variant: 'body2', fontWeight: 500 } }}
+                sx={{ flexShrink: 0 }}
+              />
+            </Stack>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
+              Inactive campaigns are hidden from players and Grug won&apos;t track context in their channel.
+            </Typography>
             <Autocomplete
               size="small"
               freeSolo
@@ -499,18 +514,7 @@ export default function CampaignsPage() {
                 <TextField {...params} label="Channel" />
               )}
             />
-            <Box>
-              <Chip
-                label={editActive ? 'Active' : 'Inactive'}
-                size="small"
-                color={editActive ? 'success' : 'default'}
-                onClick={() => setEditActive((v) => !v)}
-                sx={{ cursor: 'pointer' }}
-              />
-              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                Click to toggle
-              </Typography>
-            </Box>
+
             <Autocomplete
               size="small"
               fullWidth

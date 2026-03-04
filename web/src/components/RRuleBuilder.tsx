@@ -99,7 +99,7 @@ function buildRrule(parts: RRuleParts): string {
 }
 
 /** Human-readable description of the RRULE. */
-function describeRrule(rrule: string): string {
+export function describeRrule(rrule: string): string {
   if (!rrule) return '';
   const p = parseRrule(rrule);
 

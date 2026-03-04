@@ -35,7 +35,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import RepeatIcon from '@mui/icons-material/Repeat';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
-import RRuleBuilder from '../RRuleBuilder';
+import RRuleBuilder, { describeRrule } from '../RRuleBuilder';
 import type { CalendarEvent, DiscordChannel, EventRSVP, GuildMember, RSVPStatus } from '../../types';
 
 /* ──────────────────────────────────────────────────────────────────── */
@@ -454,13 +454,22 @@ export default function CampaignScheduleTab({
     <Box>
       {/* Header */}
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-        <Typography variant="body2" color="text.secondary">
-          {upcoming.length === 0
-            ? hasSchedule
-              ? 'No upcoming sessions in schedule.'
-              : 'No schedule set up yet.'
-            : `Next ${upcoming.length} upcoming session${upcoming.length !== 1 ? 's' : ''}`}
-        </Typography>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
+            {upcoming.length === 0
+              ? hasSchedule
+                ? 'No upcoming sessions in schedule.'
+                : 'No schedule set up yet.'
+              : `Next ${upcoming.length} upcoming session${upcoming.length !== 1 ? 's' : ''}`}
+          </Typography>
+          {hasSchedule && baseEvent && (
+            <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.25 }}>
+              {baseEvent.rrule
+                ? `${describeRrule(baseEvent.rrule)} at ${new Date(baseEvent.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: timezone || undefined })}`
+                : `One-off on ${new Date(baseEvent.start_time).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric', timeZone: timezone || undefined })} at ${new Date(baseEvent.start_time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: timezone || undefined })}`}
+            </Typography>
+          )}
+        </Box>
 
         {isGm && (
           <Stack direction="row" spacing={0.5} alignItems="center">

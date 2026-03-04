@@ -360,9 +360,18 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId }: Di
   );
 }
 
+/** Match the first NdN die in an expression to a DICE_OPTIONS color. */
+function getDieColor(expression: string): string | undefined {
+  const match = expression.match(/d(\d+)/i);
+  if (!match) return undefined;
+  const sides = parseInt(match[1], 10);
+  return DICE_OPTIONS.find((d) => d.sides === sides)?.color;
+}
+
 /** A single row in the roll history list. */
 function RollHistoryRow({ roll, currentUserId }: { roll: DiceRoll; currentUserId: string }) {
   const isOwn = roll.roller_discord_user_id === currentUserId;
+  const exprColor = getDieColor(roll.expression);
 
   return (
     <Stack
@@ -381,9 +390,16 @@ function RollHistoryRow({ roll, currentUserId }: { roll: DiceRoll; currentUserId
         {timeAgo(roll.created_at)}
       </Typography>
 
-      <Typography variant="body2" fontWeight={500} noWrap sx={{ minWidth: 80, maxWidth: 120 }}>
-        {roll.character_name ?? roll.roller_display_name}
-      </Typography>
+      <Box sx={{ minWidth: 80, maxWidth: 140, flexShrink: 0 }}>
+        <Typography variant="body2" fontWeight={500} noWrap>
+          {roll.roller_display_name}
+        </Typography>
+        {roll.character_name && (
+          <Typography variant="caption" color="text.disabled" noWrap sx={{ display: 'block', lineHeight: 1.1 }}>
+            as {roll.character_name}
+          </Typography>
+        )}
+      </Box>
 
       <Chip
         label={ROLL_TYPE_LABELS[roll.roll_type] ?? roll.roll_type}
@@ -392,9 +408,22 @@ function RollHistoryRow({ roll, currentUserId }: { roll: DiceRoll; currentUserId
         sx={{ height: 18, fontSize: '0.6rem', flexShrink: 0 }}
       />
 
-      <Typography variant="body2" color="text.secondary" noWrap sx={{ flex: 1 }}>
-        {roll.expression}
-      </Typography>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Chip
+          label={roll.expression}
+          size="small"
+          sx={{
+            height: 22,
+            fontSize: '0.72rem',
+            fontWeight: 700,
+            fontFamily: 'monospace',
+            bgcolor: exprColor ? `${exprColor}22` : 'action.hover',
+            color: exprColor ?? 'text.secondary',
+            border: '1px solid',
+            borderColor: exprColor ? `${exprColor}66` : 'divider',
+          }}
+        />
+      </Box>
 
       <Typography variant="body2" fontWeight={700} sx={{ minWidth: 36, textAlign: 'right' }}>
         {roll.total}
