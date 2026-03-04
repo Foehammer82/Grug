@@ -184,17 +184,6 @@ async def assert_can_invite(user: dict[str, Any]) -> None:
         )
 
 
-def _has_guild_admin_permission(guild_id: int | str, user: dict[str, Any]) -> bool:
-    """Deprecated — always returns False.
-
-    The ``permissions`` field was removed from the JWT in the CSRF-state fix
-    (short-lived state cookie).  Guild admin access is now determined via live
-    Discord role checks only, so stale JWT permission bits can no longer be
-    used to gain elevated access.
-    """
-    return False
-
-
 async def _has_grug_admin_role(guild_id: int | str, user_id: str) -> bool:
     """Check if a Discord user has the grug-admin role in a guild.
 

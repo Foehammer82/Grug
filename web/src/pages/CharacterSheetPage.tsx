@@ -20,14 +20,9 @@ import SyncIcon from '@mui/icons-material/Sync';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import type { Character } from '../types';
+import { SYSTEM_LABELS } from '../constants';
 
 const ABILITY_KEYS = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] as const;
-
-const SYSTEM_LABELS: Record<string, string> = {
-  pf2e: 'Pathfinder 2E',
-  dnd5e: 'D&D 5e',
-  unknown: 'Unknown',
-};
 
 /** PF2e proficiency rank labels (0 = untrained, 1 = trained, ...). */
 const PROF_RANKS = ['Untrained', 'Trained', 'Expert', 'Master', 'Legendary'] as const;

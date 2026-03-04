@@ -91,50 +91,6 @@ class TestSuperAdmin:
 
 
 # ---------------------------------------------------------------------------
-# _has_guild_admin_permission
-# ---------------------------------------------------------------------------
-
-
-class TestGuildAdminPermission:
-    def test_admin_bit_set(self):
-        """Deprecated: _has_guild_admin_permission always returns False now.
-
-        The ``permissions`` field was removed from the JWT to prevent stale
-        permission escalation.  This function is kept for backward-compat but
-        always returns False regardless of the user payload.
-        """
-        from api.deps import _has_guild_admin_permission
-
-        user = _user(guilds=[_guild("999", permissions=0x8)])
-        assert _has_guild_admin_permission("999", user) is False
-
-    def test_admin_bit_not_set(self):
-        from api.deps import _has_guild_admin_permission
-
-        user = _user(guilds=[_guild("999", permissions=0x0)])
-        assert _has_guild_admin_permission("999", user) is False
-
-    def test_admin_bit_combined_flags(self):
-        """Deprecated: always False regardless of permission bits."""
-        from api.deps import _has_guild_admin_permission
-
-        user = _user(guilds=[_guild("999", permissions=0x8 | 0x10 | 0x20)])
-        assert _has_guild_admin_permission("999", user) is False
-
-    def test_wrong_guild(self):
-        from api.deps import _has_guild_admin_permission
-
-        user = _user(guilds=[_guild("111", permissions=0x8)])
-        assert _has_guild_admin_permission("999", user) is False
-
-    def test_no_guilds(self):
-        from api.deps import _has_guild_admin_permission
-
-        user = _user(guilds=[])
-        assert _has_guild_admin_permission("999", user) is False
-
-
-# ---------------------------------------------------------------------------
 # has_can_invite
 # ---------------------------------------------------------------------------
 
