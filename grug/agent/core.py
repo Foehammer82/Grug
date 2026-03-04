@@ -46,6 +46,7 @@ class GrugDeps:
     campaign_id: int | None = None
     active_character_id: int | None = None
     is_dm_session: bool = False
+    default_ttrpg_system: str | None = None
 
 
 # ------------------------------------------------------------------
@@ -71,9 +72,21 @@ def _build_agent() -> Agent[GrugDeps, str]:
     )
 
     @agent.system_prompt(dynamic=True)
-    def _system_prompt(_ctx: RunContext[GrugDeps]) -> str:  # noqa: ARG001
+    def _system_prompt(ctx: RunContext[GrugDeps]) -> str:
         """Re-evaluate on every run (dynamic=True) so `now` is always current."""
-        return SYSTEM_PROMPT.format(now=datetime.now(timezone.utc).isoformat())
+        default_system = ctx.deps.default_ttrpg_system
+        if default_system:
+            default_system_line = (
+                f"This server default game system: {default_system}. "
+                "Grug know this. Grug use this for all rule lookups unless "
+                "friend ask about different game."
+            )
+        else:
+            default_system_line = ""
+        return SYSTEM_PROMPT.format(
+            now=datetime.now(timezone.utc).isoformat(),
+            default_ttrpg_system_line=default_system_line,
+        )
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
     from grug.agent.tools.character_tools import register_character_tools
@@ -436,6 +449,25 @@ class GrugAgent:
             # notes appear before the actual conversation history.
             history = history[:2] + notes_messages + history[2:]
 
+        # Pre-load the guild's default TTRPG system so the agent can act on
+        # it immediately without asking the user which game they play.
+        default_ttrpg_system: str | None = None
+        try:
+            from grug.db.models import GuildConfig as _GuildConfig
+            from grug.db.session import get_session_factory as _get_session_factory
+            from sqlalchemy import select as _select
+
+            _factory = _get_session_factory()
+            async with _factory() as _session:
+                _result = await _session.execute(
+                    _select(_GuildConfig.default_ttrpg_system).where(
+                        _GuildConfig.guild_id == guild_id
+                    )
+                )
+                default_ttrpg_system = _result.scalar_one_or_none()
+        except Exception:
+            logger.warning("Failed to load default_ttrpg_system for guild %d", guild_id)
+
         deps = GrugDeps(
             guild_id=guild_id,
             channel_id=channel_id,
@@ -444,6 +476,7 @@ class GrugAgent:
             campaign_id=campaign_id,
             active_character_id=active_character_id,
             is_dm_session=is_dm_session,
+            default_ttrpg_system=default_ttrpg_system,
         )
 
         try:
