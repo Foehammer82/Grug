@@ -6,7 +6,7 @@ construction and the ``GrugAgent`` orchestration wrapper.
 """
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from pydantic_ai import Agent, RunContext
@@ -49,6 +49,19 @@ class GrugDeps:
     default_ttrpg_system: str | None = None
     # Pre-loaded campaign summary injected into the system prompt.
     campaign_context: str | None = None
+    # Files to DM to the user after the response is sent.
+    # Populated by agent tools (e.g. export_character_pdf_tool).
+    # Each entry is (filename, pdf_bytes).
+    _pending_dm_files: list[tuple[str, bytes]] = field(default_factory=list)
+
+
+@dataclass
+class AgentResponse:
+    """Result returned by :meth:`GrugAgent.respond`."""
+
+    text: str
+    #: Files the bot should DM to the requesting user.
+    dm_files: list[tuple[str, bytes]] = field(default_factory=list)
 
 
 # ------------------------------------------------------------------
@@ -99,6 +112,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
         )
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.
+    from grug.agent.tools.campaign_tools import register_campaign_tools
     from grug.agent.tools.character_tools import register_character_tools
     from grug.agent.tools.glossary_tools import register_glossary_tools
     from grug.agent.tools.rag_tools import register_rag_tools
@@ -111,6 +125,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_scheduling_tools(agent)
     register_glossary_tools(agent)
     register_character_tools(agent)
+    register_campaign_tools(agent)
     register_rules_tools(agent)
     register_notes_tools(agent)
 
@@ -422,7 +437,7 @@ class GrugAgent:
         active_character_id: int | None = None,
         is_dm_session: bool = False,
         context_cutoff: datetime | None = None,
-    ) -> str:
+    ) -> AgentResponse:
         """Process a user message and return Grug's response."""
         try:
             # Load history BEFORE saving the current message so the incoming
@@ -571,4 +586,7 @@ class GrugAgent:
         except Exception as exc:
             logger.exception("Failed to save assistant message: %s", exc)
 
-        return response_text
+        return AgentResponse(
+            text=response_text,
+            dm_files=list(deps._pending_dm_files),
+        )

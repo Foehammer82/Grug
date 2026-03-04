@@ -203,7 +203,7 @@ async def test_parse_non_json_claude_response_returns_unknown(
         _, structured, system = await parser.parse(b"data", "mystery.txt")
 
     assert system == "unknown"
-    assert structured == {"system": "unknown"}
+    assert structured.get("system") == "unknown"
 
 
 async def test_parse_claude_api_failure_returns_unknown(

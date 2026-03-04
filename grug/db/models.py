@@ -731,12 +731,8 @@ class GrugNote(Base):
     __tablename__ = "grug_notes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    guild_id: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True, index=True
-    )
-    user_id: Mapped[int | None] = mapped_column(
-        BigInteger, nullable=True, index=True
-    )
+    guild_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     updated_by: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(

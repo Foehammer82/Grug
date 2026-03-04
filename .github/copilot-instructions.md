@@ -76,6 +76,19 @@ For the full command reference and pgvector-specific patterns, consult the `alem
 - Do not break backward compatibility without a clear migration path and documentation.
 - **Never run git commands (commit, push, add, rebase, merge, etc.) unless the user explicitly asks.** Completing a code change does not imply permission to commit it.
 
+## Dual-Surface Development
+
+Every user-facing feature in Grug must work through **both** surfaces:
+
+1. **Discord** — via agent tools (pydantic-ai) and/or slash commands (discord.py cogs)
+2. **Web dashboard** — via FastAPI API endpoints and React UI components
+
+When implementing a new feature, always consider both surfaces. A feature that only works in one surface is incomplete. Put shared business logic in a `grug/` service module so both the API route and the agent tool call the same function.
+
+### DM delivery for sensitive data
+
+Character sheets, private notes, and other sensitive data must not be posted publicly in a Discord channel. Agent tools that produce files append them to `ctx.deps._pending_dm_files` and prefix their response with `[DM_FILE:filename]`. The bot's `_deliver_response()` helper strips these sentinels and DMs the files to the requesting user. See the `dual-surface-features` skill (`.github/skills/dual-surface-features/SKILL.md`) for full patterns and checklist.
+
 ## Domain Concepts — Context Awareness
 
 Grug passively logs **every** non-bot guild message to `conversation_messages` with `is_passive=True` so he stays context-aware in channels even when not @mentioned. When he actually responds, the message is saved with `is_passive=False` (the default).
@@ -189,6 +202,19 @@ Transfer (move) a character between campaigns uses the existing `PATCH /api/guil
 | `GuildMemberCell` | Renders guild member avatar + display name with loading/error states |
 
 Shared constants live in `web/src/constants/character.ts` (`SYSTEM_OPTIONS`, `SYSTEM_LABELS`, `ABILITY_KEYS`, `SHEET_ACCEPTED`, `MAX_SHEET_MB`, `abilityMod()`).
+
+### Agent tools (campaigns & characters)
+
+Campaign and character tools are registered by `register_campaign_tools()` in `grug/agent/tools/campaign_tools.py`. Two tools:
+
+| Tool | What it does | Access |
+|---|---|---|
+| `get_campaign_info` | Returns campaign name, system, status, and party roster | Everyone |
+| `get_party_character` | Looks up a specific character by name in the current campaign | Own character → full sheet; other's character → public summary only; admin → full access |
+
+Admin detection uses `_is_admin()` helper that checks (1) `GRUG_SUPER_ADMIN_IDS` env, (2) `GrugUser.is_super_admin` DB flag, (3) Discord `grug-admin` role via bot cache.
+
+The existing `register_character_tools()` (`character_tools.py`) handles `get_character_sheet` and `search_character_knowledge` — both read-only, scoped to the requesting user's **active character** via `UserProfile.active_character_id`. Character data is never modified by Grug; it is ingested on upload or Pathbuilder sync and queried for context.
 
 **Reminders and scheduled tasks are the same concept.** There is no separate `Reminder` model. Everything lives in the `ScheduledTask` ORM model (`grug/db/models.py`, table `scheduled_tasks`) with a `type` discriminator:
 

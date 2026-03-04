@@ -46,6 +46,8 @@ def test_grug_deps_fields():
         "active_character_id",
         "is_dm_session",
         "default_ttrpg_system",
+        "campaign_context",
+        "_pending_dm_files",
     }
 
 
