@@ -99,6 +99,23 @@ async def _get_encounter_or_404(db: AsyncSession, encounter_id: int) -> Encounte
     return enc
 
 
+async def _assert_gm_or_admin(
+    db: AsyncSession,
+    guild_id: int,
+    campaign_id: int,
+    user: dict[str, Any],
+) -> None:
+    """Raise 403 unless the user is a guild admin or the campaign GM."""
+    user_id = int(user["id"])
+    admin = await is_guild_admin(guild_id, user)
+    if not admin:
+        campaign = await _get_campaign(db, guild_id, campaign_id)
+        if campaign.gm_discord_user_id != user_id:
+            raise HTTPException(
+                status_code=403, detail="Only GM or admin can modify encounters"
+            )
+
+
 # ── Encounter CRUD ───────────────────────────────────────────────────
 
 
@@ -275,6 +292,7 @@ async def add_combatant_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     combatant = await add_combatant(
         db,
@@ -308,6 +326,7 @@ async def remove_combatant_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     try:
         await remove_combatant(db, encounter_id, combatant_id)
@@ -335,6 +354,7 @@ async def roll_initiative_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     try:
         await roll_all_initiative(db, encounter_id)
@@ -362,6 +382,7 @@ async def roll_combatant_initiative_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     try:
         c = await roll_combatant_initiative(db, combatant_id)
@@ -459,6 +480,7 @@ async def start_encounter_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     try:
         enc = await start_encounter(db, encounter_id)
@@ -485,6 +507,7 @@ async def advance_turn_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     try:
         enc, _ = await advance_turn(db, encounter_id)
@@ -511,6 +534,7 @@ async def end_encounter_route(
     enc = await _get_encounter_or_404(db, encounter_id)
     if enc.campaign_id != campaign_id or enc.guild_id != guild_id:
         raise HTTPException(status_code=404, detail="Encounter not found")
+    await _assert_gm_or_admin(db, guild_id, campaign_id, user)
 
     try:
         enc = await end_encounter(db, encounter_id)

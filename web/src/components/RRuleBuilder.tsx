@@ -66,10 +66,12 @@ interface RRuleParts {
   freq: Frequency;
   interval: number;
   byDay: string[];
+  /** Unknown segments preserved verbatim so round-trips don't silently discard them. */
+  unknown: string[];
 }
 
 function parseRrule(rrule: string): RRuleParts {
-  const parts: RRuleParts = { freq: 'WEEKLY', interval: 1, byDay: [] };
+  const parts: RRuleParts = { freq: 'WEEKLY', interval: 1, byDay: [], unknown: [] };
   if (!rrule) return parts;
 
   for (const segment of rrule.split(';')) {
@@ -84,6 +86,8 @@ function parseRrule(rrule: string): RRuleParts {
       case 'BYDAY':
         parts.byDay = val.split(',').filter(Boolean);
         break;
+      default:
+        if (key) parts.unknown.push(segment);
     }
   }
   return parts;
@@ -95,6 +99,8 @@ function buildRrule(parts: RRuleParts): string {
   if (parts.byDay.length > 0 && parts.freq !== 'DAILY') {
     segments.push(`BYDAY=${parts.byDay.join(',')}`);
   }
+  // Re-append any unknown segments to preserve them.
+  segments.push(...parts.unknown);
   return segments.join(';');
 }
 
