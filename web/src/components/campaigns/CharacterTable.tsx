@@ -32,6 +32,7 @@ import type { Campaign, Character } from '../../types';
 
 function CopyablePathbuilderChip({ pathbuilderId }: { pathbuilderId: number }) {
   const [copied, setCopied] = useState(false);
+  const [hovered, setHovered] = useState(false);
 
   const handleCopy = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -42,26 +43,23 @@ function CopyablePathbuilderChip({ pathbuilderId }: { pathbuilderId: number }) {
   };
 
   return (
-    <Tooltip
-      title={
-        copied
-          ? 'Copied!'
-          : (
-            <Stack direction="row" alignItems="center" spacing={0.5}>
-              <span>ID: {pathbuilderId}</span>
-              <ContentCopyIcon sx={{ fontSize: 12 }} />
-            </Stack>
-          )
-      }
-      placement="top"
-    >
+    <Tooltip title={copied ? 'Copied!' : `ID: ${pathbuilderId}`} placement="top">
       <Chip
         label="Pathbuilder"
         size="small"
         color={copied ? 'success' : 'secondary'}
         variant="outlined"
         onClick={handleCopy}
-        sx={{ height: 20, fontSize: '0.65rem', cursor: 'pointer' }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        deleteIcon={<ContentCopyIcon sx={{ fontSize: '0.75rem !important' }} />}
+        onDelete={hovered ? handleCopy : undefined}
+        sx={{
+          height: 20,
+          fontSize: '0.65rem',
+          cursor: 'pointer',
+          transition: 'width 0.15s ease',
+        }}
       />
     </Tooltip>
   );

@@ -7,7 +7,7 @@ construction and the ``GrugAgent`` orchestration wrapper.
 
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.messages import (
@@ -337,6 +337,30 @@ class GrugAgent:
             )
             rows = list(reversed(recent_result.scalars().all()))
 
+        # Session-gap detection: if there is a gap larger than the configured
+        # threshold between any two consecutive messages, drop everything before
+        # that gap.  This prevents "necro thread" behaviour where Grug latches
+        # onto stale channel chatter from days/weeks ago and responds to it
+        # instead of the current conversation.
+        session_gap_hours = settings.agent_session_gap_hours
+        if session_gap_hours > 0 and len(rows) > 1:
+            gap_threshold = timedelta(hours=session_gap_hours)
+            # Scan backwards (newest → oldest) so we clip at the *most recent*
+            # large gap, preserving as much of the current session as possible.
+            for i in range(len(rows) - 1, 0, -1):
+                t_after = rows[i].created_at
+                t_before = rows[i - 1].created_at
+                if t_after and t_before and (t_after - t_before) > gap_threshold:
+                    logger.debug(
+                        "Session gap of %s detected at message index %d — "
+                        "dropping %d older messages from context",
+                        t_after - t_before,
+                        i,
+                        i,
+                    )
+                    rows = rows[i:]
+                    break
+
         messages: list[ModelRequest | ModelResponse] = []
 
         # Inject a voice reminder at the top of history so the model sees
@@ -350,7 +374,10 @@ class GrugAgent:
                             "No emoji. No markdown. No contractions. No 'I' or 'me'. "
                             "Say 'Grug' instead. Keep it short and punchy. "
                             "Never use a person name, display name, or username. "
-                            "Always say 'you' or 'friend' instead. No exceptions."
+                            "Always say 'you' or 'friend' instead. No exceptions. "
+                            "Messages labelled [background channel chat] are things "
+                            "Grug overheard but was NOT spoken to. Never address or "
+                            "comment on those — they are context only."
                         )
                     )
                 ]
@@ -368,14 +395,18 @@ class GrugAgent:
 
         for row in rows:
             if row.role == "user":
-                # Prefix with the speaker's name so Grug knows who said what
-                # in multi-user channels.
                 prefix = f"{row.author_name}: " if row.author_name else ""
-                messages.append(
-                    ModelRequest(
-                        parts=[UserPromptPart(content=f"{prefix}{row.content}")]
+                if row.is_passive:
+                    # Passive messages are ambient channel chatter — Grug overheard
+                    # them but was not addressed.  Wrap them so the model knows not
+                    # to respond to their content; they exist only for context.
+                    content = (
+                        f"[background channel chat — Grug was not spoken to]\n"
+                        f"{prefix}{row.content}"
                     )
-                )
+                else:
+                    content = f"{prefix}{row.content}"
+                messages.append(ModelRequest(parts=[UserPromptPart(content=content)]))
             elif row.role == "assistant":
                 messages.append(ModelResponse(parts=[TextPart(content=row.content)]))
         return messages
