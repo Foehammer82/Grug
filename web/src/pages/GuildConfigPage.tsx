@@ -309,7 +309,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                     const cfg = configMap.get(ch.id);
                     const autoRespond = cfg?.auto_respond ?? false;
                     const threshold =
-                      pendingThresholds[ch.id] ?? cfg?.auto_respond_threshold ?? 0.5;
+                      pendingThresholds[ch.id] ?? cfg?.auto_respond_threshold ?? 0.1;
                     return (
                       <TableRow key={ch.id} hover>
                         <TableCell>
@@ -358,7 +358,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                 <Slider
                                   size="small"
                                   min={0}
-                                  max={0.5}
+                                  max={0.1}
                                   step={null}
                                   value={threshold}
                                   marks={[

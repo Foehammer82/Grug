@@ -130,12 +130,12 @@ class AIChatCog(GrugCogBase, name="AI Chat"):
                     guild_id=message.guild.id,
                 )
                 should_respond = score >= auto_respond_threshold
-                logger.debug(
-                    "Auto-respond score %.2f vs threshold %.2f in channel %s → %s",
+                logger.info(
+                    "Auto-respond | score=%.3f threshold=%.3f → %s | %r",
                     score,
                     auto_respond_threshold,
-                    message.channel.id,
-                    "respond" if should_respond else "skip",
+                    "RESPOND" if should_respond else "skip",
+                    message.clean_content[:80],
                 )
 
         if not should_respond:

@@ -14,6 +14,7 @@ Design principles:
 
 import json
 import logging
+import re
 
 from anthropic import AsyncAnthropic
 
@@ -90,7 +91,7 @@ async def score_auto_respond(
         client = AsyncAnthropic(api_key=settings.anthropic_api_key)
         response = await client.messages.create(
             model="claude-haiku-4-5",
-            max_tokens=64,
+            max_tokens=128,
             system=_SCORER_SYSTEM,
             messages=[{"role": "user", "content": user_prompt}],
         )
@@ -102,7 +103,20 @@ async def score_auto_respond(
             guild_id=guild_id,
         )
         text = response.content[0].text.strip()
-        data = json.loads(text)
+        if not text:
+            logger.warning(
+                "Auto-respond scorer returned empty response; defaulting to respond"
+            )
+            return 0.0
+        # Extract JSON object even if the model wraps it in markdown or adds preamble.
+        match = re.search(r"\{[^}]+\}", text)
+        if not match:
+            logger.warning(
+                "Auto-respond scorer returned no JSON object in %r; defaulting to respond",
+                text[:120],
+            )
+            return 0.0
+        data = json.loads(match.group())
         confidence = float(data["confidence"])
         return max(0.0, min(1.0, confidence))
     except Exception:
