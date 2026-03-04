@@ -214,7 +214,7 @@ export default function NavBar() {
             sx={{
               color: 'inherit',
               borderColor: 'inherit',
-              '&:hover': { borderColor: 'inherit', bgcolor: 'rgba(0,0,0,0.1)' },
+              '&:hover': { borderColor: 'inherit', bgcolor: 'action.hover' },
               textTransform: 'none',
             }}
           >

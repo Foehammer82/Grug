@@ -1,7 +1,9 @@
 """Admin routes — manage GrugUser privileges and generate invite URLs.
 
 All endpoints require Grug super-admin status except ``GET /api/invite-url``
-which also allows users with the ``can_invite`` privilege.
+(which also allows users with the ``can_invite`` privilege) and
+``POST /api/admin/stop-impersonate`` (which requires an active impersonation
+session and re-validates that the original impersonator is still a super-admin).
 """
 
 import asyncio
@@ -380,7 +382,9 @@ async def get_discord_user(
 
 
 # --------------------------------------------------------------------------- #
-# Impersonation (super-admin only)                                             #
+# Impersonation                                                                #
+# Start requires super-admin; stop requires an active impersonation session    #
+# and re-validates the original impersonator is still a super-admin.           #
 # --------------------------------------------------------------------------- #
 
 
