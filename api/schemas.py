@@ -12,6 +12,10 @@ class UserOut(BaseModel):
     avatar: str | None = None
     is_super_admin: bool = False
     can_invite: bool = False
+    # Impersonation fields — only populated when a super-admin is impersonating.
+    impersonating: bool = False
+    impersonator_id: str | None = None
+    impersonator_username: str | None = None
 
 
 class DefaultsOut(BaseModel):
