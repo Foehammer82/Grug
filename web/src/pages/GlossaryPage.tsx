@@ -154,7 +154,7 @@ export default function GlossaryPage() {
 
       {/* Toolbar */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <FormControl size="small" sx={{ minWidth: 200 }}>
+        <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 } }}>
           <InputLabel id="channel-filter-label">Filter by channel</InputLabel>
           <Select
             labelId="channel-filter-label"

@@ -21,9 +21,10 @@ interface ServerButtonProps {
   icon: string | null;
   active: boolean;
   isAdmin: boolean;
+  onNavigate?: () => void;
 }
 
-function ServerButton({ guildId, name, icon, active, isAdmin }: ServerButtonProps) {
+function ServerButton({ guildId, name, icon, active, isAdmin, onNavigate }: ServerButtonProps) {
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
   const defaultTab = isAdmin ? 'config' : 'events';
@@ -31,7 +32,7 @@ function ServerButton({ guildId, name, icon, active, isAdmin }: ServerButtonProp
   return (
     <Tooltip title={name} placement="right" arrow>
       <Box
-        onClick={() => navigate(`/guilds/${guildId}/${defaultTab}`)}
+        onClick={() => { navigate(`/guilds/${guildId}/${defaultTab}`); onNavigate?.(); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
@@ -85,7 +86,7 @@ function ServerButton({ guildId, name, icon, active, isAdmin }: ServerButtonProp
   );
 }
 
-function DmButton() {
+function DmButton({ onNavigate }: { onNavigate?: () => void }) {
   const [hovered, setHovered] = useState(false);
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -94,7 +95,7 @@ function DmButton() {
   return (
     <Tooltip title="Direct Messages" placement="right" arrow>
       <Box
-        onClick={() => navigate('/personal/tasks')}
+        onClick={() => { navigate('/personal/tasks'); onNavigate?.(); }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         sx={{
@@ -144,7 +145,7 @@ function DmButton() {
   );
 }
 
-export default function ServerSidebar() {
+export default function ServerSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const { guildId: activeGuildId } = useParams<{ guildId?: string }>();
   const { data: guilds } = useGuilds();
 
@@ -168,7 +169,7 @@ export default function ServerSidebar() {
       }}
     >
       {/* DM button */}
-      <DmButton />
+      <DmButton onNavigate={onNavigate} />
       <Divider flexItem sx={{ width: '60%', mx: 'auto', my: 0.5 }} />
 
       {/* Server list */}
@@ -180,6 +181,7 @@ export default function ServerSidebar() {
           icon={g.icon}
           active={g.id === activeGuildId}
           isAdmin={g.is_admin}
+          onNavigate={onNavigate}
         />
       ))}
     </Box>

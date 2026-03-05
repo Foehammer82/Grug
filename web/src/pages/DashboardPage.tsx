@@ -27,8 +27,8 @@ export default function DashboardPage() {
       {isLoading ? (
         <Typography color="text.secondary">Loading servers…</Typography>
       ) : guilds && guilds.length > 0 ? (
-        <Typography variant="h6" color="text.secondary">
-          ← Select a server to get started
+        <Typography variant="h6" color="text.secondary" sx={{ textAlign: 'center', px: 2 }}>
+          Select a server to get started
         </Typography>
       ) : (
         <>

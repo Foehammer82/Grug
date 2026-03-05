@@ -149,13 +149,13 @@ export default function DocumentsPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 600 }}>
+      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" spacing={1}>
+        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: { sm: 600 } }}>
           Text files indexed for Grug to search during conversation (RAG). When you ask Grug
           about rules, lore, or campaign notes, Grug looks here first.
         </Typography>
         {isAdmin && (
-          <Button variant="contained" size="small" onClick={() => setUploadOpen(true)}>
+          <Button variant="contained" size="small" onClick={() => setUploadOpen(true)} sx={{ alignSelf: { xs: 'flex-end', sm: 'center' }, flexShrink: 0 }}>
             Upload Document
           </Button>
         )}

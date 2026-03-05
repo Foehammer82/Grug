@@ -151,13 +151,15 @@ export default function TasksPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+      <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'flex-start' }, justifyContent: 'space-between', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
         <Typography variant="body2" color="text.secondary">
           Scheduled tasks — one-off reminders and recurring automated prompts.
           Ask Grug in chat to create one, e.g. "remind me to check in at 5 PM"
           or "every Friday morning, post the weekly recap".
         </Typography>
-        <PollingIndicator intervalMs={POLL_MS} dataUpdatedAt={dataUpdatedAt} />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, justifyContent: 'flex-end' }}>
+          <PollingIndicator intervalMs={POLL_MS} dataUpdatedAt={dataUpdatedAt} />
+        </Box>
       </Box>
 
       <Box>

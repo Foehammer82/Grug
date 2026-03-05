@@ -301,6 +301,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
               borderColor: 'divider',
               borderRadius: 1,
               maxHeight: 420,
+              WebkitOverflowScrolling: 'touch',
             }}
           >
             <Table size="small" stickyHeader>
@@ -308,7 +309,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                 <TableRow>
                   <TableCell>Channel</TableCell>
                   <TableCell sx={{ whiteSpace: 'nowrap', width: 110 }}>Enabled</TableCell>
-                  <TableCell sx={{ whiteSpace: 'nowrap', width: '55%', minWidth: 320 }}>
+                  <TableCell sx={{ whiteSpace: 'nowrap', width: '55%', minWidth: { xs: 200, sm: 320 } }}>
                     Auto Respond
                   </TableCell>
                 </TableRow>
@@ -399,7 +400,7 @@ function ChannelSettingsPanel({ guildId }: { guildId: string }) {
                                   // extra right pad so "Selectively" isn't clipped.
                                   pl: '4px',
                                   pr: '8px',
-                                  width: 320,
+                                  width: { xs: 200, sm: 320 },
                                   // Push slider track up, leave room below for labels.
                                   mt: 0.5,
                                   mb: 1.5,

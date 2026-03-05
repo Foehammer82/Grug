@@ -20,13 +20,16 @@ export default function PersonalLayout() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header */}
-      <Box sx={{ px: 4, pt: 3, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 1.5 }}>
+      <Box sx={{ px: { xs: 2, sm: 4 }, pt: { xs: 2, sm: 3 }, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Typography variant="h5" fontWeight={700} sx={{ mb: 1.5, fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
           Direct Messages
         </Typography>
         <Tabs
           value={activeTab === -1 ? 0 : activeTab}
           onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{
             minHeight: 40,
             '& .MuiTab-root': {
@@ -35,6 +38,8 @@ export default function PersonalLayout() {
               fontWeight: 600,
               fontSize: '0.875rem',
               color: 'text.secondary',
+              px: { xs: 1.5, sm: 2 },
+              minWidth: { xs: 'auto', sm: 90 },
               '&.Mui-selected': { color: 'primary.main' },
               '&.Mui-focusVisible': { outline: 'none', boxShadow: 'none', backgroundColor: 'transparent' },
             },
@@ -47,7 +52,7 @@ export default function PersonalLayout() {
       </Box>
 
       {/* Page content */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 4 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 4 } }}>
         <Outlet />
       </Box>
     </Box>
