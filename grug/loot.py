@@ -67,7 +67,7 @@ TREASURE_TABLE: dict[int, _TreasureRow] = {row.party_level: row for row in [
 # fmt: on
 
 
-def get_treasure_budget(party_level: int, party_size: int = 4) -> _TreasureRow | None:
+def get_treasure_budget(party_level: int) -> _TreasureRow | None:
     """Look up the PF2e treasure budget for *party_level*.
 
     Returns ``None`` if the level is out of range (1–20).
@@ -238,7 +238,7 @@ async def fetch_items_for_slots(
         return_exceptions=True,
     )
     items_by_level: dict[int, list[AoNItem]] = {}
-    for lvl, result in zip(levels, results, strict=False):
+    for lvl, result in zip(levels, results, strict=True):
         if isinstance(result, Exception):
             logger.warning("Item fetch failed for level %d: %s", lvl, result)
             items_by_level[lvl] = []

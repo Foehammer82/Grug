@@ -9,6 +9,7 @@ Reference: https://2e.aonprd.com/Rules.aspx?ID=2656
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,8 @@ from grug.agent.core import GrugDeps
 
 if TYPE_CHECKING:
     from pydantic_ai import Agent
+
+    from grug.loot import _TreasureRow
 
 logger = logging.getLogger(__name__)
 
@@ -138,11 +141,9 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
         return format_treasure_table(row, party_size=party_size)
 
 
-async def _fetch_item_pools(row):
+async def _fetch_item_pools(row: _TreasureRow):
     """Fetch permanent and consumable item pools from AoN in parallel."""
     from grug.loot import fetch_items_for_slots
-
-    import asyncio
 
     perm_task = fetch_items_for_slots(row.permanent_items, "permanent")
     cons_task = fetch_items_for_slots(row.consumables, "consumable")
