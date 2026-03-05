@@ -58,7 +58,6 @@ export default function GoldManageDialog({
   // player_banking_enabled only gates positive self-adjustments (adding gold from nowhere),
   // which is enforced on the backend — no separate tab needed here.
   const canSpend = !isAdminOrGm;
-  const canTransfer = true;
   // Admins/GMs see Adjust + Transfer; players always see Spend + Transfer
   const useTabs = true;
   type TabKey = 'adjust' | 'spend' | 'transfer';
