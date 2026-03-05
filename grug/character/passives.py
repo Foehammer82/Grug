@@ -163,7 +163,7 @@ def _passive_pf2e(data: dict[str, Any], skill: str) -> int | None:
         score_val = scores.get(ability_key)
     else:
         score_val = None
-    ab_mod = _ability_mod(score_val) if score_val is not None else 0
+    ability_mod = _ability_mod(score_val) if score_val is not None else 0
 
     # Look up the proficiency rank.
     # Perception has a top-level field; other skills live in `proficiencies`.
@@ -180,11 +180,11 @@ def _passive_pf2e(data: dict[str, Any], skill: str) -> int | None:
         # No rank data available.  If we at least have the governing
         # ability score, return a best-effort untrained estimate.
         if score_val is not None:
-            return 10 + ab_mod
+            return 10 + ability_mod
         return None
 
     rank = int(rank)
     # Untrained (rank 0): no level added.
     # Trained+ (rank ≥ 2): proficiency = level + rank.
     proficiency = (level + rank) if rank >= 2 else 0
-    return 10 + ab_mod + proficiency
+    return 10 + ability_mod + proficiency

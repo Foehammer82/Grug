@@ -192,13 +192,45 @@ class TestPassiveUnknownSystem:
 # ---------------------------------------------------------------------------
 
 
-def _make_character(name, structured_data, owner_id=100):
+def _make_character(name, structured_data, owner_discord_user_id=100):
     """Create a mock Character ORM object."""
     c = MagicMock()
     c.name = name
     c.structured_data = structured_data
-    c.owner_discord_user_id = owner_id
+    c.owner_discord_user_id = owner_discord_user_id
     return c
+
+
+def _mock_db_factory(execute_results):
+    """Build a mock session factory whose execute() returns *execute_results* in order."""
+    results_iter = iter(execute_results)
+
+    async def _execute(stmt):
+        return next(results_iter)
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(side_effect=_execute)
+
+    mock_factory = MagicMock()
+    mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+    mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
+    return mock_factory
+
+
+def _scalar_result(value):
+    """Create a mock execute result whose scalar_one_or_none() returns *value*."""
+    r = MagicMock()
+    r.scalar_one_or_none.return_value = value
+    return r
+
+
+def _scalars_result(values):
+    """Create a mock execute result whose scalars().all() returns *values*."""
+    r = MagicMock()
+    scalars_mock = MagicMock()
+    scalars_mock.all.return_value = values
+    r.scalars.return_value = scalars_mock
+    return r
 
 
 @pytest.mark.asyncio
@@ -221,52 +253,28 @@ async def test_check_party_passives_gm_with_dc(monkeypatch):
     campaign.gm_discord_user_id = 42  # requesting user IS the GM
 
     chars = [
+        _make_character("Gandalf", {"system": "dnd5e", "passive_perception": 18}),
         _make_character(
-            "Gandalf", {"system": "dnd5e", "passive_perception": 18}, owner_id=100
-        ),
-        _make_character(
-            "Frodo", {"system": "dnd5e", "skills": {"perception": 2}}, owner_id=101
+            "Frodo",
+            {"system": "dnd5e", "skills": {"perception": 2}},
+            owner_discord_user_id=101,
         ),
     ]
 
-    # Mock DB: first query returns campaign, second returns characters.
-    call_count = 0
+    mock_factory = _mock_db_factory([
+        _scalar_result(None),       # _is_admin → GrugUser not found
+        _scalar_result(None),       # _is_admin → GuildConfig not found
+        _scalar_result(campaign),   # check_party_passives → Campaign query
+        _scalars_result(chars),     # check_party_passives → Characters query
+    ])
 
-    async def _mock_execute(stmt):
-        nonlocal call_count
-        call_count += 1
-        result = MagicMock()
-        if call_count == 1:
-            result.scalar_one_or_none.return_value = campaign
-        else:
-            scalars_mock = MagicMock()
-            scalars_mock.all.return_value = chars
-            result.scalars.return_value = scalars_mock
-        return result
-
-    mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(side_effect=_mock_execute)
-
-    mock_factory = MagicMock()
-    mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
-    with patch(
-        "grug.db.session.get_session_factory",
-        return_value=mock_factory,
-    ):
-        # Import the tool function after patching
+    with patch("grug.db.session.get_session_factory", return_value=mock_factory):
         from grug.agent.tools.campaign_tools import register_campaign_tools
         from pydantic_ai import Agent
 
-        agent = Agent(
-            "test",
-            deps_type=GrugDeps,
-            output_type=str,
-        )
+        agent = Agent("test", deps_type=GrugDeps, output_type=str)
         register_campaign_tools(agent)
 
-        # Find the check_party_passives tool
         tools = agent._function_toolset.tools
         tool_fn = tools["check_party_passives"]
         result = await tool_fn.function(ctx, skill="perception", dc=15)
@@ -300,33 +308,15 @@ async def test_check_party_passives_non_gm_denied(monkeypatch):
     campaign = MagicMock()
     campaign.gm_discord_user_id = 42  # someone else is the GM
 
-    # _is_admin makes two DB queries (GrugUser, GuildConfig) → both return None.
-    # Then check_party_passives queries Campaign → return the campaign mock.
-    call_count = 0
+    # _is_admin makes two DB queries (GrugUser, GuildConfig) → both None.
+    # Then check_party_passives queries Campaign.
+    mock_factory = _mock_db_factory([
+        _scalar_result(None),       # _is_admin → GrugUser not found
+        _scalar_result(None),       # _is_admin → GuildConfig not found
+        _scalar_result(campaign),   # check_party_passives → Campaign
+    ])
 
-    async def _mock_execute(stmt):
-        nonlocal call_count
-        call_count += 1
-        result = MagicMock()
-        if call_count <= 2:
-            # _is_admin queries for GrugUser and GuildConfig — not found.
-            result.scalar_one_or_none.return_value = None
-        else:
-            # check_party_passives queries for Campaign.
-            result.scalar_one_or_none.return_value = campaign
-        return result
-
-    mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(side_effect=_mock_execute)
-
-    mock_factory = MagicMock()
-    mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
-    with patch(
-        "grug.db.session.get_session_factory",
-        return_value=mock_factory,
-    ):
+    with patch("grug.db.session.get_session_factory", return_value=mock_factory):
         from grug.agent.tools.campaign_tools import register_campaign_tools
         from pydantic_ai import Agent
 
@@ -385,35 +375,18 @@ async def test_check_party_passives_without_dc(monkeypatch):
 
     chars = [
         _make_character(
-            "Legolas", {"system": "dnd5e", "passive_perception": 20}, owner_id=200
+            "Legolas",
+            {"system": "dnd5e", "passive_perception": 20},
+            owner_discord_user_id=200,
         ),
     ]
 
-    call_count = 0
+    mock_factory = _mock_db_factory([
+        _scalar_result(campaign),   # check_party_passives → Campaign query
+        _scalars_result(chars),     # check_party_passives → Characters query
+    ])
 
-    async def _mock_execute(stmt):
-        nonlocal call_count
-        call_count += 1
-        result = MagicMock()
-        if call_count == 1:
-            result.scalar_one_or_none.return_value = campaign
-        else:
-            scalars_mock = MagicMock()
-            scalars_mock.all.return_value = chars
-            result.scalars.return_value = scalars_mock
-        return result
-
-    mock_session = AsyncMock()
-    mock_session.execute = AsyncMock(side_effect=_mock_execute)
-
-    mock_factory = MagicMock()
-    mock_factory.return_value.__aenter__ = AsyncMock(return_value=mock_session)
-    mock_factory.return_value.__aexit__ = AsyncMock(return_value=False)
-
-    with patch(
-        "grug.db.session.get_session_factory",
-        return_value=mock_factory,
-    ):
+    with patch("grug.db.session.get_session_factory", return_value=mock_factory):
         from grug.agent.tools.campaign_tools import register_campaign_tools
         from pydantic_ai import Agent
 
