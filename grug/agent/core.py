@@ -128,6 +128,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     from grug.agent.tools.rules_tools import register_rules_tools
     from grug.agent.tools.scheduling_tools import register_scheduling_tools
 
+    from grug.agent.tools.loot_tools import register_loot_tools
     from grug.agent.tools.notes_tools import register_notes_tools
     from grug.agent.tools.session_notes_tools import register_session_notes_tools
 
@@ -138,6 +139,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     register_campaign_tools(agent)
     register_banking_tools(agent)
     register_rules_tools(agent)
+    register_loot_tools(agent)
     register_notes_tools(agent)
     register_session_notes_tools(agent)
     register_dice_tools(agent)
