@@ -209,6 +209,7 @@ export default function CharacterTable({
           No characters yet.
         </Typography>
       ) : (
+        <Box sx={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <Table size="small" sx={{ '& td, & th': { borderColor: 'divider' } }}>
           <TableHead>
             <TableRow>
@@ -326,6 +327,7 @@ export default function CharacterTable({
             })}
           </TableBody>
         </Table>
+        </Box>
       )}
 
       {/* Add character button */}
