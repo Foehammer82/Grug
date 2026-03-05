@@ -254,12 +254,19 @@ export default function AdminPage() {
   }
 
   return (
-    <Box sx={{ p: 4, maxWidth: 900, mx: 'auto' }}>
+    <Box sx={{ p: { xs: 2, sm: 4 }, maxWidth: 900, mx: 'auto' }}>
       <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
         Admin
       </Typography>
 
-      <Tabs value={tab} onChange={(_, v) => setTab(v as number)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v as number)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+      >
         <Tab label="User Management" />
         <Tab label="LLM Usage & Costs" />
       </Tabs>
@@ -267,7 +274,7 @@ export default function AdminPage() {
       {/* ── Tab 0: User Management ── */}
       {tab === 0 && (
         <>
-          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} justifyContent="space-between" spacing={1} sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">
               Manage Discord users and their privileges. Super-admin can be granted here or set via
               the <code>GRUG_SUPER_ADMIN_IDS</code> environment variable (env-locked).
@@ -277,7 +284,7 @@ export default function AdminPage() {
               size="small"
               startIcon={<PersonAddIcon />}
               onClick={() => setAddOpen(true)}
-              sx={{ ml: 2, flexShrink: 0 }}
+              sx={{ flexShrink: 0, alignSelf: { xs: 'flex-end', sm: 'center' } }}
             >
               Add User
             </Button>

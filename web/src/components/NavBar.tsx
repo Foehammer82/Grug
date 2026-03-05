@@ -1,6 +1,7 @@
 import BrightnessAutoOutlinedIcon from '@mui/icons-material/BrightnessAutoOutlined';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import MenuIcon from '@mui/icons-material/Menu';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import SettingsIcon from '@mui/icons-material/Settings';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
@@ -40,7 +41,11 @@ const THEME_LABEL: Record<ThemePreference, string> = {
   system: 'System mode',
 };
 
-export default function NavBar() {
+interface NavBarProps {
+  onMenuClick?: () => void;
+}
+
+export default function NavBar({ onMenuClick }: NavBarProps) {
   const { data: user } = useAuth();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -90,6 +95,13 @@ export default function NavBar() {
     <>
       <AppBar position="sticky" color="default">
         <Toolbar sx={{ gap: 1 }}>
+          {/* Hamburger menu — mobile only */}
+          {onMenuClick && (
+            <IconButton onClick={onMenuClick} size="small" edge="start" sx={{ mr: 0.5 }}>
+              <MenuIcon />
+            </IconButton>
+          )}
+
           {/* Grug home button + wordmark */}
           <Tooltip title="Home">
             <IconButton onClick={() => navigate('/dashboard')} size="small" sx={{ p: 0.5 }}>
@@ -112,7 +124,7 @@ export default function NavBar() {
           <Typography
             variant="h6"
             fontWeight={400}
-            sx={{ color: 'text.secondary', cursor: 'default', userSelect: 'none', lineHeight: 1 }}
+            sx={{ color: 'text.secondary', cursor: 'default', userSelect: 'none', lineHeight: 1, display: { xs: 'none', sm: 'block' } }}
           >
             Agent Dashboard
           </Typography>
@@ -129,10 +141,24 @@ export default function NavBar() {
                 href={inviteData.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                sx={{ textTransform: 'none', whiteSpace: 'nowrap' }}
+                sx={{ textTransform: 'none', whiteSpace: 'nowrap', display: { xs: 'none', sm: 'inline-flex' } }}
               >
                 Invite Grug
               </Button>
+            </Tooltip>
+          )}
+          {canInvite && inviteData?.url && (
+            <Tooltip title="Add Grug to another Discord server">
+              <IconButton
+                component="a"
+                href={inviteData.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                size="small"
+                sx={{ color: 'text.secondary', display: { xs: 'inline-flex', sm: 'none' } }}
+              >
+                <OpenInNewIcon fontSize="small" />
+              </IconButton>
             </Tooltip>
           )}
 

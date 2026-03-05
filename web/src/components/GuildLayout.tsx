@@ -68,9 +68,9 @@ export default function GuildLayout() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header area */}
-      <Box sx={{ px: 4, pt: 3, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ px: { xs: 2, sm: 4 }, pt: { xs: 2, sm: 3 }, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 1.5 }}>
-          <Typography variant="h5" fontWeight={700}>
+          <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
             {guild?.name ?? 'Loading…'}
           </Typography>
           {guildId && (
@@ -84,6 +84,7 @@ export default function GuildLayout() {
                   cursor: 'pointer',
                   userSelect: 'none',
                   lineHeight: 1,
+                  display: { xs: 'none', sm: 'inline' },
                   '&:hover': { color: 'text.secondary' },
                 }}
               >
@@ -95,6 +96,9 @@ export default function GuildLayout() {
         <Tabs
           value={activeTab === -1 ? 0 : activeTab}
           onChange={handleTabChange}
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           sx={{
             minHeight: 40,
             '& .MuiTab-root': {
@@ -103,6 +107,8 @@ export default function GuildLayout() {
               fontWeight: 600,
               fontSize: '0.875rem',
               color: 'text.secondary',
+              px: { xs: 1.5, sm: 2 },
+              minWidth: { xs: 'auto', sm: 90 },
               '&.Mui-selected': { color: 'primary.main' },
               '&.Mui-focusVisible': { outline: 'none', boxShadow: 'none', backgroundColor: 'transparent' },
             },
@@ -115,7 +121,7 @@ export default function GuildLayout() {
       </Box>
 
       {/* Page content */}
-      <Box sx={{ flex: 1, overflow: 'auto', p: 4 }}>
+      <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 4 } }}>
         <Outlet context={{ isAdmin, timezone }} />
       </Box>
     </Box>

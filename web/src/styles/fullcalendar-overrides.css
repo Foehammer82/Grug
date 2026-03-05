@@ -126,3 +126,51 @@
   font-weight: 600;
   font-size: 0.75rem;
 }
+
+/* ---- Mobile overrides ---- */
+@media (max-width: 600px) {
+  .fc {
+    font-size: 0.75rem;
+  }
+
+  .fc .fc-toolbar {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .fc .fc-toolbar-title {
+    font-size: 1rem;
+    width: 100%;
+    text-align: center;
+    order: -1;
+  }
+
+  .fc .fc-toolbar-chunk {
+    display: flex;
+    justify-content: center;
+  }
+
+  .fc .fc-button {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .fc .fc-col-header-cell {
+    font-size: 0.625rem;
+    padding: 4px 0;
+  }
+
+  .fc .fc-daygrid-day-number {
+    font-size: 0.75rem;
+    padding: 2px 4px;
+  }
+
+  .fc .fc-daygrid-event {
+    font-size: 0.625rem;
+    padding: 0 2px;
+  }
+
+  .fc .fc-daygrid-day-events {
+    min-height: 1.5em;
+  }
+}

@@ -265,13 +265,13 @@ export default function EventsPage() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
       {/* Header row */}
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="body2" color="text.secondary">
+      <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'center' }, justifyContent: 'space-between', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'none', sm: 'block' } }}>
           Session calendar — plan your games, track events, and see upcoming tasks.
           Click a date to create an event or click an item for details.
           {isAdmin && ' Drag events to reschedule them.'}
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0 }}>
+        <Box sx={{ display: 'flex', gap: 1, flexShrink: 0, justifyContent: { xs: 'flex-end', sm: 'flex-start' } }}>
           <Button
             variant="outlined"
             size="small"
@@ -326,6 +326,9 @@ export default function EventsPage() {
               left: 'prev,next today',
               center: 'title',
               right: 'dayGridMonth,timeGridWeek,timeGridDay',
+            }}
+            views={{
+              dayGridMonth: { titleFormat: { year: 'numeric', month: 'short' } },
             }}
             events={calendarEvents}
             datesSet={handleDatesSet}

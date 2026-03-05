@@ -131,14 +131,16 @@ export default function CampaignCard({
       <Stack
         direction="row"
         alignItems="center"
-        spacing={1.5}
+        spacing={1}
         sx={{
-          px: 2,
+          px: { xs: 1.5, sm: 2 },
           py: 1,
           bgcolor: 'action.hover',
           borderBottom: '1px solid',
           borderColor: 'divider',
           minHeight: 44,
+          flexWrap: 'wrap',
+          gap: 0.5,
         }}
       >
         <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: '0 1 auto' }}>
@@ -249,11 +251,14 @@ export default function CampaignCard({
       </Stack>
 
       {/* Tab bar */}
-      <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', px: 2 }}>
+      <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', px: { xs: 1, sm: 2 } }}>
         <Tabs
           value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
           textColor="inherit"
+          variant="scrollable"
+          scrollButtons="auto"
+          allowScrollButtonsMobile
           TabIndicatorProps={{ style: { height: 2 } }}
           sx={{ minHeight: 36 }}
         >
@@ -296,7 +301,7 @@ export default function CampaignCard({
       </Box>
 
       {/* Tab panels */}
-      <Box sx={{ px: 2, py: 1.5 }}>
+      <Box sx={{ px: { xs: 1, sm: 2 }, py: 1.5 }}>
         {activeTab === 'characters' && (
           <CharacterTable
             guildId={c.guild_id}
