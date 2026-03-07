@@ -34,6 +34,16 @@ export interface ScheduledTask {
   created_at: string;
 }
 
+export interface ScheduledTaskRun {
+  id: number;
+  task_id: number | null;
+  guild_id: string;
+  ran_at: string;
+  triggered_by: 'scheduled' | 'manual';
+  response: string | null;
+  success: boolean;
+}
+
 /* ── Calendar events ──────────────────────────────────────────────── */
 
 export interface CalendarEvent {
