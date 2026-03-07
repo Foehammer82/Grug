@@ -1192,3 +1192,157 @@ class LLMUsageRecord(Base):
     call_type: Mapped[str] = mapped_column(String(64), nullable=False)
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
+
+
+# ---------------------------------------------------------------------------
+# Manager Agent models
+# ---------------------------------------------------------------------------
+
+
+class UserFeedback(Base):
+    """User feedback on a Grug response — thumbs up/down + optional comment.
+
+    Feedback is scoped to a specific conversation message (the assistant
+    response).  The manager agent reads accumulated feedback when reviewing
+    Grug's behaviour for a guild.
+    """
+
+    __tablename__ = "user_feedback"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "discord_user_id", name="uq_user_feedback_msg_user"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    channel_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    # FK to conversation_messages.id — the assistant message being rated.
+    message_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("conversation_messages.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    discord_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    # +1 = positive, -1 = negative
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class InstructionOverride(Base):
+    """Per-guild custom instruction override for Grug's system prompt.
+
+    Super-admins can manually edit Grug's instructions for a guild.  The
+    manager agent can also propose overrides which appear as pending
+    recommendations until a super-admin applies them.
+
+    ``scope`` values:
+    * ``'guild'`` — applies to the entire guild
+    * ``'channel'`` — applies to a specific channel only (channel_id set)
+
+    ``status`` values:
+    * ``'active'`` — currently applied to Grug's prompt
+    * ``'pending'`` — proposed by the manager, awaiting admin approval
+    * ``'rejected'`` — admin reviewed and rejected the recommendation
+    """
+
+    __tablename__ = "instruction_overrides"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("guild_configs.guild_id"),
+        nullable=False,
+        index=True,
+    )
+    channel_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True, index=True)
+    scope: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="guild", server_default="guild"
+    )
+    # The custom instruction text that supplements or overrides the base prompt.
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    # 'active' | 'pending' | 'rejected'
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="active", server_default="active"
+    )
+    # Who proposed this override: 'admin' (manual) or 'manager' (agent)
+    source: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="admin", server_default="admin"
+    )
+    # When source='manager', this is the review that generated it.
+    review_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("manager_reviews.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Human-readable reason for the override.
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    guild: Mapped["GuildConfig"] = relationship()
+
+
+class ManagerReview(Base):
+    """A batch review of Grug's interactions by the manager agent.
+
+    The manager periodically reviews conversation history + user feedback
+    for a guild and produces a structured report with observations and
+    optional instruction recommendations.
+    """
+
+    __tablename__ = "manager_reviews"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    guild_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("guild_configs.guild_id"),
+        nullable=False,
+        index=True,
+    )
+    # 'pending' | 'running' | 'completed' | 'failed'
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="pending", server_default="pending"
+    )
+    # Number of messages and feedback items reviewed.
+    messages_reviewed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    feedback_reviewed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    # The manager's overall assessment (populated on completion).
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # JSON list of specific observations / issues found.
+    # Format: [{"category": "voice", "severity": "minor", "detail": "..."}]
+    observations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # JSON list of recommended instruction changes.
+    # Format: [{"action": "add"|"modify"|"remove", "content": "...", "reason": "..."}]
+    recommendations: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Whether the report was sent to the webhook.
+    webhook_sent: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    guild: Mapped["GuildConfig"] = relationship()

@@ -18,6 +18,7 @@ import CampaignsPage from './pages/CampaignsPage';
 import CampaignDetailPage from './pages/CampaignDetailPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
 import DocumentViewerPage from './pages/DocumentViewerPage';
+import ManagerPage from './pages/ManagerPage';
 import TasksPage from './pages/TasksPage';
 import { useBotAvatar } from './hooks/useBotAvatar';
 
@@ -54,6 +55,7 @@ function App() {
           <Route path="campaigns" element={<CampaignsPage />} />
           <Route path="campaigns/:campaignId" element={<CampaignDetailPage />} />
           <Route path="characters/:characterId" element={<CharacterSheetPage />} />
+          <Route path="manager" element={<ManagerPage />} />
           <Route
             path="campaigns/:campaignId/documents/:docId"
             element={<DocumentViewerPage />}

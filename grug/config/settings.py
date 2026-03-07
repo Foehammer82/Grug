@@ -149,6 +149,20 @@ class Settings(BaseSettings):
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 
+    # Manager agent
+    manager_webhook_url: str = Field(
+        default="",
+        description="Discord webhook URL for manager agent reports (empty = disabled)",
+    )
+    manager_review_cron: str = Field(
+        default="0 6 * * 1",
+        description="5-field UTC cron expression for scheduled manager reviews (default: Monday 06:00 UTC)",
+    )
+    manager_review_enabled: bool = Field(
+        default=False,
+        description="Enable periodic manager reviews of Grug's conversations",
+    )
+
     @model_validator(mode="after")
     def _validate_secret_key(self) -> "Settings":
         """Refuse to start with the default insecure secret key."""

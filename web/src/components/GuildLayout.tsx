@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useGuilds } from '../hooks/useGuilds';
+import { useAuth } from '../hooks/useAuth';
 import client from '../api/client';
 import type { GuildConfig } from '../types';
 import PollingIndicator from './PollingIndicator';
@@ -10,20 +11,26 @@ import PollingIndicator from './PollingIndicator';
 /** How often to refresh all active guild queries, in milliseconds. */
 const POLL_MS = 30_000;
 
-/** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
+/**
+ * Tab definitions.
+ * - `adminOnly` tabs are hidden from non-admin guild members.
+ * - `superAdminOnly` tabs are hidden from everyone except Grug super-admins.
+ */
 const TABS = [
-  { label: 'Config',       path: 'config',       adminOnly: true },
-  { label: 'Calendar',        path: 'events',       adminOnly: false },
-  { label: 'Scheduled Tasks', path: 'tasks',        adminOnly: true },
-  { label: 'Glossary',     path: 'glossary',     adminOnly: false },
-  { label: "Grug's Notes", path: 'notes',        adminOnly: false },
-  { label: 'Campaigns',    path: 'campaigns',    adminOnly: false },
+  { label: 'Config',          path: 'config',   adminOnly: true,  superAdminOnly: false },
+  { label: 'Calendar',        path: 'events',   adminOnly: false, superAdminOnly: false },
+  { label: 'Scheduled Tasks', path: 'tasks',    adminOnly: true,  superAdminOnly: false },
+  { label: 'Glossary',        path: 'glossary', adminOnly: false, superAdminOnly: false },
+  { label: "Grug's Notes",    path: 'notes',    adminOnly: false, superAdminOnly: false },
+  { label: 'Campaigns',       path: 'campaigns',adminOnly: false, superAdminOnly: false },
+  { label: 'Manager',         path: 'manager',  adminOnly: false, superAdminOnly: true  },
 ];
 
 export default function GuildLayout() {
   const { guildId } = useParams<{ guildId: string }>();
   const navigate = useNavigate();
   const { data: guilds } = useGuilds();
+  const { data: me } = useAuth();
   const [copied, setCopied] = useState(false);
   const [lastRefreshedAt, setLastRefreshedAt] = useState(Date.now());
   const location = useLocation();
@@ -31,6 +38,7 @@ export default function GuildLayout() {
 
   const guild = guilds?.find((g) => g.id === guildId);
   const isAdmin = guild?.is_admin ?? false;
+  const isSuperAdmin = me?.is_super_admin ?? false;
   const guildsLoaded = guilds !== undefined;
 
   const { data: guildConfig } = useQuery<GuildConfig>({
@@ -43,8 +51,12 @@ export default function GuildLayout() {
   });
   const timezone = guildConfig?.timezone ?? 'UTC';
 
-  // Filter tabs based on admin status
-  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+  // Filter tabs based on admin / super-admin status
+  const visibleTabs = TABS.filter((t) => {
+    if (t.superAdminOnly) return isSuperAdmin;
+    if (t.adminOnly) return isAdmin;
+    return true;
+  });
 
   // Global polling: periodically invalidate all active queries for this guild.
   // React Query only refetches queries with active observers (i.e. currently
@@ -78,8 +90,13 @@ export default function GuildLayout() {
   // Only redirect once guild data has loaded — avoids a false redirect while
   // isAdmin is still false during the initial fetch (which would replace the
   // URL with /events on every page refresh for admin-only pages).
-  const isAdminOnlyPage = TABS.find((t) => t.path === lastSegment)?.adminOnly;
+  const currentTabDef = TABS.find((t) => t.path === lastSegment);
+  const isAdminOnlyPage = currentTabDef?.adminOnly;
+  const isSuperAdminOnlyPage = currentTabDef?.superAdminOnly;
   if (guildsLoaded && !isAdmin && isAdminOnlyPage) {
+    return <Navigate to={`/guilds/${guildId}/events`} replace />;
+  }
+  if (guildsLoaded && !isSuperAdmin && isSuperAdminOnlyPage) {
     return <Navigate to={`/guilds/${guildId}/events`} replace />;
   }
 
@@ -145,7 +162,7 @@ export default function GuildLayout() {
 
       {/* Page content */}
       <Box sx={{ flex: 1, overflow: 'auto', p: { xs: 2, sm: 4 } }}>
-        <Outlet context={{ isAdmin, timezone }} />
+        <Outlet context={{ isAdmin, isSuperAdmin, timezone }} />
       </Box>
     </Box>
   );
