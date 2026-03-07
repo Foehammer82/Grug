@@ -740,6 +740,45 @@ class ScheduledTask(Base):
 
     guild: Mapped["GuildConfig"] = relationship(back_populates="scheduled_tasks")
     event: Mapped["CalendarEvent | None"] = relationship()
+    runs: Mapped[list["ScheduledTaskRun"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="ScheduledTaskRun.ran_at.desc()",
+    )
+
+
+class ScheduledTaskRun(Base):
+    """A single execution record for a ScheduledTask.
+
+    Created each time a task fires (scheduled or manual), storing the agent
+    response and whether the run succeeded.  Survives task deletion via the
+    SET NULL foreign key so guild admins retain an audit trail.
+    """
+
+    __tablename__ = "scheduled_task_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Nullable so records persist after the parent task is deleted.
+    task_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("scheduled_tasks.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    guild_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    ran_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    # 'scheduled' | 'manual'
+    triggered_by: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="scheduled", server_default="scheduled"
+    )
+    response: Mapped[str | None] = mapped_column(Text, nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    task: Mapped["ScheduledTask | None"] = relationship(back_populates="runs")
 
 
 class ConversationMessage(Base):

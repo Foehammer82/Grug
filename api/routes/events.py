@@ -37,7 +37,8 @@ from api.schemas import (
     PollVoteUpsert,
     ScheduledTaskCreate,
     ScheduledTaskOut,
-    TaskToggle,
+    ScheduledTaskRunOut,
+    ScheduledTaskUpdate,
 )
 from grug.db.models import (
     AvailabilityPoll,
@@ -48,6 +49,7 @@ from grug.db.models import (
     GuildConfig,
     PollVote,
     ScheduledTask,
+    ScheduledTaskRun,
 )
 from grug.utils import ensure_guild, expand_event_occurrences
 
@@ -911,14 +913,14 @@ async def create_guild_task(
 
 
 @router.patch("/api/guilds/{guild_id}/tasks/{task_id}", response_model=ScheduledTaskOut)
-async def toggle_task(
+async def update_task(
     guild_id: int,
     task_id: int,
-    body: TaskToggle,
+    body: ScheduledTaskUpdate,
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> ScheduledTask:
-    """Enable or disable a scheduled task."""
+    """Update a scheduled task (enabled state, schedule, prompt, name, channel)."""
     await assert_guild_member(guild_id, user)
     await assert_guild_admin(guild_id, user)
     task = await get_or_404(
@@ -928,13 +930,134 @@ async def toggle_task(
         ScheduledTask.guild_id == guild_id,
         detail="Task not found",
     )
-    task.enabled = body.enabled
+
+    fields = body.model_fields_set
+    schedule_changed = False
+
+    if "enabled" in fields and body.enabled is not None:
+        task.enabled = body.enabled
+        schedule_changed = True
+    if "name" in fields:
+        task.name = body.name
+    if "prompt" in fields and body.prompt is not None:
+        task.prompt = body.prompt
+    if "fire_at" in fields:
+        task.fire_at = body.fire_at
+        schedule_changed = True
+    if "cron_expression" in fields:
+        task.cron_expression = body.cron_expression
+        schedule_changed = True
+    if "channel_id" in fields and body.channel_id is not None:
+        task.channel_id = int(body.channel_id)
+
     await db.commit()
     await db.refresh(task)
+
+    # Re-sync the APScheduler job if anything schedule-related changed.
+    if schedule_changed:
+        try:
+            from grug.scheduler.manager import (
+                add_cron_job,
+                add_date_job,
+                get_scheduler,
+            )
+            from grug.scheduler.tasks import execute_scheduled_task
+
+            scheduler = get_scheduler()
+            job_id = f"task_{task.id}"
+            # Remove old job (ignore if not registered).
+            try:
+                scheduler.remove_job(job_id)
+            except Exception:
+                pass
+            # Re-register if still enabled.
+            now = datetime.now(timezone.utc)
+            if task.enabled:
+                if task.type == "once" and task.fire_at and task.last_run is None and task.fire_at > now:
+                    add_date_job(
+                        execute_scheduled_task,
+                        run_date=task.fire_at,
+                        job_id=job_id,
+                        args=[task.id],
+                    )
+                elif task.type == "recurring" and task.cron_expression:
+                    add_cron_job(
+                        execute_scheduled_task,
+                        cron_expression=task.cron_expression,
+                        job_id=job_id,
+                        args=[task.id],
+                        timezone=task.timezone,
+                    )
+        except Exception:
+            pass  # Scheduler sync will recover on next pass.
+
     return task
 
 
-@router.delete("/api/guilds/{guild_id}/tasks/{task_id}", status_code=204)
+@router.post(
+    "/api/guilds/{guild_id}/tasks/{task_id}/trigger", status_code=202
+)
+async def trigger_task(
+    guild_id: int,
+    task_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Manually trigger a scheduled task to run immediately.
+
+    The task executes in the background — returns ``202 Accepted`` immediately.
+    Poll ``GET /api/guilds/{guild_id}/tasks/{task_id}/runs`` to see the result.
+    """
+    await assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    task = await get_or_404(
+        db,
+        ScheduledTask,
+        ScheduledTask.id == task_id,
+        ScheduledTask.guild_id == guild_id,
+        detail="Task not found",
+    )
+    _ = task  # confirm it exists; execution happens below
+
+    import asyncio
+
+    from grug.scheduler.tasks import execute_scheduled_task
+
+    asyncio.ensure_future(execute_scheduled_task(task_id, triggered_by="manual"))
+    return {"status": "accepted", "task_id": task_id}
+
+
+@router.get(
+    "/api/guilds/{guild_id}/tasks/{task_id}/runs",
+    response_model=list[ScheduledTaskRunOut],
+)
+async def list_task_runs(
+    guild_id: int,
+    task_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[ScheduledTaskRun]:
+    """Return the execution history for a scheduled task (newest first, limit 50)."""
+    await assert_guild_member(guild_id, user)
+    await assert_guild_admin(guild_id, user)
+    # Verify the task belongs to this guild.
+    await get_or_404(
+        db,
+        ScheduledTask,
+        ScheduledTask.id == task_id,
+        ScheduledTask.guild_id == guild_id,
+        detail="Task not found",
+    )
+    result = await db.execute(
+        select(ScheduledTaskRun)
+        .where(ScheduledTaskRun.task_id == task_id)
+        .order_by(ScheduledTaskRun.ran_at.desc())
+        .limit(50)
+    )
+    return list(result.scalars().all())
+
+
+
 async def delete_task(
     guild_id: int,
     task_id: int,

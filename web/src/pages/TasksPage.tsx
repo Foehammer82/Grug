@@ -13,6 +13,7 @@ import {
   FormControl,
   FormControlLabel,
   FormLabel,
+  IconButton,
   Paper,
   Radio,
   RadioGroup,
@@ -24,14 +25,18 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
+import HistoryIcon from '@mui/icons-material/History';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import EditIcon from '@mui/icons-material/Edit';
 import { useState } from 'react';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import { TABLE_HEADER_SX } from '../types';
 import { cronToHuman } from '../utils';
-import type { DiscordChannel, GuildConfig, ScheduledTask } from '../types';
+import type { DiscordChannel, GuildConfig, ScheduledTask, ScheduledTaskRun } from '../types';
 import { useGuildContext } from '../hooks/useGuildContext';
 
 const EMPTY_FORM = {
@@ -42,6 +47,15 @@ const EMPTY_FORM = {
   cron_expression: '',
   schedule_text: '',
   channel_id: null as string | null,
+};
+
+type EditForm = {
+  name: string;
+  prompt: string;
+  fire_at: string;
+  cron_expression: string;
+  schedule_text: string;
+  channel_id: string | null;
 };
 
 export default function TasksPage() {
@@ -55,6 +69,20 @@ export default function TasksPage() {
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+
+  // Edit dialog state
+  const [editTask, setEditTask] = useState<ScheduledTask | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({
+    name: '',
+    prompt: '',
+    fire_at: '',
+    cron_expression: '',
+    schedule_text: '',
+    channel_id: null,
+  });
+
+  // History dialog state
+  const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null);
 
   const { data: tasks, isLoading } = useQuery<ScheduledTask[]>({
     queryKey: ['tasks', guildId],
@@ -84,6 +112,19 @@ export default function TasksPage() {
     enabled: !!guildId && dialogOpen,
   });
 
+  // Task run history query (only fetches when history dialog is open)
+  const { data: taskRuns, isLoading: runsLoading } = useQuery<ScheduledTaskRun[]>({
+    queryKey: ['task-runs', guildId, historyTask?.id],
+    queryFn: async () => {
+      const res = await client.get<ScheduledTaskRun[]>(
+        `/api/guilds/${guildId}/tasks/${historyTask!.id}/runs`,
+      );
+      return res.data;
+    },
+    enabled: !!guildId && !!historyTask,
+    refetchInterval: historyTask ? 5_000 : false,
+  });
+
   const openDialog = () => {
     setForm(EMPTY_FORM);
     setDialogOpen(true);
@@ -92,6 +133,30 @@ export default function TasksPage() {
   const closeDialog = () => {
     setDialogOpen(false);
     setForm(EMPTY_FORM);
+  };
+
+  const openEditDialog = (task: ScheduledTask) => {
+    setEditTask(task);
+    setEditForm({
+      name: task.name ?? '',
+      prompt: task.prompt,
+      fire_at: task.fire_at ? new Date(task.fire_at).toISOString().slice(0, 16) : '',
+      cron_expression: task.cron_expression ?? '',
+      schedule_text: '',
+      channel_id: task.channel_id,
+    });
+  };
+
+  const closeEditDialog = () => {
+    setEditTask(null);
+  };
+
+  const openHistoryDialog = (task: ScheduledTask) => {
+    setHistoryTask(task);
+  };
+
+  const closeHistoryDialog = () => {
+    setHistoryTask(null);
   };
 
   const cronFromTextMutation = useMutation({
@@ -103,6 +168,17 @@ export default function TasksPage() {
       return res.data.cron_expression;
     },
     onSuccess: (cron) => setForm((f) => ({ ...f, cron_expression: cron })),
+  });
+
+  const editCronFromTextMutation = useMutation({
+    mutationFn: async (text: string) => {
+      const res = await client.post<{ cron_expression: string }>(
+        `/api/guilds/${guildId}/tasks/cron-from-text`,
+        { text },
+      );
+      return res.data.cron_expression;
+    },
+    onSuccess: (cron) => setEditForm((f) => ({ ...f, cron_expression: cron })),
   });
 
   const createMutation = useMutation({
@@ -133,6 +209,34 @@ export default function TasksPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', guildId] }),
   });
 
+  const editMutation = useMutation({
+    mutationFn: async () => {
+      if (!editTask) return;
+      const payload: Record<string, unknown> = {
+        name: editForm.name || null,
+        prompt: editForm.prompt,
+        channel_id: editForm.channel_id,
+      };
+      if (editTask.type === 'once') {
+        payload.fire_at = editForm.fire_at ? new Date(editForm.fire_at).toISOString() : null;
+      } else {
+        payload.cron_expression = editForm.cron_expression || null;
+      }
+      await client.patch(`/api/guilds/${guildId}/tasks/${editTask.id}`, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['tasks', guildId] });
+      closeEditDialog();
+    },
+  });
+
+  const triggerMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await client.post(`/api/guilds/${guildId}/tasks/${id}/trigger`);
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tasks', guildId] }),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       await client.delete(`/api/guilds/${guildId}/tasks/${id}`);
@@ -144,9 +248,16 @@ export default function TasksPage() {
     (c) => c.id === (form.channel_id ?? guildConfig?.announce_channel_id),
   ) ?? null;
 
+  const editSelectedChannel = channels?.find((c) => c.id === editForm.channel_id) ?? null;
+
   const isFormValid =
     form.prompt.trim().length > 0 &&
     (form.type === 'once' ? !!form.fire_at : !!form.cron_expression.trim());
+
+  const isEditFormValid =
+    editTask !== null &&
+    editForm.prompt.trim().length > 0 &&
+    (editTask.type === 'once' ? !!editForm.fire_at : !!editForm.cron_expression.trim());
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -248,13 +359,36 @@ export default function TasksPage() {
                       {t.next_run ? fmtDate(t.next_run) : '—'}
                     </Typography>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                    <Tooltip title="Run now">
+                      <span>
+                        <IconButton
+                          size="small"
+                          color="success"
+                          onClick={() => triggerMutation.mutate(t.id)}
+                          disabled={triggerMutation.isPending}
+                        >
+                          <PlayArrowIcon fontSize="small" />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Edit">
+                      <IconButton size="small" onClick={() => openEditDialog(t)}>
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Run history">
+                      <IconButton size="small" onClick={() => openHistoryDialog(t)}>
+                        <HistoryIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
                     <Button
                       size="small"
                       color="error"
                       variant="outlined"
                       onClick={() => deleteMutation.mutate(t.id)}
                       disabled={deleteMutation.isPending}
+                      sx={{ ml: 0.5 }}
                     >
                       Delete
                     </Button>
@@ -391,6 +525,184 @@ export default function TasksPage() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── Edit task dialog ── */}
+      <Dialog open={!!editTask} onClose={closeEditDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Task</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
+          <TextField
+            label="Prompt"
+            required
+            multiline
+            minRows={3}
+            value={editForm.prompt}
+            onChange={(e) => setEditForm((f) => ({ ...f, prompt: e.target.value }))}
+            helperText="The message Grug will act on when the task fires."
+          />
+
+          <TextField
+            label="Name (optional)"
+            value={editForm.name}
+            onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+            helperText="Short label shown in the task list."
+          />
+
+          <Autocomplete
+            size="small"
+            fullWidth
+            options={channels ?? []}
+            loading={channelsLoading}
+            value={editSelectedChannel}
+            onChange={(_, ch) => setEditForm((f) => ({ ...f, channel_id: ch?.id ?? null }))}
+            getOptionLabel={(ch) => `#${ch.name}`}
+            isOptionEqualToValue={(opt, val) => opt.id === val.id}
+            renderInput={(params) => (
+              <TextField {...params} label="Channel" />
+            )}
+          />
+
+          {editTask?.type === 'once' ? (
+            <TextField
+              label="Fire at"
+              type="datetime-local"
+              required
+              value={editForm.fire_at}
+              onChange={(e) => setEditForm((f) => ({ ...f, fire_at: e.target.value }))}
+              InputLabelProps={{ shrink: true }}
+              helperText="Date and time when the task should fire (local time)."
+            />
+          ) : (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <TextField
+                  label="Describe the schedule"
+                  placeholder='e.g. "every Monday at 9am UTC"'
+                  fullWidth
+                  size="small"
+                  value={editForm.schedule_text}
+                  onChange={(e) => setEditForm((f) => ({ ...f, schedule_text: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && editForm.schedule_text.trim()) {
+                      e.preventDefault();
+                      editCronFromTextMutation.mutate(editForm.schedule_text.trim());
+                    }
+                  }}
+                  disabled={editCronFromTextMutation.isPending}
+                />
+                <Button
+                  variant="outlined"
+                  size="small"
+                  sx={{ whiteSpace: 'nowrap', flexShrink: 0, height: 40 }}
+                  disabled={!editForm.schedule_text.trim() || editCronFromTextMutation.isPending}
+                  onClick={() => editCronFromTextMutation.mutate(editForm.schedule_text.trim())}
+                >
+                  {editCronFromTextMutation.isPending ? 'Converting…' : 'Convert'}
+                </Button>
+              </Box>
+              <TextField
+                label="Cron expression"
+                required
+                value={editForm.cron_expression}
+                onChange={(e) => setEditForm((f) => ({ ...f, cron_expression: e.target.value }))}
+                helperText={
+                  cronToHuman(editForm.cron_expression)
+                  ?? '5-field UTC cron — e.g. "0 9 * * 1" = every Monday at 09:00 UTC.'
+                }
+                inputProps={{ style: { fontFamily: 'monospace' } }}
+              />
+            </Box>
+          )}
+
+          {editMutation.isError && (
+            <Typography color="error" variant="body2">
+              Failed to save changes. Please try again.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeEditDialog}>Cancel</Button>
+          <Button
+            variant="contained"
+            disabled={!isEditFormValid || editMutation.isPending}
+            onClick={() => editMutation.mutate()}
+          >
+            {editMutation.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Run history dialog ── */}
+      <Dialog open={!!historyTask} onClose={closeHistoryDialog} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Run History — {historyTask?.name ?? historyTask?.prompt.slice(0, 60)}
+        </DialogTitle>
+        <DialogContent>
+          {runsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 2 }}>
+              <CircularProgress />
+            </Box>
+          ) : !taskRuns || taskRuns.length === 0 ? (
+            <Typography color="text.secondary" sx={{ pt: 1 }}>
+              No runs recorded yet. Trigger the task or wait for it to fire on schedule.
+            </Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    {['Ran At', 'Triggered By', 'Status', 'Response'].map((h) => (
+                      <TableCell key={h} sx={TABLE_HEADER_SX}>{h}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {taskRuns.map((run) => (
+                    <TableRow key={run.id} hover>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                        {fmtDate(run.ran_at)}
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={run.triggered_by === 'manual' ? 'Manual' : 'Scheduled'}
+                          size="small"
+                          color={run.triggered_by === 'manual' ? 'secondary' : 'default'}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <Chip
+                          label={run.success ? 'Success' : 'Failed'}
+                          size="small"
+                          color={run.success ? 'success' : 'error'}
+                          variant="outlined"
+                        />
+                      </TableCell>
+                      <TableCell sx={{ maxWidth: 480 }}>
+                        <Typography
+                          variant="body2"
+                          color="text.secondary"
+                          sx={{
+                            whiteSpace: 'pre-wrap',
+                            wordBreak: 'break-word',
+                            maxHeight: 120,
+                            overflow: 'auto',
+                          }}
+                        >
+                          {run.response ?? '—'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeHistoryDialog}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
+
