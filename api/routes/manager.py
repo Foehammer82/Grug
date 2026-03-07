@@ -413,8 +413,15 @@ async def trigger_review(
     await db.commit()
     await db.refresh(review)
 
-    # Fire-and-forget — the reviewer creates its own DB session.
-    asyncio.create_task(run_review(guild_id))
+    # Fire-and-forget — the reviewer creates its own DB session and manages
+    # its own error state (sets status='failed' on exception).
+    async def _bg_review() -> None:
+        try:
+            await run_review(guild_id)
+        except Exception:
+            logger.exception("Background manager review failed for guild %d", guild_id)
+
+    asyncio.create_task(_bg_review(), name=f"manager_review_{guild_id}")
 
     return _review_to_out(review)
 

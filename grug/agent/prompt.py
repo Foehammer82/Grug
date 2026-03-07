@@ -184,6 +184,10 @@ CUSTOM SERVER INSTRUCTIONS (set by server admin — follow these too):
 _jinja_env = jinja2.Environment(
     undefined=jinja2.StrictUndefined,
     keep_trailing_newline=True,
+    # autoescape is intentionally False — this is a plain-text LLM prompt, not HTML.
+    # HTML escaping would corrupt the output. Template variables are server-controlled
+    # (admin instructions, timestamps, system names) or set by the agent itself.
+    autoescape=False,
 )
 SYSTEM_PROMPT_TEMPLATE = _jinja_env.from_string(_SYSTEM_PROMPT_TEMPLATE)
 

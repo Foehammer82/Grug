@@ -433,7 +433,7 @@ async def _run_manager_reviews() -> None:
     factory = get_session_factory()
     async with factory() as session:
         result = await session.execute(select(GuildConfig.guild_id))
-        guild_ids = [row[0] for row in result.all()]
+        guild_ids = list(result.scalars().all())
 
     if not guild_ids:
         logger.info("Manager review: no guilds to review.")
