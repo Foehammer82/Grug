@@ -758,3 +758,72 @@ async def sync_campaign_pathbuilder(
 
     await db.commit()
     return {"synced": synced, "skipped": skipped, "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Passive checks
+# ---------------------------------------------------------------------------
+
+
+@router.post("/api/guilds/{guild_id}/campaigns/{campaign_id}/passives")
+async def check_passives(
+    guild_id: int,
+    campaign_id: int,
+    body: dict,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
+    """Compute passive skill scores for every character in the campaign.
+
+    **GM / admin only** — prevents leaking hidden check info to players.
+
+    Request body::
+
+        { "skill": "perception", "dc": 15 }   // dc is optional
+
+    Returns a list of ``{ name, owner_discord_user_id, score, pass }`` dicts.
+    ``score`` is ``null`` when the character lacks sufficient sheet data.
+    ``pass`` is ``null`` when no DC is provided, otherwise ``true``/``false``.
+    """
+    from grug.character.passives import compute_passive_score
+
+    await assert_guild_member(guild_id, user)
+    admin = await is_guild_admin(guild_id, user)
+
+    campaign = await get_or_404(
+        db, Campaign, Campaign.id == campaign_id, Campaign.guild_id == guild_id
+    )
+    is_gm = str(campaign.gm_discord_user_id) == str(user["id"])
+    if not admin and not is_gm:
+        raise HTTPException(status_code=403, detail="Only the GM or an admin can check passive scores.")
+
+    skill: str = (body.get("skill") or "perception").strip().lower().replace(" ", "_")
+    dc: int | None = body.get("dc")
+
+    chars = (
+        (
+            await db.execute(
+                select(Character).where(Character.campaign_id == campaign_id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    results: list[dict[str, Any]] = []
+    for c in chars:
+        sd = c.structured_data or {}
+        score = compute_passive_score(sd, skill)
+        passed: bool | None = None
+        if dc is not None and score is not None:
+            passed = score >= dc
+        results.append(
+            {
+                "name": c.name,
+                "owner_discord_user_id": str(c.owner_discord_user_id) if c.owner_discord_user_id else None,
+                "score": score,
+                "pass": passed,
+            }
+        )
+
+    return results

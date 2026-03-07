@@ -402,3 +402,73 @@ async def test_check_party_passives_without_dc(monkeypatch):
     assert "20" in result
     assert "✅" not in result
     assert "❌" not in result
+
+
+# ---------------------------------------------------------------------------
+# API endpoint — POST /api/guilds/{guild_id}/campaigns/{campaign_id}/passives
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_api_passives_returns_scores():
+    """The passives API endpoint returns correct scores for the party."""
+    from api.routes.campaigns import check_passives
+
+    campaign = MagicMock()
+    campaign.gm_discord_user_id = 42
+
+    chars = [
+        _make_character("Gandalf", {"system": "dnd5e", "passive_perception": 18}),
+        _make_character("Frodo", {"system": "dnd5e", "skills": {"perception": 2}}, owner_discord_user_id=101),
+    ]
+
+    scalars_mock = MagicMock()
+    scalars_mock.all.return_value = chars
+    chars_result = MagicMock()
+    chars_result.scalars.return_value = scalars_mock
+
+    mock_db = AsyncMock()
+    mock_db.execute = AsyncMock(return_value=chars_result)
+
+    user = {"id": "42", "sub": "42"}
+
+    with (
+        patch("api.routes.campaigns.assert_guild_member", new=AsyncMock()),
+        patch("api.routes.campaigns.is_guild_admin", new=AsyncMock(return_value=False)),
+        patch("api.routes.campaigns.get_or_404", new=AsyncMock(return_value=campaign)),
+    ):
+        result = await check_passives(
+            guild_id=1, campaign_id=10, body={"skill": "perception", "dc": 15}, user=user, db=mock_db,
+        )
+
+    assert len(result) == 2
+    assert result[0]["name"] == "Gandalf"
+    assert result[0]["score"] == 18
+    assert result[0]["pass"] is True
+    assert result[1]["name"] == "Frodo"
+    assert result[1]["score"] == 12
+    assert result[1]["pass"] is False
+
+
+@pytest.mark.asyncio
+async def test_api_passives_forbidden_for_non_gm():
+    """Non-GM non-admin users get a 403 from the passives endpoint."""
+    from fastapi import HTTPException
+    from api.routes.campaigns import check_passives
+
+    campaign = MagicMock()
+    campaign.gm_discord_user_id = 42  # someone else is GM
+
+    mock_db = AsyncMock()
+    user = {"id": "999", "sub": "999"}
+
+    with (
+        patch("api.routes.campaigns.assert_guild_member", new=AsyncMock()),
+        patch("api.routes.campaigns.is_guild_admin", new=AsyncMock(return_value=False)),
+        patch("api.routes.campaigns.get_or_404", new=AsyncMock(return_value=campaign)),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            await check_passives(
+                guild_id=1, campaign_id=10, body={"skill": "perception"}, user=user, db=mock_db,
+            )
+    assert exc_info.value.status_code == 403
