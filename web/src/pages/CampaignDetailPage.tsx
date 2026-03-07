@@ -24,10 +24,10 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import MenuItem from '@mui/material/MenuItem';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
-import { useGuildContext } from '../hooks/useGuildContext';
+import { useGuilds } from '../hooks/useGuilds';
 import { SYSTEM_OPTIONS, SYSTEM_LABELS } from '../constants/character';
 import CampaignCard from '../components/campaigns/CampaignCard';
-import type { Campaign, CombatTrackerDepth, DiscordChannel, GuildMember } from '../types';
+import type { Campaign, CombatTrackerDepth, DiscordChannel, GuildConfig, GuildMember } from '../types';
 
 const DEPTH_OPTIONS: { value: CombatTrackerDepth; label: string; description: string }[] = [
   { value: 'basic', label: 'Basic', description: 'Initiative & turns only' },
@@ -40,8 +40,22 @@ export default function CampaignDetailPage() {
   const { guildId, campaignId } = useParams<{ guildId: string; campaignId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
-  const { isAdmin, timezone } = useGuildContext();
   const currentUserId = me?.id ?? '';
+
+  // Derive admin status and timezone directly (no GuildLayout outlet context needed)
+  const { data: guilds } = useGuilds();
+  const guild = guilds?.find((g) => g.id === guildId);
+  const isAdmin = guild?.is_admin ?? false;
+
+  const { data: guildConfig } = useQuery<GuildConfig>({
+    queryKey: ['guild-config', guildId],
+    queryFn: async () => {
+      const res = await client.get<GuildConfig>(`/api/guilds/${guildId}/config`);
+      return res.data;
+    },
+    enabled: !!guildId,
+  });
+  const timezone = guildConfig?.timezone ?? 'UTC';
 
   // Edit state
   const [editId, setEditId] = useState<number | null>(null);
@@ -189,7 +203,7 @@ export default function CampaignDetailPage() {
   }
 
   return (
-    <Stack spacing={2}>
+    <Stack spacing={2} sx={{ p: { xs: 2, sm: 4 } }}>
       {/* Back navigation */}
       <Box>
         <Tooltip title="Back to all campaigns">

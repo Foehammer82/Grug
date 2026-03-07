@@ -17,6 +17,7 @@ import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CampaignDetailPage from './pages/CampaignDetailPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
+import NavBarOnlyLayout from './components/NavBarOnlyLayout';
 import DocumentViewerPage from './pages/DocumentViewerPage';
 import ManagerPage from './pages/ManagerPage';
 import TasksPage from './pages/TasksPage';
@@ -53,7 +54,6 @@ function App() {
           <Route path="glossary" element={<GlossaryPage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
-          <Route path="campaigns/:campaignId" element={<CampaignDetailPage />} />
           <Route path="characters/:characterId" element={<CharacterSheetPage />} />
           <Route path="manager" element={<ManagerPage />} />
           <Route
@@ -61,6 +61,12 @@ function App() {
             element={<DocumentViewerPage />}
           />
         </Route>
+      </Route>
+      <Route element={<NavBarOnlyLayout />}>
+        <Route
+          path="/guilds/:guildId/campaigns/:campaignId"
+          element={<CampaignDetailPage />}
+        />
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<NotFoundPage />} />
