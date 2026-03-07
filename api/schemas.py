@@ -633,6 +633,19 @@ class InviteUrlOut(BaseModel):
     url: str
 
 
+class AdminGuildOut(BaseModel):
+    """Guild record returned by the super-admin guild management endpoint."""
+
+    guild_id: str
+    name: str
+    icon: str | None = None
+    member_count: int | None = None
+    total_campaigns: int = 0
+    active_campaigns: int = 0
+    total_messages: int = 0
+    joined_at: datetime
+
+
 # --------------------------------------------------------------------------- #
 # RSVP schemas                                                                 #
 # --------------------------------------------------------------------------- #

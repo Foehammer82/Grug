@@ -14,7 +14,7 @@ from urllib.parse import quote
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import create_jwt
@@ -27,6 +27,7 @@ from api.deps import (
     is_super_admin_full,
 )
 from api.schemas import (
+    AdminGuildOut,
     DiscordMemberOut,
     DiscordUserOut,
     GrugUserOut,
@@ -34,7 +35,7 @@ from api.schemas import (
     InviteUrlOut,
 )
 from grug.config.settings import get_settings
-from grug.db.models import GrugUser, GuildConfig
+from grug.db.models import Campaign, ConversationMessage, GrugUser, GuildConfig
 
 logger = logging.getLogger(__name__)
 
@@ -493,3 +494,145 @@ async def stop_impersonation(
         max_age=86400,
     )
     return {"status": "ok", "restored": impersonator["username"]}
+
+
+# --------------------------------------------------------------------------- #
+# Guild management (super-admin only)                                          #
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/api/admin/guilds", response_model=list[AdminGuildOut])
+async def list_admin_guilds(
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[AdminGuildOut]:
+    """Return all guilds Grug has joined, with activity stats.  Super-admin only."""
+    await assert_super_admin(user)
+    bot_token = get_bot_token()
+
+    # Fetch all guild configs
+    result = await db.execute(select(GuildConfig).order_by(GuildConfig.created_at))
+    configs = result.scalars().all()
+    if not configs:
+        return []
+
+    guild_ids = [cfg.guild_id for cfg in configs]
+
+    # Bulk-query campaign counts per guild (total and active, excluding soft-deleted)
+    campaign_totals_result = await db.execute(
+        select(Campaign.guild_id, func.count(Campaign.id).label("total"))
+        .where(Campaign.guild_id.in_(guild_ids), Campaign.deleted_at.is_(None))
+        .group_by(Campaign.guild_id)
+    )
+    total_campaigns_map: dict[int, int] = {
+        row.guild_id: row.total for row in campaign_totals_result
+    }
+
+    active_campaigns_result = await db.execute(
+        select(Campaign.guild_id, func.count(Campaign.id).label("active"))
+        .where(
+            Campaign.guild_id.in_(guild_ids),
+            Campaign.deleted_at.is_(None),
+            Campaign.is_active.is_(True),
+        )
+        .group_by(Campaign.guild_id)
+    )
+    active_campaigns_map: dict[int, int] = {
+        row.guild_id: row.active for row in active_campaigns_result
+    }
+
+    # Bulk-query non-passive message counts per guild
+    messages_result = await db.execute(
+        select(ConversationMessage.guild_id, func.count(ConversationMessage.id).label("msgs"))
+        .where(
+            ConversationMessage.guild_id.in_(guild_ids),
+            ConversationMessage.is_passive.is_(False),
+        )
+        .group_by(ConversationMessage.guild_id)
+    )
+    messages_map: dict[int, int] = {
+        row.guild_id: row.msgs for row in messages_result
+    }
+
+    # Fetch guild info from Discord API in parallel
+    async def _fetch_guild_info(guild_id: int) -> dict | None:
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as http:
+                resp = await http.get(
+                    f"https://discord.com/api/v10/guilds/{guild_id}",
+                    params={"with_counts": "true"},
+                    headers={"Authorization": f"Bot {bot_token}"},
+                )
+            if resp.status_code == 200:
+                return resp.json()
+        except Exception:
+            logger.warning("Failed to fetch guild info for %s", guild_id, exc_info=True)
+        return None
+
+    guild_infos = await asyncio.gather(
+        *[_fetch_guild_info(cfg.guild_id) for cfg in configs]
+    )
+
+    out: list[AdminGuildOut] = []
+    for cfg, info in zip(configs, guild_infos):
+        gid = cfg.guild_id
+        name = info["name"] if info else str(gid)
+        icon = info.get("icon") if info else None
+        member_count = info.get("approximate_member_count") if info else None
+        out.append(
+            AdminGuildOut(
+                guild_id=str(gid),
+                name=name,
+                icon=icon,
+                member_count=member_count,
+                total_campaigns=total_campaigns_map.get(gid, 0),
+                active_campaigns=active_campaigns_map.get(gid, 0),
+                total_messages=messages_map.get(gid, 0),
+                joined_at=cfg.created_at,
+            )
+        )
+
+    out.sort(key=lambda g: g.name.lower())
+    return out
+
+
+@router.delete("/api/admin/guilds/{guild_id}", status_code=204)
+async def leave_guild(
+    guild_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Have Grug leave a guild (kicks the bot from the server).  Super-admin only.
+
+    This calls Discord's ``DELETE /users/@me/guilds/{guild_id}`` endpoint
+    using the bot token to make the bot leave, then removes the guild config
+    from the database.
+    """
+    await assert_super_admin(user)
+    bot_token = get_bot_token()
+
+    # Verify the guild exists in our DB
+    result = await db.execute(
+        select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+    )
+    cfg = result.scalar_one_or_none()
+    if cfg is None:
+        raise HTTPException(status_code=404, detail="Guild not found")
+
+    # Have the bot leave the Discord guild
+    async with httpx.AsyncClient(timeout=10.0) as http:
+        resp = await http.delete(
+            f"https://discord.com/api/v10/users/@me/guilds/{guild_id}",
+            headers={"Authorization": f"Bot {bot_token}"},
+        )
+
+    # 204 = success, 404 = already left — both are acceptable
+    if resp.status_code not in (204, 404):
+        raise HTTPException(
+            status_code=502,
+            detail=f"Discord API returned {resp.status_code} when leaving guild",
+        )
+
+    # Remove guild config from our database
+    await db.delete(cfg)
+    await db.commit()
