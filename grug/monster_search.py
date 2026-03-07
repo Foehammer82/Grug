@@ -8,8 +8,8 @@ structured data instead of formatted text.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
-import time
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,36 +21,15 @@ BASE_5E = "https://www.dnd5eapi.co"
 BASE_AON = "https://elasticsearch.aonprd.com"
 
 # ---------------------------------------------------------------------------
-# In-memory TTL cache for monster search results
+# Cache key helpers — uses the centralized grug.cache module
 # ---------------------------------------------------------------------------
 
-_CACHE_TTL = 300  # 5 minutes
-_monster_cache: dict[str, tuple[list[Any], float]] = {}  # key → (results, expires_at)
+_MONSTER_CACHE_TTL = 300  # 5 minutes — search queries are unbounded strings
+_MONSTER_PREFIX = "monster"
 
 
-def _cache_key(query: str, system: str | None, limit: int) -> str:
-    return f"{query.lower().strip()}|{system}|{limit}"
-
-
-def _cache_get(key: str) -> list[Any] | None:
-    entry = _monster_cache.get(key)
-    if entry is None:
-        return None
-    results, expires_at = entry
-    if time.monotonic() > expires_at:
-        del _monster_cache[key]
-        return None
-    return results
-
-
-def _cache_set(key: str, results: list[Any]) -> None:
-    # Evict expired entries to prevent unbounded growth (keep at most 200 entries)
-    if len(_monster_cache) >= 200:
-        now = time.monotonic()
-        expired = [k for k, (_, exp) in _monster_cache.items() if now > exp]
-        for k in expired:
-            del _monster_cache[k]
-    _monster_cache[key] = (results, time.monotonic() + _CACHE_TTL)
+def _monster_cache_key(query: str, system: str | None, limit: int) -> str:
+    return f"{_MONSTER_PREFIX}:{query.lower().strip()}:{system}:{limit}"
 
 
 @dataclass
@@ -273,10 +252,13 @@ async def search_monsters(
     Returns:
         List of MonsterResult sorted by relevance.
     """
-    key = _cache_key(query, system, limit)
-    cached = _cache_get(key)
+    from grug.cache import get_cache
+
+    cache = get_cache()
+    key = _monster_cache_key(query, system, limit)
+    cached = await cache.get(key)
     if cached is not None:
-        return cached
+        return [MonsterResult(**d) for d in cached]
 
     results: list[MonsterResult] = []
 
@@ -286,5 +268,9 @@ async def search_monsters(
     if system is None or system == "pf2e":
         results.extend(await search_monsters_pf2e(query, limit=limit))
 
-    _cache_set(key, results)
+    await cache.set(
+        key,
+        [dataclasses.asdict(r) for r in results],
+        ttl=_MONSTER_CACHE_TTL,
+    )
     return results

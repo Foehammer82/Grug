@@ -26,8 +26,15 @@ def mock_settings(monkeypatch):
     import grug.config.settings as s
 
     s.get_settings.cache_clear()
+
+    # Reset the centralized cache singleton so each test gets a fresh cache.
+    import grug.cache as _cache_mod
+
+    _cache_mod._cache = None
+
     yield
     s.get_settings.cache_clear()
+    _cache_mod._cache = None
 
 
 # ---------------------------------------------------------------------------

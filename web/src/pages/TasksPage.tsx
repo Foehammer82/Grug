@@ -29,7 +29,6 @@ import {
 import { useState } from 'react';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
-import PollingIndicator from '../components/PollingIndicator';
 import { TABLE_HEADER_SX } from '../types';
 import { cronToHuman } from '../utils';
 import type { DiscordChannel, GuildConfig, ScheduledTask } from '../types';
@@ -57,7 +56,7 @@ export default function TasksPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const { data: tasks, isLoading, dataUpdatedAt } = useQuery<ScheduledTask[]>({
+  const { data: tasks, isLoading } = useQuery<ScheduledTask[]>({
     queryKey: ['tasks', guildId],
     queryFn: async () => {
       const res = await client.get<ScheduledTask[]>(`/api/guilds/${guildId}/tasks`);
@@ -151,16 +150,11 @@ export default function TasksPage() {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: { xs: 'stretch', sm: 'flex-start' }, justifyContent: 'space-between', flexDirection: { xs: 'column', sm: 'row' }, gap: 1 }}>
-        <Typography variant="body2" color="text.secondary">
-          Scheduled tasks — one-off reminders and recurring automated prompts.
-          Ask Grug in chat to create one, e.g. "remind me to check in at 5 PM"
-          or "every Friday morning, post the weekly recap".
-        </Typography>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0, justifyContent: 'flex-end' }}>
-          <PollingIndicator intervalMs={POLL_MS} dataUpdatedAt={dataUpdatedAt} />
-        </Box>
-      </Box>
+      <Typography variant="body2" color="text.secondary">
+        Scheduled tasks — one-off reminders and recurring automated prompts.
+        Ask Grug in chat to create one, e.g. "remind me to check in at 5 PM"
+        or "every Friday morning, post the weekly recap".
+      </Typography>
 
       <Box>
         <Button variant="contained" size="small" onClick={openDialog}>

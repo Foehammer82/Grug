@@ -77,6 +77,7 @@ class CallType(StrEnum):
     RRULE_PARSE = "rrule_parse"
     AUTO_RESPOND_SCORE = "auto_respond_score"
     SESSION_NOTE_SYNTHESIS = "session_note_synthesis"
+    LOOT_GENERATION = "loot_generation"
 
 
 # ---------------------------------------------------------------------------
