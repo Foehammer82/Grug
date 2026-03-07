@@ -1,10 +1,14 @@
 import { Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useGuilds } from '../hooks/useGuilds';
 import client from '../api/client';
 import type { GuildConfig } from '../types';
+import PollingIndicator from './PollingIndicator';
+
+/** How often to refresh all active guild queries, in milliseconds. */
+const POLL_MS = 30_000;
 
 /** Tab definitions. `adminOnly` tabs are hidden from non-admin guild members. */
 const TABS = [
@@ -22,7 +26,9 @@ export default function GuildLayout() {
   const navigate = useNavigate();
   const { data: guilds } = useGuilds();
   const [copied, setCopied] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState(Date.now());
   const location = useLocation();
+  const queryClient = useQueryClient();
 
   const guild = guilds?.find((g) => g.id === guildId);
   const isAdmin = guild?.is_admin ?? false;
@@ -40,6 +46,23 @@ export default function GuildLayout() {
 
   // Filter tabs based on admin status
   const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
+
+  // Global polling: periodically invalidate all active queries for this guild.
+  // React Query only refetches queries with active observers (i.e. currently
+  // mounted components), so only the data the user is currently viewing is
+  // refreshed — keeping requests efficient.
+  useEffect(() => {
+    if (!guildId) return undefined;
+    const timer = setInterval(() => {
+      queryClient.invalidateQueries({
+        predicate: (query) =>
+          Array.isArray(query.queryKey) &&
+          query.queryKey.some((key) => key === guildId),
+      });
+      setLastRefreshedAt(Date.now());
+    }, POLL_MS);
+    return () => clearInterval(timer);
+  }, [guildId, queryClient]);
 
   function handleCopyId() {
     if (!guildId) return;
@@ -69,7 +92,7 @@ export default function GuildLayout() {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header area */}
       <Box sx={{ px: { xs: 2, sm: 4 }, pt: { xs: 2, sm: 3 }, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, mb: 1.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
           <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
             {guild?.name ?? 'Loading…'}
           </Typography>
@@ -92,6 +115,7 @@ export default function GuildLayout() {
               </Typography>
             </Tooltip>
           )}
+          <PollingIndicator intervalMs={POLL_MS} dataUpdatedAt={lastRefreshedAt} />
         </Box>
         <Tabs
           value={activeTab === -1 ? 0 : activeTab}
