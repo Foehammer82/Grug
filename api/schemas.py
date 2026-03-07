@@ -238,6 +238,21 @@ class TaskToggle(BaseModel):
     enabled: bool
 
 
+class ScheduledTaskUpdate(BaseModel):
+    """Full update payload for a scheduled task (all fields optional).
+
+    Any field included in the request body will be applied; omitted fields
+    are left unchanged (uses ``model_fields_set`` on the server side).
+    """
+
+    enabled: bool | None = None
+    name: str | None = None
+    prompt: str | None = None
+    fire_at: datetime | None = None
+    cron_expression: str | None = None
+    channel_id: str | None = None
+
+
 class ScheduledTaskCreate(BaseModel):
     type: str  # 'once' | 'recurring'
     name: str | None = None
@@ -246,6 +261,24 @@ class ScheduledTaskCreate(BaseModel):
     cron_expression: str | None = None
     enabled: bool = True
     channel_id: str | None = None  # optional: used for guild tasks
+
+
+class ScheduledTaskRunOut(BaseModel):
+    """A single execution record for a scheduled task."""
+
+    id: int
+    task_id: int | None
+    guild_id: int
+    ran_at: datetime
+    triggered_by: str
+    response: str | None
+    success: bool
+
+    model_config = {"from_attributes": True}
+
+    @field_serializer("guild_id")
+    def serialize_guild_id(self, v: int) -> str:
+        return str(v)
 
 
 class CronFromTextRequest(BaseModel):
