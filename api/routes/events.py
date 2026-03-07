@@ -1057,7 +1057,7 @@ async def list_task_runs(
     return list(result.scalars().all())
 
 
-
+@router.delete("/api/guilds/{guild_id}/tasks/{task_id}", status_code=204)
 async def delete_task(
     guild_id: int,
     task_id: int,

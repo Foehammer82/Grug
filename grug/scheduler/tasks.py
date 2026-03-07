@@ -216,14 +216,10 @@ async def execute_scheduled_task(task_id: int, triggered_by: str = "scheduled") 
         if linked_event_id:
             try:
                 embed, view = await _build_event_reminder_embed(linked_event_id, prompt)
-                if embed is not None:
-                    from grug.bot.client import get_bot as _get_bot
-
-                    _bot = _get_bot()
-                    if _bot is not None:
-                        _chan = _bot.get_channel(channel_id)
-                        if _chan is not None:
-                            await _chan.send(embed=embed, view=view)
+                if embed is not None and bot is not None:
+                    _chan = bot.get_channel(channel_id)
+                    if _chan is not None:
+                        await _chan.send(embed=embed, view=view)
             except Exception:
                 logger.exception(
                     "Failed to send RSVP embed for event %d", linked_event_id

@@ -705,4 +705,3 @@ export default function TasksPage() {
     </Box>
   );
 }
-
