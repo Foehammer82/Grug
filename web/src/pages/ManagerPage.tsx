@@ -449,7 +449,33 @@ function ReviewCard({ review }: { review: ManagerReview }) {
 export default function ManagerPage() {
   const { guildId } = useParams<{ guildId: string }>();
 
+  const { data: featureData, isLoading: featureLoading } = useQuery<{ enabled: boolean }>({
+    queryKey: ['manager-enabled'],
+    queryFn: async () => (await client.get<{ enabled: boolean }>('/api/manager/enabled')).data,
+    staleTime: 60_000,
+  });
+
   if (!guildId) return null;
+
+  if (featureLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress size={32} />
+      </Box>
+    );
+  }
+
+  if (!featureData?.enabled) {
+    return (
+      <Box sx={{ maxWidth: 600, mx: 'auto', mt: 4 }}>
+        <Alert severity="info">
+          <strong>Manager agent is disabled.</strong> Set{' '}
+          <code>MANAGER_REVIEW_ENABLED=true</code> in the environment to enable
+          scheduled reviews, instruction overrides, and correction tracking.
+        </Alert>
+      </Box>
+    );
+  }
 
   return (
     <Box>

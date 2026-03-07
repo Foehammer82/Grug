@@ -28,6 +28,18 @@ YOUR RESPONSIBILITIES:
    - Are the instructions being followed?
    - Are there gaps that need new instructions?
 
+5. GRUG'S NOTES & USER CORRECTIONS — This is a high-priority signal:
+   - Read every entry in "Grug's Notes" carefully, especially recent ones.
+   - Identify anything that reflects a user correcting Grug, reporting a mistake,
+     or expressing frustration at repeated bad behaviour.
+   - For each such note, decide:
+     (a) Can this be fixed with an instruction override? → recommend one.
+     (b) Does this require a change to Grug's core codebase or system prompt? →
+         flag it as a "critical" or "major" observation with a clear description
+         of what code / prompt section needs updating and why.
+   - If the same problem appears in both notes AND conversation feedback, treat it
+     as a confirmed pattern and escalate to "major" severity.
+
 OUTPUT FORMAT:
 
 Respond with a JSON object containing:
@@ -42,9 +54,10 @@ Respond with a JSON object containing:
   ],
   "recommendations": [
     {
-      "action": "add|modify|remove",
-      "content": "The instruction text to add, modify, or remove",
-      "reason": "Why this change would help"
+      "action": "add|modify|remove|codebase_change",
+      "content": "The instruction text to add/modify/remove, OR a description of the code/prompt change needed",
+      "reason": "Why this change would help",
+      "source": "notes|feedback|conversation|pattern"
     }
   ]
 }
@@ -52,6 +65,9 @@ Respond with a JSON object containing:
 GUIDELINES:
 - Be specific. Reference actual messages when possible.
 - Only recommend instruction changes when there is a clear pattern (3+ occurrences).
+- Use ``action: "codebase_change"`` when the fix requires developer intervention \
+(e.g. a bug in a tool, a missing capability, or a flaw in the core system prompt). \
+These will be surfaced as high-priority observations for the development team.
 - Severity levels:
   - info: noteworthy but not a problem
   - minor: small inconsistency, not user-facing

@@ -6,7 +6,7 @@ Feedback submission is open to all guild members.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,10 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (
     assert_guild_member,
+    assert_super_admin,
     get_current_user,
     get_db,
-    is_guild_admin,
 )
+from grug.config.settings import get_settings
 from grug.db.models import (
     ConversationMessage,
     InstructionOverride,
@@ -30,6 +31,15 @@ from grug.db.models import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["manager"])
+
+
+def _assert_manager_enabled() -> None:
+    """Raise 503 if the manager agent feature is disabled via env var."""
+    if not get_settings().manager_review_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="Manager agent is disabled. Set MANAGER_REVIEW_ENABLED=true to enable it.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +203,14 @@ def _feedback_to_out(fb: UserFeedback) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
+@router.get("/api/manager/enabled")
+async def manager_enabled(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, bool]:
+    """Return whether the manager agent feature is enabled (any authenticated user)."""
+    return {"enabled": get_settings().manager_review_enabled}
+
+
 @router.get(
     "/api/guilds/{guild_id}/instructions",
     response_model=list[InstructionOverrideOut],
@@ -202,10 +220,10 @@ async def list_instructions(
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Any]:
-    """List all instruction overrides for a guild (active, pending, rejected)."""
+    """List all instruction overrides for a guild (super-admin only)."""
+    _assert_manager_enabled()
     await assert_guild_member(guild_id, user)
-    if not await is_guild_admin(guild_id, user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    await assert_super_admin(user)
 
     result = await db.execute(
         select(InstructionOverride)
@@ -227,10 +245,10 @@ async def create_instruction(
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """Create a new instruction override (admin only)."""
+    """Create a new instruction override (super-admin only)."""
+    _assert_manager_enabled()
     await assert_guild_member(guild_id, user)
-    if not await is_guild_admin(guild_id, user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    await assert_super_admin(user)
 
     if body.scope not in ("guild", "channel"):
         raise HTTPException(status_code=422, detail="scope must be 'guild' or 'channel'")
@@ -272,9 +290,9 @@ async def update_instruction(
     Use ``status: 'active'`` to apply a pending recommendation.
     Use ``status: 'rejected'`` to reject a pending recommendation.
     """
+    _assert_manager_enabled()
     await assert_guild_member(guild_id, user)
-    if not await is_guild_admin(guild_id, user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    await assert_super_admin(user)
 
     override = (
         await db.execute(
@@ -314,10 +332,10 @@ async def delete_instruction(
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
-    """Delete an instruction override."""
+    """Delete an instruction override (super-admin only)."""
+    _assert_manager_enabled()
     await assert_guild_member(guild_id, user)
-    if not await is_guild_admin(guild_id, user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    await assert_super_admin(user)
 
     override = (
         await db.execute(
@@ -366,10 +384,10 @@ async def list_reviews(
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[Any]:
-    """List manager reviews for a guild (admin only)."""
+    """List manager reviews for a guild (super-admin only)."""
+    _assert_manager_enabled()
     await assert_guild_member(guild_id, user)
-    if not await is_guild_admin(guild_id, user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    await assert_super_admin(user)
 
     result = await db.execute(
         select(ManagerReview)
@@ -391,14 +409,14 @@ async def trigger_review(
     user: dict[str, Any] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
-    """Trigger an on-demand manager review for a guild (admin only).
+    """Trigger an on-demand manager review for a guild (super-admin only).
 
     The review runs asynchronously — returns the review record immediately
     with ``status='running'``.  Poll the review list to see the result.
     """
+    _assert_manager_enabled()
     await assert_guild_member(guild_id, user)
-    if not await is_guild_admin(guild_id, user):
-        raise HTTPException(status_code=403, detail="Admin access required")
+    await assert_super_admin(user)
 
     import asyncio
 

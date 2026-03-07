@@ -41,10 +41,11 @@ async def run_review(guild_id: int) -> int:
     6. Send webhook report
     7. Return the review ID
     """
-    from sqlalchemy import func, select
+    from sqlalchemy import select
 
     from grug.db.models import (
         ConversationMessage,
+        GrugNote,
         InstructionOverride,
         ManagerReview,
         UserFeedback,
@@ -97,6 +98,18 @@ async def run_review(guild_id: int) -> int:
             )
             feedback_rows = fb_result.scalars().all()
 
+            # Grug's guild-scoped notes (corrections, observations)
+            notes_result = await session.execute(
+                select(GrugNote)
+                .where(
+                    GrugNote.guild_id == guild_id,
+                    GrugNote.user_id.is_(None),
+                )
+                .order_by(GrugNote.updated_at.desc())
+                .limit(50)
+            )
+            grug_notes = notes_result.scalars().all()
+
             # Count
             msg_count = len(messages)
             fb_count = len(feedback_rows)
@@ -119,6 +132,7 @@ async def run_review(guild_id: int) -> int:
         # ── Step 3: Build prompt and call LLM ─────────────────────────────
         conversation_text = _format_messages(messages)
         feedback_text = _format_feedback(feedback_rows)
+        notes_text = _format_notes(grug_notes)
 
         prompt = (
             f"Review the following conversation history from a Discord guild "
@@ -127,6 +141,11 @@ async def run_review(guild_id: int) -> int:
             f"{conversation_text}\n\n"
             f"=== USER FEEDBACK ({fb_count} items) ===\n"
             f"{feedback_text}\n\n"
+            f"=== GRUG'S NOTES (corrections and observations logged by Grug) ===\n"
+            f"{notes_text}\n\n"
+            f"Pay special attention to any entries in Grug's Notes that reflect "
+            f"user corrections, complaints, or patterns — these may indicate that "
+            f"Grug's underlying prompt or codebase needs updating.\n\n"
             f"Analyze Grug's behaviour and produce your review."
         )
 
@@ -208,6 +227,19 @@ def _format_messages(messages: list[Any]) -> str:
     return "\n".join(lines) if lines else "(no messages)"
 
 
+def _format_notes(notes: list[Any]) -> str:
+    """Format Grug's guild notes into a readable text block."""
+    if not notes:
+        return "(no notes)"
+    lines: list[str] = []
+    for note in notes:
+        ts = note.updated_at.isoformat() if note.updated_at else "?"
+        content = (note.content or "").strip()
+        if content:
+            lines.append(f"[updated {ts}]\n{content}")
+    return "\n\n".join(lines) if lines else "(no notes)"
+
+
 def _format_feedback(feedback_rows: list[Any]) -> str:
     """Format user feedback into a readable text block."""
     if not feedback_rows:
@@ -259,7 +291,7 @@ def _parse_review_result(raw: str) -> ReviewResult:
     if text.startswith("```"):
         # Strip markdown code fences
         lines = text.split("\n")
-        lines = [l for l in lines if not l.strip().startswith("```")]
+        lines = [line for line in lines if not line.strip().startswith("```")]
         text = "\n".join(lines)
 
     try:
