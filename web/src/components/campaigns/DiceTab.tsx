@@ -249,8 +249,9 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
                     });
                   }}
                   sx={{
-                    minWidth: 48,
-                    fontSize: '0.75rem',
+                    minWidth: { xs: 52, sm: 48 },
+                    minHeight: { xs: 44, sm: 36 },
+                    fontSize: { xs: '0.85rem', sm: '0.75rem' },
                     fontWeight: 700,
                     borderColor: d.color,
                     color: active ? '#fff' : d.color,
@@ -263,7 +264,7 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
               </Badge>
             );
           })}
-          <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
+          <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5, display: { xs: 'none', sm: 'inline' } }}>
             (right-click to remove one)
           </Typography>
         </Stack>
@@ -355,6 +356,7 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
               size="small"
               onClick={() => setIsPrivate(!isPrivate)}
               color={isPrivate ? 'warning' : 'default'}
+              sx={{ minWidth: 40, minHeight: 40 }}
             >
               {isPrivate ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
             </IconButton>
@@ -362,16 +364,17 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
 
           <Button
             variant="contained"
-            size="small"
+            size="medium"
             startIcon={<CasinoIcon />}
             onClick={handleRoll}
             disabled={rollMutation.isPending || (Object.keys(dicePool).length === 0 && !customExpr.trim())}
+            sx={{ minHeight: { xs: 44, sm: 36 }, minWidth: { xs: 100, sm: 'auto' } }}
           >
             {rollMutation.isPending ? 'Rolling…' : 'Roll'}
           </Button>
 
           <Tooltip title="Reset to defaults">
-            <IconButton size="small" onClick={handleReset}>
+            <IconButton size="small" onClick={handleReset} sx={{ minWidth: 40, minHeight: 40 }}>
               <RestartAltIcon fontSize="small" />
             </IconButton>
           </Tooltip>

@@ -16,6 +16,7 @@ import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalNotesPage from './pages/PersonalNotesPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
+import CampaignDetailPage from './pages/CampaignDetailPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
 import TasksPage from './pages/TasksPage';
 import { useBotAvatar } from './hooks/useBotAvatar';
@@ -52,6 +53,7 @@ function App() {
           <Route path="glossary" element={<GlossaryPage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
+          <Route path="campaigns/:campaignId" element={<CampaignDetailPage />} />
           <Route path="characters/:characterId" element={<CharacterSheetPage />} />
         </Route>
       </Route>
