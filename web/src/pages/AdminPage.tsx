@@ -29,12 +29,15 @@ import {
   Typography,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import DnsIcon from '@mui/icons-material/Dns';
+import ExitToAppIcon from '@mui/icons-material/ExitToApp';
 import LockIcon from '@mui/icons-material/Lock';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import SupervisorAccountIcon from '@mui/icons-material/SupervisorAccount';
 import client from '../api/client';
 import { useAuth } from '../hooks/useAuth';
 import LLMUsageSection from '../components/LLMUsageSection';
+import GuildAvatar from '../components/GuildAvatar';
 import { useNavigate } from 'react-router-dom';
 
 /* ------------------------------------------------------------------ */
@@ -47,6 +50,17 @@ interface GrugUser {
   is_super_admin: boolean;
   is_env_super_admin: boolean;
   created_at: string;
+}
+
+interface AdminGuild {
+  guild_id: string;
+  name: string;
+  icon: string | null;
+  member_count: number | null;
+  total_campaigns: number;
+  active_campaigns: number;
+  total_messages: number;
+  joined_at: string;
 }
 
 interface DiscordUser {
@@ -150,6 +164,8 @@ export default function AdminPage() {
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedMember, setSelectedMember] = useState<DiscordMember | null>(null);
+  const [leaveGuildId, setLeaveGuildId] = useState<string | null>(null);
+  const [leaveGuildName, setLeaveGuildName] = useState<string>('');
 
   /* ---- Debounce search input 400 ms ---- */
   useEffect(() => {
@@ -237,6 +253,27 @@ export default function AdminPage() {
     },
   });
 
+  /* ---- Admin guilds list ---- */
+  const { data: adminGuilds, isLoading: guildsLoading } = useQuery<AdminGuild[]>({
+    queryKey: ['admin-guilds'],
+    queryFn: async () => {
+      const res = await client.get<AdminGuild[]>('/api/admin/guilds');
+      return res.data;
+    },
+    enabled: !!me?.is_super_admin && tab === 2,
+  });
+
+  /* ---- Leave guild ---- */
+  const leaveGuildMutation = useMutation({
+    mutationFn: async (guildId: string) => {
+      await client.delete(`/api/admin/guilds/${guildId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-guilds'] });
+      setLeaveGuildId(null);
+    },
+  });
+
   if (!me?.is_super_admin) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', pt: 8 }}>
@@ -269,6 +306,7 @@ export default function AdminPage() {
       >
         <Tab label="User Management" />
         <Tab label="LLM Usage & Costs" />
+        <Tab label="Servers" icon={<DnsIcon fontSize="small" />} iconPosition="start" />
       </Tabs>
 
       {/* ── Tab 0: User Management ── */}
@@ -499,6 +537,111 @@ export default function AdminPage() {
 
       {/* ── Tab 1: LLM Usage & Costs ── */}
       {tab === 1 && <LLMUsageSection />}
+
+      {/* ── Tab 2: Servers ── */}
+      {tab === 2 && (
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            All Discord servers Grug has joined. Super-admins can remove Grug from any server.
+          </Typography>
+
+          {guildsLoading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', pt: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : !adminGuilds || adminGuilds.length === 0 ? (
+            <Typography color="text.secondary">No servers found.</Typography>
+          ) : (
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    {['Server', 'Members', 'Campaigns', 'Active', 'Messages', 'Joined', 'Actions'].map((h) => (
+                      <TableCell key={h} sx={HEADER_SX}>{h !== 'Actions' ? h : ''}</TableCell>
+                    ))}
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {adminGuilds.map((g) => (
+                    <TableRow key={g.guild_id} hover>
+                      <TableCell sx={{ minWidth: 220 }}>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <GuildAvatar guildId={g.guild_id} name={g.name} icon={g.icon} size={28} />
+                          <Box>
+                            <Typography variant="body2" fontWeight={500}>{g.name}</Typography>
+                            <Typography variant="caption" color="text.secondary">{g.guild_id}</Typography>
+                          </Box>
+                        </Stack>
+                      </TableCell>
+                      <TableCell>
+                        {g.member_count != null ? g.member_count.toLocaleString() : '—'}
+                      </TableCell>
+                      <TableCell>{g.total_campaigns}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={g.active_campaigns}
+                          size="small"
+                          color={g.active_campaigns > 0 ? 'success' : 'default'}
+                          variant="outlined"
+                          sx={{ height: 18, fontSize: '0.7rem' }}
+                        />
+                      </TableCell>
+                      <TableCell>{g.total_messages.toLocaleString()}</TableCell>
+                      <TableCell>{new Date(g.joined_at).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Tooltip title="Remove Grug from this server">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => {
+                              setLeaveGuildId(g.guild_id);
+                              setLeaveGuildName(g.name);
+                            }}
+                          >
+                            <ExitToAppIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+
+          {/* Leave guild confirmation dialog */}
+          <Dialog
+            open={leaveGuildId !== null}
+            onClose={() => setLeaveGuildId(null)}
+            maxWidth="xs"
+            fullWidth
+          >
+            <DialogTitle>Leave Server?</DialogTitle>
+            <DialogContent>
+              <Typography>
+                Remove Grug from <strong>{leaveGuildName}</strong>? The bot will leave the server
+                and all guild configuration will be deleted. This cannot be undone without re-inviting.
+              </Typography>
+              {leaveGuildMutation.isError && (
+                <Typography color="error" variant="body2" sx={{ mt: 1 }}>
+                  Failed to leave server — please try again.
+                </Typography>
+              )}
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setLeaveGuildId(null)}>Cancel</Button>
+              <Button
+                variant="contained"
+                color="error"
+                onClick={() => leaveGuildId && leaveGuildMutation.mutate(leaveGuildId)}
+                disabled={leaveGuildMutation.isPending}
+              >
+                Leave Server
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </>
+      )}
     </Box>
   );
 }
