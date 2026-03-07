@@ -16,15 +16,16 @@ const POLL_MS = 30_000;
  * Tab definitions.
  * - `adminOnly` tabs are hidden from non-admin guild members.
  * - `superAdminOnly` tabs are hidden from everyone except Grug super-admins.
+ * - `requiresManager` tabs are additionally hidden when the manager feature is disabled.
  */
 const TABS = [
-  { label: 'Config',          path: 'config',   adminOnly: true,  superAdminOnly: false },
-  { label: 'Calendar',        path: 'events',   adminOnly: false, superAdminOnly: false },
-  { label: 'Scheduled Tasks', path: 'tasks',    adminOnly: true,  superAdminOnly: false },
-  { label: 'Glossary',        path: 'glossary', adminOnly: false, superAdminOnly: false },
-  { label: "Grug's Notes",    path: 'notes',    adminOnly: false, superAdminOnly: false },
-  { label: 'Campaigns',       path: 'campaigns',adminOnly: false, superAdminOnly: false },
-  { label: 'Manager',         path: 'manager',  adminOnly: false, superAdminOnly: true  },
+  { label: 'Config',          path: 'config',   adminOnly: true,  superAdminOnly: false, requiresManager: false },
+  { label: 'Calendar',        path: 'events',   adminOnly: false, superAdminOnly: false, requiresManager: false },
+  { label: 'Scheduled Tasks', path: 'tasks',    adminOnly: true,  superAdminOnly: false, requiresManager: false },
+  { label: 'Glossary',        path: 'glossary', adminOnly: false, superAdminOnly: false, requiresManager: false },
+  { label: "Grug's Notes",    path: 'notes',    adminOnly: false, superAdminOnly: false, requiresManager: false },
+  { label: 'Campaigns',       path: 'campaigns',adminOnly: false, superAdminOnly: false, requiresManager: false },
+  { label: 'Manager',         path: 'manager',  adminOnly: false, superAdminOnly: true,  requiresManager: true  },
 ];
 
 export default function GuildLayout() {
@@ -52,8 +53,16 @@ export default function GuildLayout() {
   });
   const timezone = guildConfig?.timezone ?? 'UTC';
 
-  // Filter tabs based on admin / super-admin status
+  const { data: managerFeature } = useQuery<{ enabled: boolean }>({
+    queryKey: ['manager-enabled'],
+    queryFn: async () => (await client.get<{ enabled: boolean }>('/api/manager/enabled')).data,
+    staleTime: 60_000,
+  });
+  const managerEnabled = managerFeature?.enabled ?? false;
+
+  // Filter tabs based on admin / super-admin status and feature flags
   const visibleTabs = TABS.filter((t) => {
+    if (t.requiresManager && !managerEnabled) return false;
     if (t.superAdminOnly) return isSuperAdmin;
     if (t.adminOnly) return isAdmin;
     return true;
