@@ -63,7 +63,7 @@ def _convert_unix_dow_field(dow_expr: str) -> str:
     return ",".join(result_parts)
 
 
-def unix_cron_to_trigger(cron_expression: str) -> CronTrigger:
+def unix_cron_to_trigger(cron_expression: str, timezone: str = "UTC") -> CronTrigger:
     """Create an APScheduler :class:`CronTrigger` from a standard 5-field Unix cron expression.
 
     APScheduler's ``CronTrigger`` uses ``0=Monday`` for ``day_of_week``, while
@@ -75,9 +75,13 @@ def unix_cron_to_trigger(cron_expression: str) -> CronTrigger:
     Args:
         cron_expression: A whitespace-separated 5-field cron string
             (``minute hour day month day_of_week``).
+        timezone: IANA timezone name for the cron schedule (e.g. ``"America/New_York"``).
+            Defaults to ``"UTC"``.  When a guild has a configured timezone the
+            cron fields are interpreted in that local time rather than UTC, so
+            ``"0 9 * * 5"`` means Friday 9 AM in the guild's local time.
 
     Returns:
-        A configured :class:`CronTrigger` instance with UTC timezone.
+        A configured :class:`CronTrigger` instance.
 
     Raises:
         ValueError: If *cron_expression* does not contain exactly 5 fields.
@@ -94,7 +98,7 @@ def unix_cron_to_trigger(cron_expression: str) -> CronTrigger:
         day=day,
         month=month,
         day_of_week=_convert_unix_dow_field(dow),
-        timezone="UTC",
+        timezone=timezone,
     )
 
 
@@ -149,14 +153,23 @@ def add_cron_job(
     job_id: str,
     args: list | None = None,
     kwargs: dict | None = None,
+    timezone: str = "UTC",
 ) -> str:
     """Schedule a recurring job using a cron expression (5-field).
 
     The *cron_expression* must be a standard Unix 5-field cron string where
     ``day_of_week`` uses the ``0=Sunday`` convention (e.g. ``0 8 * * 5`` means
-    Friday 8 AM UTC).
+    Friday 8 AM in the given *timezone*).
+
+    Args:
+        func: The callable to execute.
+        cron_expression: A 5-field Unix cron string.
+        job_id: Unique identifier for the APScheduler job.
+        args: Positional arguments forwarded to *func*.
+        kwargs: Keyword arguments forwarded to *func*.
+        timezone: IANA timezone name for interpreting cron fields (default ``"UTC"``).
     """
-    trigger = unix_cron_to_trigger(cron_expression)
+    trigger = unix_cron_to_trigger(cron_expression, timezone=timezone)
     scheduler = get_scheduler()
     job = scheduler.add_job(
         func,

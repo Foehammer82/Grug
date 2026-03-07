@@ -161,9 +161,9 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
           present, UTC is assumed.  Example: "remind the group to pick a session date"
           → ``fire_at="2026-03-15T18:00:00+00:00"``.
 
-        * **Recurring** (``cron_expression``): fires on a 5-field UTC cron schedule and
-          keeps running until disabled.  Example: ``"0 9 * * 5"`` = every Friday at
-          9 AM UTC.
+        * **Recurring** (``cron_expression``): fires on a 5-field cron schedule interpreted
+          in the guild's configured timezone (e.g. ``"0 9 * * 5"`` = every Friday at
+          9 AM in the server's local time).
 
         ``prompt`` is the text Grug will respond to at execution time — describe what
         you actually want done (e.g. "roll initiative for the party", "post the weekly
@@ -177,7 +177,9 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
         """
         from datetime import datetime, timezone
 
-        from grug.db.models import ScheduledTask
+        from sqlalchemy import select
+
+        from grug.db.models import GuildConfig, ScheduledTask
         from grug.db.session import get_session_factory
         from grug.scheduler.manager import add_cron_job, add_date_job
         from grug.scheduler.tasks import execute_scheduled_task
@@ -189,6 +191,16 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
         await ensure_guild(ctx.deps.guild_id)
         target_user = user_id if user_id is not None else ctx.deps.user_id
         factory = get_session_factory()
+
+        # Look up the guild's configured timezone for recurring cron tasks.
+        guild_timezone = "UTC"
+        async with factory() as session:
+            cfg_result = await session.execute(
+                select(GuildConfig).where(GuildConfig.guild_id == ctx.deps.guild_id)
+            )
+            cfg = cfg_result.scalar_one_or_none()
+            if cfg and cfg.timezone:
+                guild_timezone = cfg.timezone
 
         if fire_at is not None:
             run_dt = datetime.fromisoformat(fire_at)
@@ -230,6 +242,7 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
                     name=name,
                     prompt=prompt,
                     cron_expression=cron_expression,
+                    timezone=guild_timezone,
                     user_id=target_user,
                     created_by=ctx.deps.user_id,
                 )
@@ -243,8 +256,12 @@ def register_scheduling_tools(agent: Agent[GrugDeps, str]) -> None:
                 cron_expression=cron_expression,
                 job_id=f"task_{task_id}",
                 args=[task_id],
+                timezone=guild_timezone,
             )
-            return f"Recurring task '{name}' scheduled ({cron_expression}) — ID: {task_id}."
+            return (
+                f"Recurring task '{name}' scheduled ({cron_expression}) in timezone "
+                f"{guild_timezone!r} — ID: {task_id}."
+            )
 
     @agent.tool
     async def list_scheduled_tasks(ctx: RunContext[GrugDeps]) -> str:

@@ -156,6 +156,7 @@ class ScheduledTaskOut(BaseModel):
     prompt: str
     fire_at: datetime | None
     cron_expression: str | None
+    timezone: str = "UTC"
     user_id: int | None
     enabled: bool
     last_run: datetime | None
@@ -181,7 +182,8 @@ class ScheduledTaskOut(BaseModel):
 
         For ``once`` tasks returns ``fire_at`` if the task hasn't fired yet.
         For ``recurring`` tasks uses APScheduler's ``CronTrigger`` to compute
-        the next fire time from the stored cron expression.
+        the next fire time from the stored cron expression, interpreting the
+        fields in the task's configured timezone.
         """
         now = datetime.now(timezone.utc)
         if self.type == "once":
@@ -191,7 +193,7 @@ class ScheduledTaskOut(BaseModel):
             try:
                 from grug.scheduler.manager import unix_cron_to_trigger
 
-                trigger = unix_cron_to_trigger(self.cron_expression)
+                trigger = unix_cron_to_trigger(self.cron_expression, timezone=self.timezone)
                 return trigger.get_next_fire_time(None, now)
             except Exception:
                 pass
@@ -205,7 +207,7 @@ class ScheduledTaskOut(BaseModel):
         Returns up to 60 upcoming occurrences so the calendar can display all
         instances within any visible date range (covers ~1 year of weekly tasks).
         Only populated for enabled ``recurring`` tasks; always empty for
-        ``once`` tasks.
+        ``once`` tasks.  Fire times are computed using the task's stored timezone.
         """
         from datetime import timedelta
 
@@ -215,7 +217,7 @@ class ScheduledTaskOut(BaseModel):
         try:
             from grug.scheduler.manager import unix_cron_to_trigger
 
-            trigger = unix_cron_to_trigger(self.cron_expression)
+            trigger = unix_cron_to_trigger(self.cron_expression, timezone=self.timezone)
             now = datetime.now(timezone.utc)
             results: list[datetime] = []
             current = now

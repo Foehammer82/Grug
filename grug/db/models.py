@@ -688,6 +688,9 @@ class ScheduledTask(Base):
     )
     # Populated for type='recurring'
     cron_expression: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # IANA timezone name used to interpret cron fields (e.g. "America/New_York").
+    # Defaults to "UTC".  Stored so the scheduler always fires at the intended local time.
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC", server_default="UTC")
     # Where this task was created from: 'discord' (agent tool) or 'web' (UI).
     source: Mapped[str] = mapped_column(
         String(16), nullable=False, default="discord", server_default="discord"

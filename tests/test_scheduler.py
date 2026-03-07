@@ -147,6 +147,86 @@ def test_unix_cron_to_trigger_invalid():
         unix_cron_to_trigger("0 8 * *")
 
 
+def test_unix_cron_to_trigger_non_utc_timezone():
+    """Cron '0 9 * * 5' with America/New_York fires at 9 AM ET, not 9 AM UTC."""
+    import zoneinfo
+    from grug.scheduler.manager import unix_cron_to_trigger
+
+    # Wednesday March 4, 2026 at 18:26 UTC — before DST change on March 8, so EST = UTC-5
+    now = datetime(2026, 3, 4, 18, 26, tzinfo=timezone.utc)
+    trigger = unix_cron_to_trigger("0 9 * * 5", timezone="America/New_York")
+    next_fire = trigger.get_next_fire_time(None, now)
+    assert next_fire is not None
+    # Should be Friday
+    assert next_fire.weekday() == 4
+    # Compute expected UTC hour dynamically from the actual TZ offset on the fire date
+    ny_tz = zoneinfo.ZoneInfo("America/New_York")
+    fire_local = next_fire.astimezone(ny_tz)
+    assert fire_local.hour == 9, f"Expected 9 AM local, got {fire_local.hour}"
+    assert fire_local.minute == 0
+    # Verify the UTC representation differs from naive 9 AM UTC
+    utc_offset_hours = fire_local.utcoffset().total_seconds() / 3600
+    expected_utc_hour = (9 - utc_offset_hours) % 24
+    assert next_fire.astimezone(timezone.utc).hour == int(expected_utc_hour)
+
+
+def test_add_cron_job_with_timezone():
+    """add_cron_job passes timezone to the trigger correctly."""
+    from grug.scheduler.manager import add_cron_job, get_scheduler
+
+    scheduler = get_scheduler()
+
+    async def dummy():
+        pass
+
+    job_id = add_cron_job(dummy, "0 9 * * 5", "test_tz_job", timezone="America/New_York")
+    assert job_id == "test_tz_job"
+    job = scheduler.get_job("test_tz_job")
+    assert job is not None
+    # Verify the trigger timezone is America/New_York
+    assert str(job.trigger.timezone) == "America/New_York"
+    scheduler.remove_job("test_tz_job")
+
+
+def test_next_run_schema_with_timezone():
+    """ScheduledTaskOut.next_run respects the task timezone."""
+    import zoneinfo
+    from api.schemas import ScheduledTaskOut
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    task = ScheduledTaskOut(
+        id=3,
+        guild_id=123,
+        channel_id=456,
+        type="recurring",
+        name="TZ Test",
+        prompt="Say hello",
+        fire_at=None,
+        cron_expression="0 9 * * 5",
+        timezone="America/New_York",
+        user_id=None,
+        enabled=True,
+        last_run=None,
+        source="web",
+        created_by=789,
+        created_at=now,
+    )
+    next_run = task.next_run
+    assert next_run is not None
+    # Should still land on a Friday
+    assert next_run.weekday() == 4
+    # Verify the local time is 9 AM in America/New_York, not 9 AM UTC
+    ny_tz = zoneinfo.ZoneInfo("America/New_York")
+    fire_local = next_run.astimezone(ny_tz)
+    assert fire_local.hour == 9, f"Expected 9 AM local, got {fire_local.hour}"
+    # Verify UTC and local differ (America/New_York is never UTC)
+    utc_hour = next_run.astimezone(timezone.utc).hour
+    ny_offset_h = fire_local.utcoffset().total_seconds() / 3600
+    assert ny_offset_h != 0, "America/New_York should not have a zero UTC offset"
+    assert utc_hour != 9 or ny_offset_h == 0  # 9 AM local != 9 AM UTC for non-UTC TZ
+
+
 def test_next_run_schema_friday():
     """ScheduledTaskOut.next_run returns a Friday for cron '0 8 * * 5'."""
     from api.schemas import ScheduledTaskOut

@@ -148,6 +148,7 @@ async def run_sync(bot: "commands.Bot", *, sync_commands: bool = False) -> None:
                             cron_expression=task.cron_expression,
                             job_id=job_id,
                             args=[task.id],
+                            timezone=task.timezone,
                         )
                         tasks_added += 1
                         logger.info(
