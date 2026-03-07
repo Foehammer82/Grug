@@ -54,6 +54,8 @@ class GrugDeps:
     default_ttrpg_system: str | None = None
     # Pre-loaded campaign summary injected into the system prompt.
     campaign_context: str | None = None
+    # Per-campaign model override (None = use server default).
+    campaign_llm_model: str | None = None
     # Files to DM to the user after the response is sent.
     # Populated by agent tools (e.g. export_character_pdf_tool).
     # Each entry is (filename, pdf_bytes).
@@ -77,7 +79,7 @@ class AgentResponse:
 def _build_agent() -> Agent[GrugDeps, str]:
     """Construct the pydantic-ai Agent with all tools registered."""
     settings = get_settings()
-    provider = AnthropicProvider(api_key=settings.anthropic_api_key)
+    provider = _get_anthropic_provider()
     model = AnthropicModel(settings.anthropic_model, provider=provider)
 
     from grug.agent.tools.mcp_tools import build_mcp_servers
@@ -247,6 +249,16 @@ def _build_agent() -> Agent[GrugDeps, str]:
 
 
 _agent: Agent[GrugDeps, str] | None = None
+_anthropic_provider: AnthropicProvider | None = None
+
+
+def _get_anthropic_provider() -> AnthropicProvider:
+    """Return the cached Anthropic provider (created once)."""
+    global _anthropic_provider
+    if _anthropic_provider is None:
+        settings = get_settings()
+        _anthropic_provider = AnthropicProvider(api_key=settings.anthropic_api_key)
+    return _anthropic_provider
 
 
 def get_agent() -> Agent[GrugDeps, str]:
@@ -561,6 +573,7 @@ class GrugAgent:
         # Pre-load campaign details so the agent knows what campaign and
         # characters are active in this channel without needing a tool call.
         campaign_context: str | None = None
+        campaign_llm_model: str | None = None
         if campaign_id is not None:
             try:
                 from grug.db.models import Campaign as _Campaign
@@ -578,6 +591,9 @@ class GrugAgent:
                         # channel — this is the most specific signal.
                         if _campaign.system:
                             default_ttrpg_system = _campaign.system
+
+                        # Capture the per-campaign model override (may be None).
+                        campaign_llm_model = _campaign.llm_model
 
                         _chars = (
                             (
@@ -654,18 +670,29 @@ class GrugAgent:
             is_dm_session=is_dm_session,
             default_ttrpg_system=default_ttrpg_system,
             campaign_context=campaign_context,
+            campaign_llm_model=campaign_llm_model,
         )
 
         try:
+            # Resolve the model to use: per-campaign override > server default.
+            settings = get_settings()
+            effective_model_name = campaign_llm_model or settings.anthropic_model
+            run_model: AnthropicModel | None = None
+            if campaign_llm_model:
+                run_model = AnthropicModel(
+                    campaign_llm_model, provider=_get_anthropic_provider()
+                )
+
             result = await get_agent().run(
                 message,
                 message_history=history,
                 deps=deps,
+                model=run_model,
             )
             response_text = result.output
             _usage = result.usage()
             await record_llm_usage(
-                model=get_settings().anthropic_model,
+                model=effective_model_name,
                 call_type=CallType.CHAT,
                 input_tokens=_usage.request_tokens or 0,
                 output_tokens=_usage.response_tokens or 0,

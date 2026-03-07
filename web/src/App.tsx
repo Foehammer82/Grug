@@ -4,7 +4,6 @@ import AppLayout from './components/AppLayout';
 import GuildLayout from './components/GuildLayout';
 import AdminPage from './pages/AdminPage';
 import DashboardPage from './pages/DashboardPage';
-import DocumentsPage from './pages/DocumentsPage';
 import EventsPage from './pages/EventsPage';
 import GlossaryPage from './pages/GlossaryPage';
 import GuildConfigPage from './pages/GuildConfigPage';
@@ -16,7 +15,9 @@ import PersonalConfigPage from './pages/PersonalConfigPage';
 import PersonalNotesPage from './pages/PersonalNotesPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
+import CampaignDetailPage from './pages/CampaignDetailPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
+import DocumentViewerPage from './pages/DocumentViewerPage';
 import ManagerPage from './pages/ManagerPage';
 import TasksPage from './pages/TasksPage';
 import { useBotAvatar } from './hooks/useBotAvatar';
@@ -49,12 +50,16 @@ function App() {
           <Route path="config" element={<GuildConfigPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="tasks" element={<TasksPage />} />
-          <Route path="documents" element={<DocumentsPage />} />
           <Route path="glossary" element={<GlossaryPage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
+          <Route path="campaigns/:campaignId" element={<CampaignDetailPage />} />
           <Route path="characters/:characterId" element={<CharacterSheetPage />} />
           <Route path="manager" element={<ManagerPage />} />
+          <Route
+            path="campaigns/:campaignId/documents/:docId"
+            element={<DocumentViewerPage />}
+          />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -44,7 +44,9 @@ class TestTreasureTable:
         prev_gp = 0
         for level in range(1, 21):
             row = TREASURE_TABLE[level]
-            assert row.currency_gp > prev_gp, f"Level {level} currency <= level {level - 1}"
+            assert row.currency_gp > prev_gp, (
+                f"Level {level} currency <= level {level - 1}"
+            )
             prev_gp = row.currency_gp
 
 
@@ -122,10 +124,14 @@ class TestPickRandomItems:
 class TestFormatLootTable:
     def test_includes_all_sections(self):
         permanent = [
-            AoNItem(name="Flaming Sword", item_level=5, price="160 gp", item_type="Weapon"),
+            AoNItem(
+                name="Flaming Sword", item_level=5, price="160 gp", item_type="Weapon"
+            ),
         ]
         consumable = [
-            AoNItem(name="Healing Potion", item_level=3, price="12 gp", item_type="Potion"),
+            AoNItem(
+                name="Healing Potion", item_level=3, price="12 gp", item_type="Potion"
+            ),
         ]
         text = format_loot_table(5, 4, permanent, consumable, 320)
         assert "Loot Bundle" in text

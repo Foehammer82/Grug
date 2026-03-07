@@ -243,9 +243,7 @@ async def test_check_party_passives_gm_with_dc(monkeypatch):
 
     from grug.agent.core import GrugDeps
 
-    deps = GrugDeps(
-        guild_id=1, channel_id=2, user_id=42, username="gm", campaign_id=10
-    )
+    deps = GrugDeps(guild_id=1, channel_id=2, user_id=42, username="gm", campaign_id=10)
     ctx = MagicMock()
     ctx.deps = deps
 
@@ -261,12 +259,14 @@ async def test_check_party_passives_gm_with_dc(monkeypatch):
         ),
     ]
 
-    mock_factory = _mock_db_factory([
-        _scalar_result(None),       # _is_admin → GrugUser not found
-        _scalar_result(None),       # _is_admin → GuildConfig not found
-        _scalar_result(campaign),   # check_party_passives → Campaign query
-        _scalars_result(chars),     # check_party_passives → Characters query
-    ])
+    mock_factory = _mock_db_factory(
+        [
+            _scalar_result(None),  # _is_admin → GrugUser not found
+            _scalar_result(None),  # _is_admin → GuildConfig not found
+            _scalar_result(campaign),  # check_party_passives → Campaign query
+            _scalars_result(chars),  # check_party_passives → Characters query
+        ]
+    )
 
     with patch("grug.db.session.get_session_factory", return_value=mock_factory):
         from grug.agent.tools.campaign_tools import register_campaign_tools
@@ -310,11 +310,13 @@ async def test_check_party_passives_non_gm_denied(monkeypatch):
 
     # _is_admin makes two DB queries (GrugUser, GuildConfig) → both None.
     # Then check_party_passives queries Campaign.
-    mock_factory = _mock_db_factory([
-        _scalar_result(None),       # _is_admin → GrugUser not found
-        _scalar_result(None),       # _is_admin → GuildConfig not found
-        _scalar_result(campaign),   # check_party_passives → Campaign
-    ])
+    mock_factory = _mock_db_factory(
+        [
+            _scalar_result(None),  # _is_admin → GrugUser not found
+            _scalar_result(None),  # _is_admin → GuildConfig not found
+            _scalar_result(campaign),  # check_party_passives → Campaign
+        ]
+    )
 
     with patch("grug.db.session.get_session_factory", return_value=mock_factory):
         from grug.agent.tools.campaign_tools import register_campaign_tools
@@ -381,10 +383,12 @@ async def test_check_party_passives_without_dc(monkeypatch):
         ),
     ]
 
-    mock_factory = _mock_db_factory([
-        _scalar_result(campaign),   # check_party_passives → Campaign query
-        _scalars_result(chars),     # check_party_passives → Characters query
-    ])
+    mock_factory = _mock_db_factory(
+        [
+            _scalar_result(campaign),  # check_party_passives → Campaign query
+            _scalars_result(chars),  # check_party_passives → Characters query
+        ]
+    )
 
     with patch("grug.db.session.get_session_factory", return_value=mock_factory):
         from grug.agent.tools.campaign_tools import register_campaign_tools
@@ -419,7 +423,11 @@ async def test_api_passives_returns_scores():
 
     chars = [
         _make_character("Gandalf", {"system": "dnd5e", "passive_perception": 18}),
-        _make_character("Frodo", {"system": "dnd5e", "skills": {"perception": 2}}, owner_discord_user_id=101),
+        _make_character(
+            "Frodo",
+            {"system": "dnd5e", "skills": {"perception": 2}},
+            owner_discord_user_id=101,
+        ),
     ]
 
     scalars_mock = MagicMock()
@@ -438,7 +446,11 @@ async def test_api_passives_returns_scores():
         patch("api.routes.campaigns.get_or_404", new=AsyncMock(return_value=campaign)),
     ):
         result = await check_passives(
-            guild_id=1, campaign_id=10, body={"skill": "perception", "dc": 15}, user=user, db=mock_db,
+            guild_id=1,
+            campaign_id=10,
+            body={"skill": "perception", "dc": 15},
+            user=user,
+            db=mock_db,
         )
 
     assert len(result) == 2
@@ -469,6 +481,10 @@ async def test_api_passives_forbidden_for_non_gm():
     ):
         with pytest.raises(HTTPException) as exc_info:
             await check_passives(
-                guild_id=1, campaign_id=10, body={"skill": "perception"}, user=user, db=mock_db,
+                guild_id=1,
+                campaign_id=10,
+                body={"skill": "perception"},
+                user=user,
+                db=mock_db,
             )
     assert exc_info.value.status_code == 403

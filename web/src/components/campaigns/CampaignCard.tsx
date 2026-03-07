@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import BoltIcon from '@mui/icons-material/Bolt';
@@ -6,8 +7,10 @@ import CasinoIcon from '@mui/icons-material/Casino';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EventIcon from '@mui/icons-material/Event';
+import FolderIcon from '@mui/icons-material/Folder';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TuneIcon from '@mui/icons-material/Tune';
@@ -16,6 +19,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
 import CharacterTable from './CharacterTable';
+import CampaignDocumentsTab from './CampaignDocumentsTab';
 import CampaignScheduleTab from './CampaignScheduleTab';
 import DiceTab from './DiceTab';
 import GoldLedgerDialog from './GoldLedgerDialog';
@@ -33,6 +37,8 @@ interface CampaignCardProps {
   timezone: string;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+  /** When true, hides the "open in own page" icon button (used on the detail page itself). */
+  hideOpenInPage?: boolean;
 }
 
 /** A compact header Chip showing the campaign's Game Master. */
@@ -82,8 +88,10 @@ export default function CampaignCard({
   timezone,
   onEdit,
   onDelete,
+  hideOpenInPage = false,
 }: CampaignCardProps) {
   const c = campaign;
+  const navigate = useNavigate();
   const channelName = channels.find((ch) => ch.id === c.channel_id)?.name;
   const isActualGm = c.gm_discord_user_id === currentUserId;
 
@@ -99,7 +107,7 @@ export default function CampaignCard({
   const [partyGoldOpen, setPartyGoldOpen] = useState(false);
   const [partyGoldAmount, setPartyGoldAmount] = useState('');
   const [partyGoldReason, setPartyGoldReason] = useState('');
-  const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'schedule' | 'dice' | 'initiative'>('characters');
+  const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'documents' | 'schedule' | 'dice' | 'initiative'>('characters');
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [goldMenuAnchor, setGoldMenuAnchor] = useState<HTMLElement | null>(null);
   const [passiveCheckOpen, setPassiveCheckOpen] = useState(false);
@@ -164,7 +172,7 @@ export default function CampaignCard({
               label={`#${channelName}`}
               size="small"
               variant="outlined"
-              sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, opacity: 0.5 }}
+              sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, opacity: 0.5, display: { xs: 'none', sm: 'inline-flex' } }}
             />
           </Tooltip>
         )}
@@ -251,6 +259,16 @@ export default function CampaignCard({
             </IconButton>
           </Tooltip>
         )}
+        {!hideOpenInPage && (
+          <Tooltip title="Open campaign in own page">
+            <IconButton
+              size="small"
+              onClick={() => navigate(`/guilds/${c.guild_id}/campaigns/${c.id}`)}
+            >
+              <OpenInNewIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
       </Stack>
 
       {/* Tab bar */}
@@ -276,6 +294,13 @@ export default function CampaignCard({
             value="notes"
             label="Session Notes"
             icon={<MenuBookIcon sx={{ fontSize: 14 }} />}
+            iconPosition="start"
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+          />
+          <Tab
+            value="documents"
+            label="Documents"
+            icon={<FolderIcon sx={{ fontSize: 14 }} />}
             iconPosition="start"
             sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
           />
@@ -346,6 +371,14 @@ export default function CampaignCard({
             isAdmin={isAdmin}
             isGm={isGm}
             currentUserId={currentUserId}
+          />
+        )}
+        {activeTab === 'documents' && (
+          <CampaignDocumentsTab
+            guildId={c.guild_id}
+            campaignId={c.id}
+            isGm={isGm}
+            isAdmin={isAdmin}
           />
         )}
         {activeTab === 'schedule' && (

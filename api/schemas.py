@@ -193,7 +193,9 @@ class ScheduledTaskOut(BaseModel):
             try:
                 from grug.scheduler.manager import unix_cron_to_trigger
 
-                trigger = unix_cron_to_trigger(self.cron_expression, timezone=self.timezone)
+                trigger = unix_cron_to_trigger(
+                    self.cron_expression, timezone=self.timezone
+                )
                 return trigger.get_next_fire_time(None, now)
             except Exception:
                 pass
@@ -272,6 +274,8 @@ class DocumentOut(BaseModel):
     uploaded_by: int
     campaign_id: int | None
     content_hash: str | None
+    is_public: bool
+    file_path: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -279,6 +283,7 @@ class DocumentOut(BaseModel):
 
 class DocumentUpdate(BaseModel):
     description: str | None = None
+    is_public: bool | None = None
 
 
 class DocumentSearchRequest(BaseModel):
@@ -372,6 +377,8 @@ class CampaignOut(BaseModel):
     party_gold: float = 0.0
     # Dice
     allow_manual_dice_recording: bool = False
+    # AI model override — None means use the server default
+    llm_model: str | None = None
     created_by: int
     created_at: datetime
     deleted_at: datetime | None = None
@@ -401,6 +408,8 @@ class CampaignCreate(BaseModel):
     banking_enabled: bool = False
     player_banking_enabled: bool = False
     allow_manual_dice_recording: bool = False
+    # AI model override — None means use the server default (claude-haiku-4-5)
+    llm_model: str | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -414,6 +423,8 @@ class CampaignUpdate(BaseModel):
     banking_enabled: bool | None = None
     player_banking_enabled: bool | None = None
     allow_manual_dice_recording: bool | None = None
+    # AI model override — None means use the server default (claude-haiku-4-5)
+    llm_model: str | None = None
 
 
 class CharacterCreate(BaseModel):

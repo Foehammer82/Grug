@@ -19,6 +19,7 @@ import {
   Stack,
   Switch,
   TextField,
+  Tooltip,
   Typography,
 } from '@mui/material';
 import TableRestaurantIcon from '@mui/icons-material/TableRestaurant';
@@ -34,6 +35,13 @@ const DEPTH_OPTIONS: { value: CombatTrackerDepth; label: string; description: st
   { value: 'basic', label: 'Basic', description: 'Initiative & turns only' },
   { value: 'standard', label: 'Standard', description: '+ HP, AC, conditions' },
   { value: 'full', label: 'Full', description: '+ damage log, death saves, concentration' },
+];
+
+/** Available Anthropic model overrides for a campaign. */
+const LLM_MODEL_OPTIONS: { value: string | null; label: string; description: string }[] = [
+  { value: null, label: 'Server Default (Haiku)', description: 'Use server-configured model (claude-haiku-4-5). Fast and economical.' },
+  { value: 'claude-haiku-4-5', label: 'Haiku', description: 'Fast, economical — great for most campaigns.' },
+  { value: 'claude-sonnet-4-6', label: 'Sonnet (3× cost)', description: 'Smarter responses, better at complex rule lookups and narrative. 3× the cost of Haiku.' },
 ];
 
 // ── Main page ─────────────────────────────────────────────────────────────
@@ -73,6 +81,9 @@ export default function CampaignsPage() {
 
   // Edit dice recording state
   const [editAllowManualDice, setEditAllowManualDice] = useState(false);
+
+  // Edit LLM model state
+  const [editLlmModel, setEditLlmModel] = useState<string | null>(null);
 
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -150,6 +161,7 @@ export default function CampaignsPage() {
         player_banking_enabled: editPlayerBankingEnabled,
         combat_tracker_depth: editCombatDepth,
         allow_manual_dice_recording: editAllowManualDice,
+        llm_model: editLlmModel,
       });
     },
     onSuccess: () => {
@@ -200,6 +212,7 @@ export default function CampaignsPage() {
     setEditPlayerBankingEnabled(c.player_banking_enabled);
     setEditCombatDepth(c.combat_tracker_depth ?? 'standard');
     setEditAllowManualDice(c.allow_manual_dice_recording ?? false);
+    setEditLlmModel(c.llm_model ?? null);
   }
 
   function cancelEdit() {
@@ -212,6 +225,7 @@ export default function CampaignsPage() {
     setEditPlayerBankingEnabled(false);
     setEditCombatDepth('standard');
     setEditAllowManualDice(false);
+    setEditLlmModel(null);
   }
 
   const activeCampaigns = campaigns.filter((c) => !c.deleted_at);
@@ -611,6 +625,29 @@ export default function CampaignsPage() {
                 </Box>
               }
             />
+            {/* AI Model */}
+            <Tooltip
+              title="Smarter models give better responses but cost more. Sonnet is ~3× the price of Haiku."
+              placement="top-start"
+            >
+              <TextField
+                select
+                size="small"
+                label="Grug's AI Model"
+                value={editLlmModel ?? ''}
+                onChange={(e) => setEditLlmModel(e.target.value || null)}
+                helperText={
+                  LLM_MODEL_OPTIONS.find((o) => (o.value ?? '') === (editLlmModel ?? ''))?.description ??
+                  LLM_MODEL_OPTIONS.find((o) => o.value === null)?.description
+                }
+              >
+                {LLM_MODEL_OPTIONS.map((opt) => (
+                  <MenuItem key={opt.value ?? '__default__'} value={opt.value ?? ''}>
+                    {opt.label}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Tooltip>
           </Stack>
         </DialogContent>
         <DialogActions>
