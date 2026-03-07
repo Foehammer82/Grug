@@ -195,6 +195,8 @@ export interface Campaign {
   player_banking_enabled: boolean;
   party_gold: number;
   allow_manual_dice_recording: boolean;
+  /** Per-campaign Anthropic model override. null = use server default. */
+  llm_model: string | null;
   created_by: string;
   created_at: string;
   deleted_at: string | null;

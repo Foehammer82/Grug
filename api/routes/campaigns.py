@@ -112,6 +112,7 @@ async def list_campaigns(
             banking_enabled=c.banking_enabled,
             player_banking_enabled=c.player_banking_enabled,
             allow_manual_dice_recording=c.allow_manual_dice_recording,
+            llm_model=c.llm_model,
             party_gold=float(c.party_gold),
             created_by=c.created_by,
             created_at=c.created_at,
@@ -148,6 +149,7 @@ async def create_campaign(
         combat_tracker_depth=body.combat_tracker_depth,
         banking_enabled=body.banking_enabled,
         player_banking_enabled=body.player_banking_enabled,
+        llm_model=body.llm_model,
         created_by=int(user["id"]),
         created_at=datetime.now(timezone.utc),
     )
@@ -215,6 +217,8 @@ async def update_campaign(
         campaign.combat_tracker_depth = body.combat_tracker_depth  # type: ignore[assignment]
     if "allow_manual_dice_recording" in body.model_fields_set:
         campaign.allow_manual_dice_recording = body.allow_manual_dice_recording  # type: ignore[assignment]
+    if "llm_model" in body.model_fields_set:
+        campaign.llm_model = body.llm_model  # type: ignore[assignment]
     await db.commit()
     await db.refresh(campaign)
     return campaign

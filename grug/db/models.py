@@ -190,6 +190,14 @@ class Campaign(Base):
     allow_manual_dice_recording: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False
     )
+    # ── AI Model ──────────────────────────────────────────────────────────
+    # Per-campaign Anthropic model override.  NULL means use the server
+    # default (settings.anthropic_model, typically claude-haiku-4-5).
+    # Set to a specific model name (e.g. 'claude-sonnet-4-6') to use a
+    # smarter — but more expensive — model for this campaign's channel.
+    llm_model: Mapped[str | None] = mapped_column(
+        String(128), nullable=True, default=None
+    )
 
     characters: Mapped[list["Character"]] = relationship(back_populates="campaign")
     gold_transactions: Mapped[list["GoldTransaction"]] = relationship(

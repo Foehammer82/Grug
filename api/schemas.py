@@ -372,6 +372,8 @@ class CampaignOut(BaseModel):
     party_gold: float = 0.0
     # Dice
     allow_manual_dice_recording: bool = False
+    # AI model override — None means use the server default
+    llm_model: str | None = None
     created_by: int
     created_at: datetime
     deleted_at: datetime | None = None
@@ -401,6 +403,8 @@ class CampaignCreate(BaseModel):
     banking_enabled: bool = False
     player_banking_enabled: bool = False
     allow_manual_dice_recording: bool = False
+    # AI model override — None means use the server default (claude-haiku-4-5)
+    llm_model: str | None = None
 
 
 class CampaignUpdate(BaseModel):
@@ -414,6 +418,8 @@ class CampaignUpdate(BaseModel):
     banking_enabled: bool | None = None
     player_banking_enabled: bool | None = None
     allow_manual_dice_recording: bool | None = None
+    # AI model override — None means use the server default (claude-haiku-4-5)
+    llm_model: str | None = None
 
 
 class CharacterCreate(BaseModel):
