@@ -92,7 +92,7 @@ export default function PassiveCheckPanel({ guildId, campaignId }: PassiveCheckP
           size="small"
           options={SKILL_OPTIONS}
           value={skill}
-          onChange={(_, v) => { if (v) setSkill(v); }}
+          onChange={(_, v) => setSkill(v)}
           getOptionLabel={(o) => o.label}
           isOptionEqualToValue={(a, b) => a.key === b.key}
           disableClearable

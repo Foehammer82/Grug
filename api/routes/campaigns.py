@@ -785,7 +785,7 @@ async def check_passives(
     ``score`` is ``null`` when the character lacks sufficient sheet data.
     ``pass`` is ``null`` when no DC is provided, otherwise ``true``/``false``.
     """
-    from grug.character.passives import compute_passive_score
+    from grug.character.passives import compute_passive_score, normalize_skill_key
 
     await assert_guild_member(guild_id, user)
     admin = await is_guild_admin(guild_id, user)
@@ -797,7 +797,7 @@ async def check_passives(
     if not admin and not is_gm:
         raise HTTPException(status_code=403, detail="Only the GM or an admin can check passive scores.")
 
-    skill: str = (body.get("skill") or "perception").strip().lower().replace(" ", "_")
+    skill: str = normalize_skill_key(body.get("skill") or "perception")
     dc: int | None = body.get("dc")
 
     chars = (

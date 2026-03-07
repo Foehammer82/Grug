@@ -81,6 +81,11 @@ def _ability_mod(score: int | None) -> int | None:
 # ── Public API ────────────────────────────────────────────────────────────
 
 
+def normalize_skill_key(skill: str) -> str:
+    """Normalize a skill name for lookup: lowercase, strip, spaces → underscores."""
+    return skill.strip().lower().replace(" ", "_")
+
+
 def compute_passive_score(
     structured_data: dict[str, Any],
     skill: str = "perception",
@@ -101,7 +106,7 @@ def compute_passive_score(
         return None
 
     system = (structured_data.get("system") or "unknown").lower()
-    skill_key = skill.strip().lower().replace(" ", "_")
+    skill_key = normalize_skill_key(skill)
 
     if system == "dnd5e":
         return _passive_dnd5e(structured_data, skill_key)

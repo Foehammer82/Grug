@@ -325,7 +325,7 @@ export default function CampaignCard({
                   size="small"
                   variant="outlined"
                   startIcon={<VisibilityIcon />}
-                  onClick={() => setPassiveCheckOpen((v) => !v)}
+                  onClick={() => setPassiveCheckOpen((prev) => !prev)}
                   sx={{ textTransform: 'none', fontSize: '0.75rem' }}
                 >
                   {passiveCheckOpen ? 'Hide Passive Check' : 'Passive Check'}
