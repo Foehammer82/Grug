@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Avatar, Box, Button, Chip, Dialog, DialogActions, DialogContent, DialogTitle, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Skeleton, Stack, Tab, Tabs, TextField, Tooltip, Typography } from '@mui/material';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import BoltIcon from '@mui/icons-material/Bolt';
@@ -8,6 +9,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EventIcon from '@mui/icons-material/Event';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TuneIcon from '@mui/icons-material/Tune';
@@ -33,6 +35,8 @@ interface CampaignCardProps {
   timezone: string;
   onEdit: (c: Campaign) => void;
   onDelete: (c: Campaign) => void;
+  /** When true, hides the "open in own page" icon button (used on the detail page itself). */
+  hideOpenInPage?: boolean;
 }
 
 /** A compact header Chip showing the campaign's Game Master. */
@@ -82,8 +86,10 @@ export default function CampaignCard({
   timezone,
   onEdit,
   onDelete,
+  hideOpenInPage = false,
 }: CampaignCardProps) {
   const c = campaign;
+  const navigate = useNavigate();
   const channelName = channels.find((ch) => ch.id === c.channel_id)?.name;
   const isActualGm = c.gm_discord_user_id === currentUserId;
 
@@ -164,7 +170,7 @@ export default function CampaignCard({
               label={`#${channelName}`}
               size="small"
               variant="outlined"
-              sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, opacity: 0.5 }}
+              sx={{ height: 20, fontSize: '0.7rem', flexShrink: 0, opacity: 0.5, display: { xs: 'none', sm: 'inline-flex' } }}
             />
           </Tooltip>
         )}
@@ -248,6 +254,16 @@ export default function CampaignCard({
           <Tooltip title="Delete campaign">
             <IconButton size="small" color="error" onClick={() => onDelete(c)}>
               <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {!hideOpenInPage && (
+          <Tooltip title="Open campaign in own page">
+            <IconButton
+              size="small"
+              onClick={() => navigate(`/guilds/${c.guild_id}/campaigns/${c.id}`)}
+            >
+              <OpenInNewIcon fontSize="small" />
             </IconButton>
           </Tooltip>
         )}
