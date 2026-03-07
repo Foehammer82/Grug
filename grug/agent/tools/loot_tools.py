@@ -138,11 +138,14 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
 
         # ── Validate level ────────────────────────────────────────────────
         if party_level < 1 or party_level > 20:
-            return (
-                "Party level must be between 1 and 20. "
-                "No campaign is linked to this channel (or the campaign's "
-                "characters don't have level data). Please specify party_level."
-            )
+            if party_level == 0:
+                return (
+                    "Could not determine party level automatically. "
+                    "No campaign is linked to this channel, or the campaign's "
+                    "characters don't have level data. "
+                    "Please specify party_level (1–20)."
+                )
+            return "Party level must be between 1 and 20."
 
         if party_size < 1 or party_size > 12:
             return "Party size must be between 1 and 12."
@@ -222,11 +225,14 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
             party_size = 4
 
         if party_level < 1 or party_level > 20:
-            return (
-                "Party level must be between 1 and 20. "
-                "No campaign is linked to this channel (or the campaign's "
-                "characters don't have level data). Please specify party_level."
-            )
+            if party_level == 0:
+                return (
+                    "Could not determine party level automatically. "
+                    "No campaign is linked to this channel, or the campaign's "
+                    "characters don't have level data. "
+                    "Please specify party_level (1–20)."
+                )
+            return "Party level must be between 1 and 20."
 
         row = get_treasure_budget(party_level)
         if row is None:

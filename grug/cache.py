@@ -114,7 +114,7 @@ class RedisCache:
             return None
         try:
             return json.loads(raw)
-        except (json.JSONDecodeError, TypeError):
+        except json.JSONDecodeError:
             return None
 
     async def set(self, key: str, value: Any, *, ttl: int | None = None) -> None:
@@ -129,7 +129,7 @@ class RedisCache:
 
     async def clear(self) -> None:
         """Delete all ``grug:`` prefixed keys."""
-        cursor: int | str = 0
+        cursor = 0
         while True:
             cursor, keys = await self._redis.scan(
                 cursor=cursor, match=self._prefix + "*", count=100

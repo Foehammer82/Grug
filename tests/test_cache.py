@@ -60,16 +60,17 @@ class TestMemoryCache:
     async def test_evicts_expired_on_overflow(self, monkeypatch):
         """When at capacity, expired entries are evicted first."""
         cache = MemoryCache(maxsize=3)
-        base = time.monotonic()
-        # Fill with TTL entries that are already expired
-        cache._data["old1"] = ("v1", base - 10)
-        cache._data["old2"] = ("v2", base - 10)
-        cache._data["old3"] = ("v3", base - 10)
+        # Fill with TTL entries
+        await cache.set("old1", "v1", ttl=1)
+        await cache.set("old2", "v2", ttl=1)
+        await cache.set("old3", "v3", ttl=1)
 
-        monkeypatch.setattr(time, "monotonic", lambda: base)
+        # Fast-forward past TTL so entries are expired
+        future = time.monotonic() + 10
+        monkeypatch.setattr(time, "monotonic", lambda: future)
         await cache.set("new", "fresh")
         assert await cache.get("new") == "fresh"
-        # Expired entries should be gone
+        # Expired entries should have been evicted
         assert len(cache._data) == 1
 
     async def test_fifo_eviction_when_no_expired(self):
