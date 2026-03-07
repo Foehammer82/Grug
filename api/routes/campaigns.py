@@ -1,6 +1,8 @@
 """Campaign routes — CRUD for guild-specific campaigns and their characters."""
 
+import hashlib
 import logging
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -27,6 +29,11 @@ from api.schemas import (
     CharacterCreate,
     CharacterOut,
     CharacterUpdate,
+    DocumentChunk,
+    DocumentOut,
+    DocumentSearchRequest,
+    DocumentSearchResult,
+    DocumentUpdate,
     PathbuilderLinkRequest,
 )
 from grug.character.indexer import CharacterIndexer
@@ -37,7 +44,7 @@ from grug.character.pathbuilder import (
     parse_pathbuilder_response,
 )
 from grug.config.settings import get_settings
-from grug.db.models import Campaign, Character
+from grug.db.models import Campaign, Character, Document
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +63,21 @@ _ALLOWED_SHEET_EXTENSIONS = {
 _MAX_SHEET_SIZE_MB = 20
 
 router = APIRouter(tags=["campaigns"])
+
+_ALLOWED_DOC_EXTENSIONS = {".txt", ".md", ".rst", ".pdf"}
+_MAX_DOC_SIZE_MB = 10
+
+# Lazy singleton for document indexer — avoids loading heavy ML deps at import time.
+_doc_indexer = None
+
+
+def _get_doc_indexer():
+    global _doc_indexer
+    if _doc_indexer is None:
+        from grug.rag.indexer import DocumentIndexer
+
+        _doc_indexer = DocumentIndexer()
+    return _doc_indexer
 
 
 @router.get("/api/guilds/{guild_id}/campaigns", response_model=list[CampaignOut])
@@ -831,3 +853,267 @@ async def check_passives(
         )
 
     return results
+
+
+# ---------------------------------------------------------------------------
+# Campaign document routes
+# ---------------------------------------------------------------------------
+# Documents are now campaign-scoped resources.  The GM or any guild admin can
+# upload, edit, and delete documents for their campaign.  Guild members can
+# list and search (read-only).
+# ---------------------------------------------------------------------------
+
+
+def _assert_gm_or_admin(is_admin: bool, campaign: Campaign, user: dict) -> None:
+    """Raise 403 unless the user is a guild admin or the campaign's GM."""
+    is_gm = campaign.gm_discord_user_id is not None and str(
+        campaign.gm_discord_user_id
+    ) == str(user["id"])
+    if not is_admin and not is_gm:
+        raise HTTPException(
+            status_code=403,
+            detail="Only guild admins or the campaign GM may manage documents.",
+        )
+
+
+@router.get(
+    "/api/guilds/{guild_id}/campaigns/{campaign_id}/documents",
+    response_model=list[DocumentOut],
+)
+async def list_campaign_documents(
+    guild_id: int,
+    campaign_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[Document]:
+    """List all documents indexed for a campaign."""
+    await assert_guild_member(guild_id, user)
+    # Verify the campaign belongs to this guild.
+    await get_or_404(
+        db,
+        Campaign,
+        Campaign.id == campaign_id,
+        Campaign.guild_id == guild_id,
+        detail="Campaign not found",
+    )
+    result = await db.execute(
+        select(Document)
+        .where(
+            Document.guild_id == guild_id,
+            Document.campaign_id == campaign_id,
+        )
+        .order_by(Document.created_at)
+    )
+    return list(result.scalars().all())
+
+
+@router.post(
+    "/api/guilds/{guild_id}/campaigns/{campaign_id}/documents",
+    response_model=DocumentOut,
+    status_code=201,
+)
+async def upload_campaign_document(
+    guild_id: int,
+    campaign_id: int,
+    file: UploadFile,
+    description: str = "",
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Document:
+    """Upload and index a document for a campaign (GM or admin only)."""
+    await assert_guild_member(guild_id, user)
+    admin = await is_guild_admin(guild_id, user)
+    campaign = await get_or_404(
+        db,
+        Campaign,
+        Campaign.id == campaign_id,
+        Campaign.guild_id == guild_id,
+        detail="Campaign not found",
+    )
+    _assert_gm_or_admin(admin, campaign, user)
+
+    ext = Path(file.filename or "").suffix.lower()
+    if ext not in _ALLOWED_DOC_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(sorted(_ALLOWED_DOC_EXTENSIONS))}",
+        )
+
+    contents = await file.read()
+    size_mb = len(contents) / (1024 * 1024)
+    if size_mb > _MAX_DOC_SIZE_MB:
+        raise HTTPException(
+            status_code=422,
+            detail=f"File exceeds {_MAX_DOC_SIZE_MB} MB limit.",
+        )
+
+    content_hash = hashlib.sha256(contents).hexdigest()
+
+    # Reject duplicate content within the same campaign.
+    existing = await db.execute(
+        select(Document).where(
+            Document.campaign_id == campaign_id,
+            Document.content_hash == content_hash,
+        )
+    )
+    if existing.scalars().first() is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="A document with identical content has already been uploaded to this campaign.",
+        )
+
+    safe_filename = Path(file.filename or "upload").name or "upload"
+    uploader_id = int(user["id"])
+
+    doc = Document(
+        guild_id=guild_id,
+        campaign_id=campaign_id,
+        filename=safe_filename,
+        description=description or None,
+        chroma_collection=f"guild_{guild_id}",
+        chunk_count=0,
+        uploaded_by=uploader_id,
+        content_hash=content_hash,
+    )
+    db.add(doc)
+    await db.commit()
+    await db.refresh(doc)
+
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        tmp_path = Path(tmp_dir) / safe_filename
+        tmp_path.write_bytes(contents)
+        chunk_count = await _get_doc_indexer().index_file(
+            guild_id=guild_id,
+            file_path=tmp_path,
+            document_id=doc.id,
+            description=description or None,
+        )
+
+    doc.chunk_count = chunk_count
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+@router.patch(
+    "/api/guilds/{guild_id}/campaigns/{campaign_id}/documents/{doc_id}",
+    response_model=DocumentOut,
+)
+async def update_campaign_document(
+    guild_id: int,
+    campaign_id: int,
+    doc_id: int,
+    body: DocumentUpdate,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Document:
+    """Update a campaign document's description (GM or admin only)."""
+    await assert_guild_member(guild_id, user)
+    admin = await is_guild_admin(guild_id, user)
+    campaign = await get_or_404(
+        db,
+        Campaign,
+        Campaign.id == campaign_id,
+        Campaign.guild_id == guild_id,
+        detail="Campaign not found",
+    )
+    _assert_gm_or_admin(admin, campaign, user)
+    doc = await get_or_404(
+        db,
+        Document,
+        Document.id == doc_id,
+        Document.campaign_id == campaign_id,
+        detail="Document not found",
+    )
+    if "description" in body.model_fields_set:
+        doc.description = body.description
+    await db.commit()
+    await db.refresh(doc)
+    return doc
+
+
+@router.delete(
+    "/api/guilds/{guild_id}/campaigns/{campaign_id}/documents/{doc_id}",
+    status_code=204,
+)
+async def delete_campaign_document(
+    guild_id: int,
+    campaign_id: int,
+    doc_id: int,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Delete a campaign document and its indexed chunks (GM or admin only)."""
+    await assert_guild_member(guild_id, user)
+    admin = await is_guild_admin(guild_id, user)
+    campaign = await get_or_404(
+        db,
+        Campaign,
+        Campaign.id == campaign_id,
+        Campaign.guild_id == guild_id,
+        detail="Campaign not found",
+    )
+    _assert_gm_or_admin(admin, campaign, user)
+    doc = await get_or_404(
+        db,
+        Document,
+        Document.id == doc_id,
+        Document.campaign_id == campaign_id,
+        detail="Document not found",
+    )
+    await _get_doc_indexer().delete_document(guild_id, doc_id)
+    await db.delete(doc)
+    await db.commit()
+
+
+@router.post(
+    "/api/guilds/{guild_id}/campaigns/{campaign_id}/documents/search",
+    response_model=DocumentSearchResult,
+)
+async def search_campaign_documents(
+    guild_id: int,
+    campaign_id: int,
+    body: DocumentSearchRequest,
+    user: dict[str, Any] = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentSearchResult:
+    """Run a live RAG search against a campaign's indexed documents (GM or admin only).
+
+    Returns the top-k matching chunks with similarity scores so GMs can verify
+    that a document has been indexed correctly and is retrievable.
+    """
+    await assert_guild_member(guild_id, user)
+    admin = await is_guild_admin(guild_id, user)
+    campaign = await get_or_404(
+        db,
+        Campaign,
+        Campaign.id == campaign_id,
+        Campaign.guild_id == guild_id,
+        detail="Campaign not found",
+    )
+    _assert_gm_or_admin(admin, campaign, user)
+
+    from grug.rag.retriever import DocumentRetriever
+
+    try:
+        retriever = DocumentRetriever()
+        raw = await retriever.search(
+            guild_id,
+            body.query,
+            k=body.k,
+            document_id=body.document_id,
+            campaign_id=campaign_id,
+        )
+        chunks = [
+            DocumentChunk(
+                text=c["text"],
+                filename=c["filename"],
+                chunk_index=c["chunk_index"],
+                distance=round(float(c.get("distance", 0.0)), 4),
+            )
+            for c in raw
+        ]
+        return DocumentSearchResult(chunks=chunks)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Campaign document search failed: %s", exc)
+        return DocumentSearchResult(chunks=[], error=True)

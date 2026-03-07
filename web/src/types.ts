@@ -163,6 +163,7 @@ export interface Document {
   filename: string;
   description: string | null;
   chunk_count: number;
+  campaign_id: number | null;
   content_hash: string | null;
   created_at: string;
 }

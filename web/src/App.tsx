@@ -4,7 +4,6 @@ import AppLayout from './components/AppLayout';
 import GuildLayout from './components/GuildLayout';
 import AdminPage from './pages/AdminPage';
 import DashboardPage from './pages/DashboardPage';
-import DocumentsPage from './pages/DocumentsPage';
 import EventsPage from './pages/EventsPage';
 import GlossaryPage from './pages/GlossaryPage';
 import GuildConfigPage from './pages/GuildConfigPage';
@@ -48,7 +47,6 @@ function App() {
           <Route path="config" element={<GuildConfigPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="tasks" element={<TasksPage />} />
-          <Route path="documents" element={<DocumentsPage />} />
           <Route path="glossary" element={<GlossaryPage />} />
           <Route path="notes" element={<NotesPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />

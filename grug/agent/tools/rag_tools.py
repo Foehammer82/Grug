@@ -49,17 +49,31 @@ def register_rag_tools(agent: Agent[GrugDeps, str]) -> None:
 
     @agent.tool
     async def list_documents(ctx: RunContext[GrugDeps]) -> str:
-        """List all documents that have been indexed for this server."""
+        """List documents indexed for the current campaign.
+
+        When in a campaign channel, lists only documents belonging to that
+        campaign.  Falls back to a guild-wide list when no campaign is active.
+        """
         from grug.db.models import Document
         from grug.db.session import get_session_factory
 
         factory = get_session_factory()
         async with factory() as session:
-            result = await session.execute(
-                select(Document).where(Document.guild_id == ctx.deps.guild_id)
-            )
+            if ctx.deps.campaign_id is not None:
+                result = await session.execute(
+                    select(Document).where(
+                        Document.guild_id == ctx.deps.guild_id,
+                        Document.campaign_id == ctx.deps.campaign_id,
+                    )
+                )
+            else:
+                result = await session.execute(
+                    select(Document).where(Document.guild_id == ctx.deps.guild_id)
+                )
             docs = result.scalars().all()
         if not docs:
+            if ctx.deps.campaign_id is not None:
+                return "No documents have been indexed for this campaign yet."
             return "No documents have been indexed for this server yet."
         lines = ["Indexed documents:"]
         for doc in docs:
