@@ -419,3 +419,110 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
             + (f"\n{summary}" if summary else "")
             + "\nYou can view and manage your character sheet in the web dashboard."
         )
+
+    @agent.tool
+    async def check_party_passives(
+        ctx: RunContext[GrugDeps],
+        skill: str = "perception",
+        dc: int | None = None,
+    ) -> str:
+        """Check the party's passive skill scores — GM / admin only.
+
+        Use when the GM wants to know whether any party member would passively
+        notice something (a hidden trap, a lying NPC, a concealed door, etc.)
+        without alerting the players by asking for rolls.
+
+        Common queries that should trigger this tool:
+        - "Can anyone in the party notice the hidden door?"
+        - "What are the party's passive perceptions?"
+        - "Check passive investigation against DC 15"
+        - "Would anyone see through the disguise? DC 18 Insight"
+        - "Passive stealth check for the party"
+
+        Parameters
+        ----------
+        skill:
+            The skill to check passively.  Defaults to ``"perception"``.
+            Examples: perception, insight, investigation, stealth, arcana.
+        dc:
+            Optional Difficulty Class to check against.  When provided the
+            result indicates which characters meet or exceed the DC.
+        """
+        from grug.character.passives import compute_passive_score
+        from grug.db.models import Campaign, Character
+        from grug.db.session import get_session_factory
+
+        # GM / admin gate.
+        campaign_id = ctx.deps.campaign_id
+        if campaign_id is None:
+            return (
+                "No campaign is linked to this channel. "
+                "An admin can create one with /campaign create."
+            )
+
+        admin = await _is_admin(ctx)
+        factory = get_session_factory()
+
+        # Also allow the campaign's designated GM.
+        is_gm = False
+        async with factory() as session:
+            campaign = (
+                await session.execute(
+                    select(Campaign).where(Campaign.id == campaign_id)
+                )
+            ).scalar_one_or_none()
+            if campaign is None:
+                return "Campaign not found."
+            if campaign.gm_discord_user_id == ctx.deps.user_id:
+                is_gm = True
+
+        if not admin and not is_gm:
+            return (
+                "Only the GM or an admin can check passive scores — "
+                "wouldn't want to spoil the surprise for the players!"
+            )
+
+        # Fetch party characters.
+        async with factory() as session:
+            chars = (
+                (
+                    await session.execute(
+                        select(Character).where(
+                            Character.campaign_id == campaign_id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+
+        if not chars:
+            return "No characters in this campaign yet."
+
+        skill_label = skill.strip().replace("_", " ").title()
+        lines = [f"**Passive {skill_label} — Party Check**"]
+        if dc is not None:
+            lines[0] += f" (DC {dc})"
+        lines.append("")
+
+        any_score = False
+        for c in chars:
+            sd = c.structured_data or {}
+            score = compute_passive_score(sd, skill)
+            if score is None:
+                lines.append(f"• **{c.name}**: — *(insufficient sheet data)*")
+                continue
+            any_score = True
+            if dc is not None:
+                result = "✅ pass" if score >= dc else "❌ fail"
+                lines.append(f"• **{c.name}**: {score} {result}")
+            else:
+                lines.append(f"• **{c.name}**: {score}")
+
+        if not any_score:
+            lines.append(
+                "\n⚠️ Could not compute passive scores — "
+                "character sheets may need to be uploaded or synced."
+            )
+
+        return "\n".join(lines)

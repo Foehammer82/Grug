@@ -11,6 +11,7 @@ import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import PeopleIcon from '@mui/icons-material/People';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import TuneIcon from '@mui/icons-material/Tune';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import client from '../../api/client';
 import { SYSTEM_LABELS } from '../../constants/character';
@@ -19,6 +20,7 @@ import CampaignScheduleTab from './CampaignScheduleTab';
 import DiceTab from './DiceTab';
 import GoldLedgerDialog from './GoldLedgerDialog';
 import InitiativePanel from './InitiativePanel';
+import PassiveCheckPanel from './PassiveCheckPanel';
 import SessionNotesTab from './SessionNotesTab';
 import type { Campaign, DiscordChannel, GuildMember } from '../../types';
 
@@ -100,6 +102,7 @@ export default function CampaignCard({
   const [activeTab, setActiveTab] = useState<'characters' | 'notes' | 'schedule' | 'dice' | 'initiative'>('characters');
   const [ledgerOpen, setLedgerOpen] = useState(false);
   const [goldMenuAnchor, setGoldMenuAnchor] = useState<HTMLElement | null>(null);
+  const [passiveCheckOpen, setPassiveCheckOpen] = useState(false);
 
   const adjustPartyGoldMutation = useMutation({
     mutationFn: async () => {
@@ -303,18 +306,38 @@ export default function CampaignCard({
       {/* Tab panels */}
       <Box sx={{ px: { xs: 1, sm: 2 }, py: 1.5 }}>
         {activeTab === 'characters' && (
-          <CharacterTable
-            guildId={c.guild_id}
-            campaignId={c.id}
-            campaignSystem={c.system}
-            isAdmin={isAdmin}
-            isGm={isGm}
-            currentUserId={currentUserId}
-            allCampaigns={allCampaigns}
-            bankingEnabled={c.banking_enabled}
-            playerBankingEnabled={c.player_banking_enabled}
-            partyGold={c.party_gold}
-          />
+          <>
+            <CharacterTable
+              guildId={c.guild_id}
+              campaignId={c.id}
+              campaignSystem={c.system}
+              isAdmin={isAdmin}
+              isGm={isGm}
+              currentUserId={currentUserId}
+              allCampaigns={allCampaigns}
+              bankingEnabled={c.banking_enabled}
+              playerBankingEnabled={c.player_banking_enabled}
+              partyGold={c.party_gold}
+            />
+            {isGm && (
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<VisibilityIcon />}
+                  onClick={() => setPassiveCheckOpen((prev) => !prev)}
+                  sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+                >
+                  {passiveCheckOpen ? 'Hide Passive Check' : 'Passive Check'}
+                </Button>
+                {passiveCheckOpen && (
+                  <Box sx={{ mt: 1 }}>
+                    <PassiveCheckPanel guildId={c.guild_id} campaignId={c.id} />
+                  </Box>
+                )}
+              </Box>
+            )}
+          </>
         )}
         {activeTab === 'notes' && (
           <SessionNotesTab
