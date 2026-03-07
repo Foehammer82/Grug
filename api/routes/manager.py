@@ -49,7 +49,6 @@ def _assert_manager_enabled() -> None:
 
 class FeedbackCreate(BaseModel):
     message_id: int
-    channel_id: str | int
     rating: int  # +1 or -1
     comment: str | None = None
 
@@ -87,7 +86,7 @@ class InstructionOverrideOut(BaseModel):
 class InstructionOverrideCreate(BaseModel):
     content: str
     scope: str = "guild"
-    channel_id: str | int | None = None
+    channel_id: str | None = None
     reason: str | None = None
 
 
@@ -150,7 +149,6 @@ async def submit_feedback(
     if msg is None:
         raise HTTPException(status_code=404, detail="Message not found")
 
-    channel_id = int(body.channel_id) if body.channel_id is not None else msg.channel_id
     user_id = int(user["id"])
 
     # Upsert — one feedback per user per message
@@ -172,7 +170,7 @@ async def submit_feedback(
 
     fb = UserFeedback(
         guild_id=guild_id,
-        channel_id=channel_id,
+        channel_id=msg.channel_id,
         message_id=body.message_id,
         discord_user_id=user_id,
         rating=body.rating,
@@ -258,9 +256,19 @@ async def create_instruction(
             status_code=422, detail="channel_id required for channel-scoped overrides"
         )
 
+    channel_id_int: int | None = None
+    if body.channel_id is not None:
+        try:
+            channel_id_int = int(body.channel_id)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=422,
+                detail="channel_id must be a numeric Discord channel ID",
+            )
+
     override = InstructionOverride(
         guild_id=guild_id,
-        channel_id=int(body.channel_id) if body.channel_id is not None else None,
+        channel_id=channel_id_int,
         scope=body.scope,
         content=body.content,
         status="active",
@@ -435,9 +443,13 @@ async def trigger_review(
     # its own error state (sets status='failed' on exception).
     async def _bg_review() -> None:
         try:
-            await run_review(guild_id)
+            await run_review(guild_id=guild_id, review_id=review.id)
         except Exception:
-            logger.exception("Background manager review failed for guild %d", guild_id)
+            logger.exception(
+                "Background manager review failed for guild %d (review id %d)",
+                guild_id,
+                review.id,
+            )
 
     asyncio.create_task(_bg_review(), name=f"manager_review_{guild_id}")
 

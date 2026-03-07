@@ -426,7 +426,10 @@ function ReviewCard({ review }: { review: ManagerReview }) {
           {review.recommendations.map((rec, i) => (
             <Box key={i} sx={{ mb: 1, pl: 1, borderLeft: 2, borderColor: 'primary.main' }}>
               <Typography variant="body2">
-                <strong>{rec.action}:</strong> {rec.reason}
+                <Box component="span" sx={{ fontWeight: 600 }}>
+                  {rec.action}:
+                </Box>{' '}
+                {rec.reason}
               </Typography>
               <Typography
                 variant="body2"

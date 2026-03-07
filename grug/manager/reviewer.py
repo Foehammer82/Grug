@@ -29,11 +29,17 @@ class ReviewResult(BaseModel):
     recommendations: list[dict[str, str]] = []
 
 
-async def run_review(guild_id: int) -> int:
+async def run_review(guild_id: int, *, review_id: int | None = None) -> int:
     """Run a manager review for a guild and return the ManagerReview.id.
 
+    Args:
+        guild_id: The Discord guild ID to review.
+        review_id: If provided, update this existing ManagerReview row instead
+            of creating a new one.  Used by the API trigger endpoint to avoid
+            orphaned ``pending`` rows.
+
     Steps:
-    1. Create a ManagerReview record (status='running')
+    1. Create or load a ManagerReview record (status='running')
     2. Load recent messages + feedback
     3. Run the manager agent
     4. Parse the result and update the review record
@@ -55,17 +61,28 @@ async def run_review(guild_id: int) -> int:
     settings = get_settings()
     factory = get_session_factory()
 
-    # ── Step 1: Create review record ──────────────────────────────────────
-    async with factory() as session:
-        review = ManagerReview(
-            guild_id=guild_id,
-            status="running",
-            started_at=datetime.now(timezone.utc),
-        )
-        session.add(review)
-        await session.commit()
-        await session.refresh(review)
-        review_id = review.id
+    # ── Step 1: Create or load review record ──────────────────────────────
+    if review_id is not None:
+        async with factory() as session:
+            review = (
+                await session.execute(
+                    select(ManagerReview).where(ManagerReview.id == review_id)
+                )
+            ).scalar_one()
+            review.status = "running"
+            review.started_at = datetime.now(timezone.utc)
+            await session.commit()
+    else:
+        async with factory() as session:
+            review = ManagerReview(
+                guild_id=guild_id,
+                status="running",
+                started_at=datetime.now(timezone.utc),
+            )
+            session.add(review)
+            await session.commit()
+            await session.refresh(review)
+            review_id = review.id
 
     try:
         # ── Step 2: Load data ─────────────────────────────────────────────
@@ -149,7 +166,7 @@ async def run_review(guild_id: int) -> int:
             f"Analyze Grug's behaviour and produce your review."
         )
 
-        result = await _call_manager_llm(prompt)
+        result = await _call_manager_llm(prompt, guild_id=guild_id)
 
         # ── Step 4: Parse and update ──────────────────────────────────────
         parsed = _parse_review_result(result)
@@ -252,7 +269,7 @@ def _format_feedback(feedback_rows: list[Any]) -> str:
     return "\n".join(lines)
 
 
-async def _call_manager_llm(prompt: str) -> str:
+async def _call_manager_llm(prompt: str, *, guild_id: int | None = None) -> str:
     """Call the LLM with the manager system prompt and return the response text."""
     import anthropic
 
@@ -279,6 +296,7 @@ async def _call_manager_llm(prompt: str) -> str:
         call_type=CallType.MANAGER_REVIEW,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
+        guild_id=guild_id,
     )
 
     return result_text
