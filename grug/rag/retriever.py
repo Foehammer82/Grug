@@ -22,6 +22,7 @@ class DocumentRetriever:
         k: int = 5,
         document_id: int | None = None,
         campaign_id: int | None = None,
+        public_only: bool = False,
     ) -> list[dict]:
         """Return the top-k relevant chunks for *query*.
 
@@ -29,11 +30,15 @@ class DocumentRetriever:
         with that campaign.  If no campaign-scoped documents are found, falls
         back to the full guild-wide search so a response is always possible.
 
-        Returns a list of dicts with keys: text, filename, chunk_index, distance.
+        When *public_only* is ``True``, only documents with ``is_public=True``
+        are searched (used for non-GM player queries).
+
+        Returns a list of dicts with keys: text, filename, document_id,
+        chunk_index, distance.
         """
         if campaign_id is not None:
             chunks = await self._search_campaign(
-                guild_id, query, k=k, campaign_id=campaign_id
+                guild_id, query, k=k, campaign_id=campaign_id, public_only=public_only
             )
             if chunks:
                 return chunks
@@ -53,19 +58,25 @@ class DocumentRetriever:
         query: str,
         k: int,
         campaign_id: int,
+        public_only: bool = False,
     ) -> list[dict]:
-        """Search only documents whose campaign_id matches."""
+        """Search only documents whose campaign_id matches.
+
+        When *public_only* is ``True``, further restricts to documents with
+        ``is_public=True`` so private GM documents are never leaked to players.
+        """
         from grug.db.models import Document
         from grug.db.session import get_session_factory
 
         factory = get_session_factory()
         async with factory() as session:
-            result = await session.execute(
-                select(Document.id).where(
-                    Document.guild_id == guild_id,
-                    Document.campaign_id == campaign_id,
-                )
+            stmt = select(Document.id).where(
+                Document.guild_id == guild_id,
+                Document.campaign_id == campaign_id,
             )
+            if public_only:
+                stmt = stmt.where(Document.is_public.is_(True))
+            result = await session.execute(stmt)
             doc_ids = [row[0] for row in result.all()]
 
         if not doc_ids:

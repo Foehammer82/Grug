@@ -46,10 +46,14 @@ async def _get_party_info(campaign_id: int) -> tuple[int, int] | None:
     factory = get_session_factory()
     async with factory() as session:
         chars = (
-            await session.execute(
-                select(Character).where(Character.campaign_id == campaign_id)
+            (
+                await session.execute(
+                    select(Character).where(Character.campaign_id == campaign_id)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     if not chars:
         return None
@@ -159,12 +163,8 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
         perm_items_by_level, cons_items_by_level = await _fetch_item_pools(row)
 
         # ── Pick random items ─────────────────────────────────────────────
-        permanent_picks = pick_random_items(
-            row.permanent_items, perm_items_by_level
-        )
-        consumable_picks = pick_random_items(
-            row.consumables, cons_items_by_level
-        )
+        permanent_picks = pick_random_items(row.permanent_items, perm_items_by_level)
+        consumable_picks = pick_random_items(row.consumables, cons_items_by_level)
 
         # ── Calculate currency ────────────────────────────────────────────
         extra = row.extra_currency_per_pc * max(0, party_size - 4)

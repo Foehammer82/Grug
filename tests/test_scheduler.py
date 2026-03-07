@@ -179,7 +179,9 @@ def test_add_cron_job_with_timezone():
     async def dummy():
         pass
 
-    job_id = add_cron_job(dummy, "0 9 * * 5", "test_tz_job", timezone="America/New_York")
+    job_id = add_cron_job(
+        dummy, "0 9 * * 5", "test_tz_job", timezone="America/New_York"
+    )
     assert job_id == "test_tz_job"
     job = scheduler.get_job("test_tz_job")
     assert job is not None

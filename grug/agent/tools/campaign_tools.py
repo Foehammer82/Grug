@@ -487,9 +487,7 @@ def register_campaign_tools(agent: Agent[GrugDeps, str]) -> None:
             chars = (
                 (
                     await session.execute(
-                        select(Character).where(
-                            Character.campaign_id == campaign_id
-                        )
+                        select(Character).where(Character.campaign_id == campaign_id)
                     )
                 )
                 .scalars()

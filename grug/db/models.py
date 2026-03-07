@@ -354,6 +354,14 @@ class Document(Base):
     content_hash: Mapped[str | None] = mapped_column(
         String(64), nullable=True, index=True
     )
+    # Whether the document is visible to all campaign members (True) or only
+    # visible to the GM and guild admins (False = private, the default).
+    is_public: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    # Path to the persisted raw file on disk, relative to file_data_dir.
+    # NULL for documents uploaded before file persistence was introduced.
+    file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
@@ -704,7 +712,9 @@ class ScheduledTask(Base):
     cron_expression: Mapped[str | None] = mapped_column(String(128), nullable=True)
     # IANA timezone name used to interpret cron fields (e.g. "America/New_York").
     # Defaults to "UTC".  Stored so the scheduler always fires at the intended local time.
-    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC", server_default="UTC")
+    timezone: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="UTC", server_default="UTC"
+    )
     # Where this task was created from: 'discord' (agent tool) or 'web' (UI).
     source: Mapped[str] = mapped_column(
         String(16), nullable=False, default="discord", server_default="discord"

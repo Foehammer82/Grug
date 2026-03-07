@@ -94,6 +94,7 @@ class PGVectorStore:
                 "text": row.content,
                 "filename": row.filename,
                 "description": row.description,
+                "document_id": row.document_id,
                 "chunk_index": row.chunk_index,
                 # pgvector doesn't return raw distances here; use 0.0 as placeholder.
                 "distance": 0.0,

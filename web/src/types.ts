@@ -165,6 +165,8 @@ export interface Document {
   chunk_count: number;
   campaign_id: number | null;
   content_hash: string | null;
+  is_public: boolean;
+  file_path: string | null;
   created_at: string;
 }
 

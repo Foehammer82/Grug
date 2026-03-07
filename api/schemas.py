@@ -193,7 +193,9 @@ class ScheduledTaskOut(BaseModel):
             try:
                 from grug.scheduler.manager import unix_cron_to_trigger
 
-                trigger = unix_cron_to_trigger(self.cron_expression, timezone=self.timezone)
+                trigger = unix_cron_to_trigger(
+                    self.cron_expression, timezone=self.timezone
+                )
                 return trigger.get_next_fire_time(None, now)
             except Exception:
                 pass
@@ -272,6 +274,8 @@ class DocumentOut(BaseModel):
     uploaded_by: int
     campaign_id: int | None
     content_hash: str | None
+    is_public: bool
+    file_path: str | None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -279,6 +283,7 @@ class DocumentOut(BaseModel):
 
 class DocumentUpdate(BaseModel):
     description: str | None = None
+    is_public: bool | None = None
 
 
 class DocumentSearchRequest(BaseModel):
