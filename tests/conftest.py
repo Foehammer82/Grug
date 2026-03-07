@@ -92,6 +92,7 @@ def mock_record_llm_usage():
         "grug.bot.auto_respond.record_llm_usage",
         "grug.agent.tools.rules_tools.record_llm_usage",
         "grug.agent.core.record_llm_usage",
+        "grug.manager.reviewer.record_llm_usage",
     ]
     patches = [patch(site, new=AsyncMock(return_value=None)) for site in _sites]
     for p in patches:
