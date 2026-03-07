@@ -208,9 +208,17 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
     <Box>
       {/* ── Dice Roller ─────────────────────────────── */}
       <Stack spacing={1.5}>
-        {/* Die selector buttons */}
-        <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
-          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+        {/* Die selector buttons — 4-column grid on mobile, flex row on desktop */}
+        <Box
+          sx={{
+            display: { xs: 'grid', sm: 'flex' },
+            gridTemplateColumns: { xs: 'repeat(4, 1fr)', sm: 'unset' },
+            flexWrap: { sm: 'wrap' },
+            gap: 0.5,
+            alignItems: { sm: 'center' },
+          }}
+        >
+          <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5, display: { xs: 'none', sm: 'inline' } }}>
             Add dice:
           </Typography>
           {DICE_OPTIONS.map((d) => {
@@ -221,6 +229,7 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
                 key={d.sides}
                 badgeContent={count || null}
                 sx={{
+                  width: { xs: '100%', sm: 'auto' },
                   '& .MuiBadge-badge': {
                     bgcolor: d.color,
                     color: '#fff',
@@ -249,7 +258,8 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
                     });
                   }}
                   sx={{
-                    minWidth: { xs: 52, sm: 48 },
+                    width: { xs: '100%', sm: 'auto' },
+                    minWidth: { xs: 'unset', sm: 48 },
                     minHeight: { xs: 44, sm: 36 },
                     fontSize: { xs: '0.85rem', sm: '0.75rem' },
                     fontWeight: 700,
@@ -267,7 +277,7 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
           <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5, display: { xs: 'none', sm: 'inline' } }}>
             (right-click to remove one)
           </Typography>
-        </Stack>
+        </Box>
 
         {/* Active pool chips */}
         {Object.keys(dicePool).length > 0 && (
@@ -324,60 +334,66 @@ export default function DiceTab({ guildId, campaignId, isGm, currentUserId, allo
           </Typography>
         )}
 
-        {/* Controls row */}
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-          <TextField
-            size="small"
-            label="Modifier"
-            value={modifier}
-            onChange={(e) => setModifier(e.target.value)}
-            sx={{ width: 90 }}
-            placeholder="+5"
-          />
-
-          <Typography variant="caption" color="text.secondary" sx={{ mx: 0.5 }}>
-            or
-          </Typography>
-
-          <TextField
-            size="small"
-            label="Custom expression"
-            value={customExpr}
-            onChange={(e) => setCustomExpr(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') handleRoll();
-            }}
-            placeholder="2d6+1d4+3"
-            sx={{ width: 180 }}
-          />
-
-          <Tooltip title={isPrivate ? 'Private — only you and GM see this' : 'Public — everyone sees this'}>
-            <IconButton
+        {/* Controls — stacked layout for clean mobile UX */}
+        <Stack spacing={1}>
+          {/* Modifier + custom expression row */}
+          <Stack direction="row" spacing={1} alignItems="center" useFlexGap>
+            <TextField
               size="small"
-              onClick={() => setIsPrivate(!isPrivate)}
-              color={isPrivate ? 'warning' : 'default'}
-              sx={{ minWidth: 40, minHeight: 40 }}
+              label="Modifier"
+              value={modifier}
+              onChange={(e) => setModifier(e.target.value)}
+              sx={{ width: 90, flexShrink: 0 }}
+              placeholder="+5"
+            />
+
+            <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
+              or
+            </Typography>
+
+            <TextField
+              size="small"
+              label="Custom expression"
+              value={customExpr}
+              onChange={(e) => setCustomExpr(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleRoll();
+              }}
+              placeholder="2d6+1d4+3"
+              sx={{ flex: 1, minWidth: 120 }}
+            />
+          </Stack>
+
+          {/* Roll action row */}
+          <Stack direction="row" spacing={1} alignItems="center" useFlexGap>
+            <Tooltip title={isPrivate ? 'Private — only you and GM see this' : 'Public — everyone sees this'}>
+              <IconButton
+                size="small"
+                onClick={() => setIsPrivate(!isPrivate)}
+                color={isPrivate ? 'warning' : 'default'}
+                sx={{ minWidth: 40, minHeight: 40, flexShrink: 0 }}
+              >
+                {isPrivate ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+
+            <Button
+              variant="contained"
+              size="medium"
+              startIcon={<CasinoIcon />}
+              onClick={handleRoll}
+              disabled={rollMutation.isPending || (Object.keys(dicePool).length === 0 && !customExpr.trim())}
+              sx={{ flex: 1, minHeight: { xs: 44, sm: 36 } }}
             >
-              {isPrivate ? <LockIcon fontSize="small" /> : <LockOpenIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
+              {rollMutation.isPending ? 'Rolling…' : 'Roll'}
+            </Button>
 
-          <Button
-            variant="contained"
-            size="medium"
-            startIcon={<CasinoIcon />}
-            onClick={handleRoll}
-            disabled={rollMutation.isPending || (Object.keys(dicePool).length === 0 && !customExpr.trim())}
-            sx={{ minHeight: { xs: 44, sm: 36 }, minWidth: { xs: 100, sm: 'auto' } }}
-          >
-            {rollMutation.isPending ? 'Rolling…' : 'Roll'}
-          </Button>
-
-          <Tooltip title="Reset to defaults">
-            <IconButton size="small" onClick={handleReset} sx={{ minWidth: 40, minHeight: 40 }}>
-              <RestartAltIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+            <Tooltip title="Reset to defaults">
+              <IconButton size="small" onClick={handleReset} sx={{ minWidth: 40, minHeight: 40, flexShrink: 0 }}>
+                <RestartAltIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         </Stack>
 
         {/* Last result */}
