@@ -262,68 +262,68 @@ export default function CampaignCard({
         {!hideOpenInPage && (
           <Tooltip title="Open campaign in own page">
             <IconButton
-              size="small"
+              color="primary"
               onClick={() => navigate(`/guilds/${c.guild_id}/campaigns/${c.id}`)}
+              sx={{ ml: 'auto' }}
             >
-              <OpenInNewIcon fontSize="small" />
+              <OpenInNewIcon />
             </IconButton>
           </Tooltip>
         )}
       </Stack>
 
-      {/* Tab bar */}
-      <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', px: { xs: 1, sm: 2 } }}>
+      {/* Tab bar — icon-only on xs to avoid horizontal scroll */}
+      <Box sx={{ borderBottom: '1px solid', borderColor: 'divider', px: { xs: 0.5, sm: 2 } }}>
         <Tabs
           value={activeTab}
           onChange={(_, v) => setActiveTab(v)}
           textColor="inherit"
           variant="scrollable"
-          scrollButtons="auto"
-          allowScrollButtonsMobile
+          scrollButtons={false}
           TabIndicatorProps={{ style: { height: 2 } }}
           sx={{ minHeight: 36 }}
         >
           <Tab
             value="characters"
-            label="Characters"
-            icon={<PeopleIcon sx={{ fontSize: 14 }} />}
+            label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Characters</Box>}
+            icon={<PeopleIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none', minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1, sm: 1.5 } }}
           />
           <Tab
             value="notes"
-            label="Session Notes"
-            icon={<MenuBookIcon sx={{ fontSize: 14 }} />}
+            label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Session Notes</Box>}
+            icon={<MenuBookIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none', minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1, sm: 1.5 } }}
           />
           <Tab
             value="documents"
-            label="Documents"
-            icon={<FolderIcon sx={{ fontSize: 14 }} />}
+            label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Documents</Box>}
+            icon={<FolderIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none', minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1, sm: 1.5 } }}
           />
           <Tab
             value="schedule"
-            label="Schedule"
-            icon={<EventIcon sx={{ fontSize: 14 }} />}
+            label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Schedule</Box>}
+            icon={<EventIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none', minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1, sm: 1.5 } }}
           />
           <Tab
             value="dice"
-            label="Dice"
-            icon={<CasinoIcon sx={{ fontSize: 14 }} />}
+            label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Dice</Box>}
+            icon={<CasinoIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none', minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1, sm: 1.5 } }}
           />
           <Tab
             value="initiative"
-            label="Initiative"
-            icon={<BoltIcon sx={{ fontSize: 14 }} />}
+            label={<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Initiative</Box>}
+            icon={<BoltIcon sx={{ fontSize: 16 }} />}
             iconPosition="start"
-            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none' }}
+            sx={{ minHeight: 36, py: 0, fontSize: '0.75rem', textTransform: 'none', minWidth: { xs: 44, sm: 'auto' }, px: { xs: 1, sm: 1.5 } }}
           />
         </Tabs>
       </Box>
