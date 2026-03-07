@@ -138,6 +138,14 @@ class Settings(BaseSettings):
         description="Directory to store uploaded character sheet files",
     )
 
+    # Caching — optional Redis / Valkey URL.
+    # When set, the shared cache (grug.cache.get_cache) uses Redis instead of
+    # in-memory storage.  Both Redis and Valkey are supported.
+    redis_url: str = Field(
+        default="",
+        description="Redis / Valkey connection URL for centralized caching (empty = in-memory)",
+    )
+
     # Logging
     log_level: str = Field(default="INFO", description="Logging level")
 

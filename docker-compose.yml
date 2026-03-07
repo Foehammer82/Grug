@@ -85,6 +85,25 @@ services:
       - postgres
 
   # ------------------------------------------------------------------ #
+  # Redis / Valkey — optional cache backend                             #
+  # Activate with:  docker compose --profile redis up                  #
+  # Set REDIS_URL=redis://redis:6379/0 in .env to enable.             #
+  # ------------------------------------------------------------------ #
+  redis:
+    image: redis:7-alpine
+    profiles: ["redis"]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - grug_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------------------ #
   # Web — Vite dev server (hot-module replacement)                       #
   # Activate with:  docker compose --profile dev up                     #
   # The browser uses localhost:8000 for API calls (not the Docker host). #
@@ -114,4 +133,5 @@ volumes:
   grug_db:
   grug_files:
   grug_postgres_data:
+  grug_redis_data:
   web_node_modules:
