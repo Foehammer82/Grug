@@ -1,3 +1,4 @@
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { Box, Tab, Tabs, Tooltip, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { Navigate, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -108,27 +109,43 @@ export default function GuildLayout() {
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Header area */}
       <Box sx={{ px: { xs: 2, sm: 4 }, pt: { xs: 2, sm: 3 }, pb: 0, borderBottom: '1px solid', borderColor: 'divider' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.5,
+            mb: 1.5,
+            '&:hover .guild-id-reveal': { opacity: 1 },
+          }}
+        >
           <Typography variant="h5" fontWeight={700} sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
             {guild?.name ?? 'Loading…'}
           </Typography>
           {guildId && (
-            <Tooltip title={copied ? 'Copied!' : 'Click to copy'} placement="right">
-              <Typography
-                variant="caption"
-                color="text.disabled"
+            <Tooltip title={copied ? 'Copied!' : 'Copy server ID'} placement="right">
+              <Box
+                className="guild-id-reveal"
                 onClick={handleCopyId}
                 sx={{
-                  fontFamily: 'monospace',
+                  display: { xs: 'none', sm: 'flex' },
+                  alignItems: 'center',
+                  gap: 0.5,
                   cursor: 'pointer',
-                  userSelect: 'none',
-                  lineHeight: 1,
-                  display: { xs: 'none', sm: 'inline' },
+                  opacity: 0,
+                  transition: 'opacity 0.15s ease',
+                  color: 'text.disabled',
                   '&:hover': { color: 'text.secondary' },
                 }}
               >
-                {guildId}
-              </Typography>
+                <Typography
+                  variant="caption"
+                  color="inherit"
+                  sx={{ fontFamily: 'monospace', userSelect: 'none', lineHeight: 1 }}
+                >
+                  {guildId}
+                </Typography>
+                <ContentCopyIcon sx={{ fontSize: '0.875rem' }} />
+              </Box>
             </Tooltip>
           )}
           <PollingIndicator intervalMs={POLL_MS} dataUpdatedAt={lastRefreshedAt} />
