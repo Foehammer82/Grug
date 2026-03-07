@@ -14,7 +14,6 @@ import logging
 import random
 import time
 from dataclasses import dataclass, field
-from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -148,14 +147,14 @@ _PERMANENT_TYPES = frozenset({
 
 _ITEM_CACHE_TTL = 3600  # 1 hour
 _ITEM_CACHE_MAX = 200  # max entries (20 levels × 3 categories × ~3 sizes)
-_item_cache: dict[str, tuple[list[Any], float]] = {}  # key → (results, expires_at)
+_item_cache: dict[str, tuple[list[AoNItem], float]] = {}  # key → (results, expires_at)
 
 
 def _item_cache_key(item_level: int, category: str, size: int) -> str:
     return f"{item_level}|{category}|{size}"
 
 
-def _item_cache_get(key: str) -> list[Any] | None:
+def _item_cache_get(key: str) -> list[AoNItem] | None:
     entry = _item_cache.get(key)
     if entry is None:
         return None
@@ -166,7 +165,7 @@ def _item_cache_get(key: str) -> list[Any] | None:
     return results
 
 
-def _item_cache_set(key: str, results: list[Any]) -> None:
+def _item_cache_set(key: str, results: list[AoNItem]) -> None:
     # Evict expired entries to prevent unbounded growth
     if len(_item_cache) >= _ITEM_CACHE_MAX:
         now = time.monotonic()
@@ -197,7 +196,7 @@ async def search_aon_items(
     cached = _item_cache_get(cache_key)
     if cached is not None:
         logger.debug("AoN item cache hit: level=%d category=%s", item_level, category)
-        return cached  # type: ignore[return-value]
+        return cached
 
     try:
         from elasticsearch import AsyncElasticsearch
