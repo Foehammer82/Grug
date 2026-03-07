@@ -875,18 +875,20 @@ async def create_guild_task(
     user_id = int(user["id"])
     await ensure_guild(guild_id)
 
-    # Resolve channel_id: use the provided value or fall back to the guild's announce channel
+    # Load guild config once to resolve channel_id fallback and timezone.
+    cfg_result = await db.execute(
+        select(GuildConfig).where(GuildConfig.guild_id == guild_id)
+    )
+    cfg = cfg_result.scalar_one_or_none()
+
     if body.channel_id is not None:
         channel_id = int(body.channel_id)
     else:
-        cfg_result = await db.execute(
-            select(GuildConfig).where(GuildConfig.guild_id == guild_id)
-        )
-        cfg = cfg_result.scalar_one_or_none()
         channel_id = (
             int(cfg.announce_channel_id) if cfg and cfg.announce_channel_id else 0
         )
 
+    guild_timezone = cfg.timezone if cfg and cfg.timezone else "UTC"
     name = body.name or (body.prompt[:80] if body.type == "once" else None)
     task = ScheduledTask(
         guild_id=guild_id,
@@ -896,6 +898,7 @@ async def create_guild_task(
         prompt=body.prompt,
         fire_at=body.fire_at,
         cron_expression=body.cron_expression,
+        timezone=guild_timezone,
         enabled=body.enabled,
         source="web",
         created_by=user_id,
