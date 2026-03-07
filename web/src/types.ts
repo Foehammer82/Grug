@@ -503,3 +503,44 @@ export function localInputToIso(value: string): string | null {
   if (!value) return null;
   return new Date(value + ':00.000Z').toISOString();
 }
+
+/* ── Manager agent ────────────────────────────────────────────────── */
+
+export interface InstructionOverride {
+  id: number;
+  guild_id: string;
+  channel_id: string | null;
+  scope: 'guild' | 'channel';
+  content: string;
+  status: 'active' | 'pending' | 'rejected';
+  source: 'admin' | 'manager';
+  review_id: number | null;
+  reason: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManagerReview {
+  id: number;
+  guild_id: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  messages_reviewed: number;
+  feedback_reviewed: number;
+  summary: string | null;
+  observations: Array<{
+    category: string;
+    severity: string;
+    detail: string;
+  }> | null;
+  recommendations: Array<{
+    action: string;
+    content: string;
+    reason: string;
+  }> | null;
+  webhook_sent: boolean;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}

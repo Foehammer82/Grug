@@ -17,6 +17,7 @@ import PersonalNotesPage from './pages/PersonalNotesPage';
 import PersonalTasksPage from './pages/PersonalTasksPage';
 import CampaignsPage from './pages/CampaignsPage';
 import CharacterSheetPage from './pages/CharacterSheetPage';
+import ManagerPage from './pages/ManagerPage';
 import TasksPage from './pages/TasksPage';
 import { useBotAvatar } from './hooks/useBotAvatar';
 
@@ -53,6 +54,7 @@ function App() {
           <Route path="notes" element={<NotesPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
           <Route path="characters/:characterId" element={<CharacterSheetPage />} />
+          <Route path="manager" element={<ManagerPage />} />
         </Route>
       </Route>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

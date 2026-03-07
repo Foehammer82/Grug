@@ -19,6 +19,7 @@ const TABS = [
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
   { label: "Grug's Notes", path: 'notes',        adminOnly: false },
   { label: 'Campaigns',    path: 'campaigns',    adminOnly: false },
+  { label: 'Manager',      path: 'manager',      adminOnly: true },
 ];
 
 export default function GuildLayout() {
