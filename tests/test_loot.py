@@ -1,8 +1,15 @@
 """Tests for the loot generation module (grug/loot.py)."""
 
+import time
+
 from grug.loot import (
     TREASURE_TABLE,
     AoNItem,
+    _ITEM_CACHE_TTL,
+    _item_cache,
+    _item_cache_get,
+    _item_cache_key,
+    _item_cache_set,
     format_loot_table,
     format_treasure_table,
     get_treasure_budget,
@@ -152,3 +159,51 @@ class TestFormatLootTable:
     def test_includes_aon_reference_url(self):
         text = format_loot_table(5, 4, [], [], 320)
         assert "2e.aonprd.com/Rules.aspx?ID=2656" in text
+
+
+class TestItemCache:
+    """Verify the in-memory TTL cache for AoN item searches."""
+
+    def setup_method(self):
+        """Clear the cache before each test."""
+        _item_cache.clear()
+
+    def test_cache_key_format(self):
+        key = _item_cache_key(5, "permanent", 20)
+        assert key == "5|permanent|20"
+
+    def test_cache_miss_returns_none(self):
+        assert _item_cache_get("nonexistent") is None
+
+    def test_cache_set_and_get(self):
+        items = [AoNItem(name="Sword", item_level=3)]
+        _item_cache_set("test_key", items)
+        result = _item_cache_get("test_key")
+        assert result is not None
+        assert len(result) == 1
+        assert result[0].name == "Sword"
+
+    def test_cache_expired_returns_none(self, monkeypatch):
+        items = [AoNItem(name="Expired Item", item_level=1)]
+        _item_cache_set("exp_key", items)
+        # Confirm it's there
+        assert _item_cache_get("exp_key") is not None
+        # Fast-forward past TTL
+        future = time.monotonic() + _ITEM_CACHE_TTL + 1
+        monkeypatch.setattr(time, "monotonic", lambda: future)
+        assert _item_cache_get("exp_key") is None
+
+    def test_cache_evicts_expired_on_overflow(self, monkeypatch):
+        # Fill cache to max
+        from grug.loot import _ITEM_CACHE_MAX
+
+        base_time = time.monotonic()
+        for i in range(_ITEM_CACHE_MAX):
+            _item_cache[f"old_{i}"] = ([], base_time - 1)  # already expired
+
+        # Adding one more should trigger eviction
+        monkeypatch.setattr(time, "monotonic", lambda: base_time)
+        _item_cache_set("new_key", [AoNItem(name="New", item_level=1)])
+        assert "new_key" in _item_cache
+        # All expired entries should be removed
+        assert len(_item_cache) <= 1

@@ -12,7 +12,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
+import time
 from dataclasses import dataclass, field
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +139,43 @@ _PERMANENT_TYPES = frozenset({
 })
 
 
+# ---------------------------------------------------------------------------
+# In-memory TTL cache for AoN item searches
+# ---------------------------------------------------------------------------
+# AoN item data changes infrequently (only when new PF2e books release).
+# A 1-hour TTL keeps repeated generate_loot calls fast while ensuring fresh
+# data is fetched periodically.  Keyed by (item_level, category, size).
+
+_ITEM_CACHE_TTL = 3600  # 1 hour
+_ITEM_CACHE_MAX = 200  # max entries (20 levels × 3 categories × ~3 sizes)
+_item_cache: dict[str, tuple[list[Any], float]] = {}  # key → (results, expires_at)
+
+
+def _item_cache_key(item_level: int, category: str, size: int) -> str:
+    return f"{item_level}|{category}|{size}"
+
+
+def _item_cache_get(key: str) -> list[Any] | None:
+    entry = _item_cache.get(key)
+    if entry is None:
+        return None
+    results, expires_at = entry
+    if time.monotonic() > expires_at:
+        del _item_cache[key]
+        return None
+    return results
+
+
+def _item_cache_set(key: str, results: list[Any]) -> None:
+    # Evict expired entries to prevent unbounded growth
+    if len(_item_cache) >= _ITEM_CACHE_MAX:
+        now = time.monotonic()
+        expired = [k for k, (_, exp) in _item_cache.items() if now > exp]
+        for k in expired:
+            del _item_cache[k]
+    _item_cache[key] = (results, time.monotonic() + _ITEM_CACHE_TTL)
+
+
 async def search_aon_items(
     item_level: int,
     *,
@@ -145,11 +184,21 @@ async def search_aon_items(
 ) -> list[AoNItem]:
     """Search AoN Elasticsearch for PF2e items at a specific item level.
 
+    Results are cached in-memory with a 1-hour TTL to avoid redundant
+    network calls when generating loot for the same level repeatedly.
+
     Args:
         item_level: The PF2e item level to filter on.
         category: ``"permanent"``, ``"consumable"``, or ``"any"``.
         size: Max results to return from Elasticsearch.
     """
+    # ── Check cache first ─────────────────────────────────────────────
+    cache_key = _item_cache_key(item_level, category, size)
+    cached = _item_cache_get(cache_key)
+    if cached is not None:
+        logger.debug("AoN item cache hit: level=%d category=%s", item_level, category)
+        return cached  # type: ignore[return-value]
+
     try:
         from elasticsearch import AsyncElasticsearch
     except ImportError:
@@ -218,6 +267,9 @@ async def search_aon_items(
                     description=desc,
                 )
             )
+
+        # ── Store in cache ────────────────────────────────────────────
+        _item_cache_set(cache_key, items)
         return items
     except Exception as exc:
         logger.warning("AoN item search failed for level %d: %s", item_level, exc)
