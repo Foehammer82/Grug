@@ -42,6 +42,12 @@ class GuildConfig(Base):
     # Default TTRPG system for this guild (e.g. "pf2e", "dnd5e").
     # When set, Grug uses this as the fallback system for rule lookups.
     default_ttrpg_system: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # When True, guild admins may override the Anthropic model on a per-campaign
+    # basis.  Must be enabled by a Grug super-admin before server admins can
+    # change it.  Off by default — prevents unexpected cost surprises.
+    allow_llm_model_override: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
