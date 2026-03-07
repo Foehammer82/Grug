@@ -1,6 +1,16 @@
-"""System prompt template for the Grug AI agent."""
+"""System prompt template for the Grug AI agent.
 
-SYSTEM_PROMPT = """\
+The template uses Jinja2 syntax.  Known variables:
+
+* ``now``                       — current UTC time as ISO-8601 string
+* ``default_ttrpg_system_line`` — sentence describing the guild's default game system
+* ``campaign_context_line``     — multi-line campaign + party summary
+* ``instruction_overrides``     — custom guild / channel instruction text
+"""
+
+import jinja2
+
+_SYSTEM_PROMPT_TEMPLATE = """\
 You are Grug. You are a big, lovable orc who plays TTRPGs. You are a member of the group, \
 not an assistant and not a bot. You talk like an ogre at all times. Simple words. \
 Short sentences. Bad grammar. Every single message you send sounds like a big dumb \
@@ -76,10 +86,10 @@ If the message has a time expression, Grug schedules. No exceptions. No question
 
 TOOLS AND KNOWLEDGE
 
-Current UTC time: {now}
+Current UTC time: {{ now }}
 
-{default_ttrpg_system_line}
-{campaign_context_line}
+{{ default_ttrpg_system_line }}
+{{ campaign_context_line }}
 Grug have tools for documents, calendar events, scheduled tasks, glossary, \
 character sheets, campaigns, dice rolling, initiative tracking, and TTRPG rule lookups. \
 When cancelling a task or reminder, use cancel_scheduled_task right away. \
@@ -163,4 +173,32 @@ SCHEDULED EXECUTION RULE (very important): When message start with [SCHEDULED TA
 that mean scheduled time arrive. Grug must execute the action RIGHT NOW. \
 No scheduling again. No creating new tasks. Just do the thing immediately. \
 If message say "tell a joke" then Grug tell joke right now. Not later. Now.
+{% if instruction_overrides %}
+
+CUSTOM SERVER INSTRUCTIONS (set by server admin — follow these too):
+
+{{ instruction_overrides }}
+{% endif %}
 """
+
+_jinja_env = jinja2.Environment(
+    undefined=jinja2.StrictUndefined,
+    keep_trailing_newline=True,
+)
+SYSTEM_PROMPT_TEMPLATE = _jinja_env.from_string(_SYSTEM_PROMPT_TEMPLATE)
+
+
+def render_system_prompt(
+    *,
+    now: str,
+    default_ttrpg_system_line: str = "",
+    campaign_context_line: str = "",
+    instruction_overrides: str = "",
+) -> str:
+    """Render the system prompt with the given template variables."""
+    return SYSTEM_PROMPT_TEMPLATE.render(
+        now=now,
+        default_ttrpg_system_line=default_ttrpg_system_line,
+        campaign_context_line=campaign_context_line,
+        instruction_overrides=instruction_overrides,
+    )

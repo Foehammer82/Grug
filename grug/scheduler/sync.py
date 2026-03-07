@@ -410,3 +410,71 @@ def schedule_hourly_llm_usage_rollup() -> None:
     logger.info(
         "LLM usage hourly rollup scheduled at :00 each hour (job id: %s).", job_id
     )
+
+
+# ---------------------------------------------------------------------------
+# Manager agent periodic review
+# ---------------------------------------------------------------------------
+
+
+async def _run_manager_reviews() -> None:
+    """Run a manager review for every guild that has the feature enabled.
+
+    Iterates over all GuildConfig rows and runs a review for each.
+    Errors for individual guilds are logged and do not block other guilds.
+    """
+    from grug.config.settings import get_settings
+    from grug.db.models import GuildConfig
+
+    settings = get_settings()
+    if not settings.manager_review_enabled:
+        return
+
+    factory = get_session_factory()
+    async with factory() as session:
+        result = await session.execute(select(GuildConfig.guild_id))
+        guild_ids = [row[0] for row in result.all()]
+
+    if not guild_ids:
+        logger.info("Manager review: no guilds to review.")
+        return
+
+    from grug.manager.reviewer import run_review
+
+    for gid in guild_ids:
+        try:
+            await run_review(gid)
+            logger.info("Manager review completed for guild %d", gid)
+        except Exception:
+            logger.exception("Manager review failed for guild %d", gid)
+
+
+def schedule_manager_reviews() -> None:
+    """Register a periodic APScheduler job for manager reviews.
+
+    The cron schedule is read from ``Settings.manager_review_cron``.
+    Only registers the job if ``Settings.manager_review_enabled`` is True.
+    """
+    from grug.config.settings import get_settings
+    from grug.scheduler.manager import unix_cron_to_trigger
+
+    settings = get_settings()
+    if not settings.manager_review_enabled:
+        logger.info("Manager reviews disabled — skipping scheduler registration.")
+        return
+
+    scheduler = get_scheduler()
+    job_id = "manager_review"
+    trigger = unix_cron_to_trigger(settings.manager_review_cron, timezone="UTC")
+    scheduler.add_job(
+        _run_manager_reviews,
+        trigger=trigger,
+        id=job_id,
+        replace_existing=True,
+        misfire_grace_time=600,
+    )
+    logger.info(
+        "Manager review scheduled with cron '%s' (job id: %s).",
+        settings.manager_review_cron,
+        job_id,
+    )

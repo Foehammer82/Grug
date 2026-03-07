@@ -14,6 +14,7 @@ from grug.scheduler.manager import start_scheduler
 from grug.scheduler.sync import (
     run_sync,
     schedule_daily_pathbuilder_sync,
+    schedule_manager_reviews,
     schedule_periodic_sync,
 )
 
@@ -57,6 +58,7 @@ async def main() -> None:
         await run_sync(bot, sync_commands=True)
         schedule_periodic_sync(bot)
         schedule_daily_pathbuilder_sync()
+        schedule_manager_reviews()
 
     # Load cogs
     await bot.load_extension("grug.bot.cogs.ai_chat")

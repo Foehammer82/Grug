@@ -20,7 +20,7 @@ from pydantic_ai.models.anthropic import AnthropicModel
 from pydantic_ai.providers.anthropic import AnthropicProvider
 from sqlalchemy import func, select
 
-from grug.agent.prompt import SYSTEM_PROMPT
+from grug.agent.prompt import render_system_prompt
 from grug.config.settings import get_settings
 from grug.db.models import ConversationMessage
 from grug.db.session import get_session_factory
@@ -92,7 +92,7 @@ def _build_agent() -> Agent[GrugDeps, str]:
     )
 
     @agent.system_prompt(dynamic=True)
-    def _system_prompt(ctx: RunContext[GrugDeps]) -> str:
+    async def _system_prompt(ctx: RunContext[GrugDeps]) -> str:
         """Re-evaluate on every run (dynamic=True) so `now` is always current."""
         default_system = ctx.deps.default_ttrpg_system
         if default_system:
@@ -111,10 +111,41 @@ def _build_agent() -> Agent[GrugDeps, str]:
             )
         else:
             campaign_context_line = ""
-        return SYSTEM_PROMPT.format(
+
+        # Load active instruction overrides for this guild/channel.
+        instruction_overrides = ""
+        try:
+            from grug.db.models import InstructionOverride
+
+            factory = get_session_factory()
+            async with factory() as session:
+                result = await session.execute(
+                    select(InstructionOverride).where(
+                        InstructionOverride.guild_id == ctx.deps.guild_id,
+                        InstructionOverride.status == "active",
+                    )
+                )
+                overrides = result.scalars().all()
+                parts: list[str] = []
+                for ov in overrides:
+                    # Channel-scoped overrides only apply to matching channel.
+                    if ov.scope == "channel" and ov.channel_id != ctx.deps.channel_id:
+                        continue
+                    parts.append(ov.content)
+                if parts:
+                    instruction_overrides = "\n\n".join(parts)
+        except Exception:
+            logger.warning(
+                "Failed to load instruction overrides for guild %d",
+                ctx.deps.guild_id,
+                exc_info=True,
+            )
+
+        return render_system_prompt(
             now=datetime.now(timezone.utc).isoformat(),
             default_ttrpg_system_line=default_system_line,
             campaign_context_line=campaign_context_line,
+            instruction_overrides=instruction_overrides,
         )
 
     # Register tool groups — each follows the register_*_tools(agent) pattern.

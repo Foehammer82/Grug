@@ -24,6 +24,7 @@ from api.routes import (
     glossary,
     gold,
     guilds,
+    manager,
     monsters,
     notes,
     personal,
@@ -91,3 +92,4 @@ app.include_router(dice.router, dependencies=_auth_required)
 app.include_router(encounters.router, dependencies=_auth_required)
 app.include_router(monsters.router, dependencies=_auth_required)
 app.include_router(usage.router, dependencies=_auth_required)
+app.include_router(manager.router, dependencies=_auth_required)
