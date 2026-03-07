@@ -25,14 +25,62 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Campaign party auto-detection
+# ---------------------------------------------------------------------------
+
+
+async def _get_party_info(campaign_id: int) -> tuple[int, int] | None:
+    """Infer *(party_level, party_size)* from a campaign's character roster.
+
+    Reads each character's ``structured_data["level"]`` and returns the
+    average level (rounded) and total character count.
+
+    Returns ``None`` if the campaign has no characters with level data.
+    """
+    from sqlalchemy import select
+
+    from grug.db.models import Character
+    from grug.db.session import get_session_factory
+
+    factory = get_session_factory()
+    async with factory() as session:
+        chars = (
+            await session.execute(
+                select(Character).where(Character.campaign_id == campaign_id)
+            )
+        ).scalars().all()
+
+    if not chars:
+        return None
+
+    levels: list[int] = []
+    for char in chars:
+        sd = char.structured_data or {}
+        level = sd.get("level")
+        if isinstance(level, int) and level > 0:
+            levels.append(level)
+
+    if not levels:
+        return None
+
+    avg_level = round(sum(levels) / len(levels))
+    return max(1, min(20, avg_level)), len(chars)
+
+
+# ---------------------------------------------------------------------------
+# Tool registration
+# ---------------------------------------------------------------------------
+
+
 def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
     """Register loot generation tools on *agent*."""
 
     @agent.tool
     async def generate_loot(
         ctx: RunContext[GrugDeps],
-        party_level: int,
-        party_size: int = 4,
+        party_level: int = 0,
+        party_size: int = 0,
     ) -> str:
         """Generate a level-appropriate treasure bundle for a PF2e party.
 
@@ -42,6 +90,10 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
 
         Only the GM or a guild admin may generate loot.
 
+        If the current channel is linked to a campaign with characters that
+        have level data, ``party_level`` and ``party_size`` are automatically
+        inferred from the roster.  You can still override them explicitly.
+
         Use when the GM says things like "generate loot for level 5",
         "roll treasure for a level 8 party", "what loot should I give my
         level 3 party", or "create a treasure hoard".
@@ -49,10 +101,11 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
         Parameters
         ----------
         party_level:
-            The party's current level (1–20).
+            The party's current level (1–20).  Set to 0 or omit to
+            auto-detect from the campaign's character roster.
         party_size:
-            Number of PCs in the party.  Defaults to 4.  Extra PCs add
-            bonus currency per the official table.
+            Number of PCs in the party.  Set to 0 or omit to auto-detect
+            from the campaign.
         """
         from grug.agent.tools.banking_tools import _is_admin_or_gm
         from grug.loot import (
@@ -68,9 +121,28 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
                 "Ask your GM to use this tool!"
             )
 
+        # ── Auto-detect from campaign if not specified ────────────────────
+        if party_level == 0 or party_size == 0:
+            if ctx.deps.campaign_id is not None:
+                info = await _get_party_info(ctx.deps.campaign_id)
+                if info is not None:
+                    detected_level, detected_size = info
+                    if party_level == 0:
+                        party_level = detected_level
+                    if party_size == 0:
+                        party_size = detected_size
+
+        # Fall back to default party size if still unknown
+        if party_size == 0:
+            party_size = 4
+
         # ── Validate level ────────────────────────────────────────────────
         if party_level < 1 or party_level > 20:
-            return "Party level must be between 1 and 20."
+            return (
+                "Party level must be between 1 and 20. "
+                "No campaign is linked to this channel (or the campaign's "
+                "characters don't have level data). Please specify party_level."
+            )
 
         if party_size < 1 or party_size > 12:
             return "Party size must be between 1 and 12."
@@ -109,8 +181,8 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
     @agent.tool
     async def get_treasure_guidelines(
         ctx: RunContext[GrugDeps],
-        party_level: int,
-        party_size: int = 4,
+        party_level: int = 0,
+        party_size: int = 0,
     ) -> str:
         """Look up the PF2e treasure-by-level guidelines for a given party level.
 
@@ -119,20 +191,42 @@ def register_loot_tools(agent: Agent[GrugDeps, str]) -> None:
         wants to know the recommended treasure budget before deciding what
         to award.
 
+        If the current channel is linked to a campaign, ``party_level`` and
+        ``party_size`` can be auto-detected from the character roster.
+
         Use when someone asks "what's the treasure budget for level 7",
         "how much loot for a level 5 party", or "treasure guidelines".
 
         Parameters
         ----------
         party_level:
-            The party's current level (1–20).
+            The party's current level (1–20).  Set to 0 or omit to
+            auto-detect from the campaign.
         party_size:
-            Number of PCs in the party.  Defaults to 4.
+            Number of PCs in the party.  Set to 0 or omit to auto-detect.
         """
         from grug.loot import format_treasure_table, get_treasure_budget
 
+        # ── Auto-detect from campaign if not specified ────────────────────
+        if party_level == 0 or party_size == 0:
+            if ctx.deps.campaign_id is not None:
+                info = await _get_party_info(ctx.deps.campaign_id)
+                if info is not None:
+                    detected_level, detected_size = info
+                    if party_level == 0:
+                        party_level = detected_level
+                    if party_size == 0:
+                        party_size = detected_size
+
+        if party_size == 0:
+            party_size = 4
+
         if party_level < 1 or party_level > 20:
-            return "Party level must be between 1 and 20."
+            return (
+                "Party level must be between 1 and 20. "
+                "No campaign is linked to this channel (or the campaign's "
+                "characters don't have level data). Please specify party_level."
+            )
 
         row = get_treasure_budget(party_level)
         if row is None:

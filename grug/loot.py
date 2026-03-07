@@ -10,9 +10,9 @@ Reference: https://2e.aonprd.com/Rules.aspx?ID=2656
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import random
-import time
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -139,40 +139,15 @@ _PERMANENT_TYPES = frozenset({
 
 
 # ---------------------------------------------------------------------------
-# In-memory TTL cache for AoN item searches
+# Cache key helpers — uses the centralized grug.cache module
 # ---------------------------------------------------------------------------
-# AoN item data changes infrequently (only when new PF2e books release).
-# A 1-hour TTL keeps repeated generate_loot calls fast while ensuring fresh
-# data is fetched periodically.  Keyed by (item_level, category, size).
 
-_ITEM_CACHE_TTL = 3600  # 1 hour
-_ITEM_CACHE_MAX = 200  # max entries (20 levels × 3 categories × ~3 sizes)
-_item_cache: dict[str, tuple[list[AoNItem], float]] = {}  # key → (results, expires_at)
+_AON_ITEM_PREFIX = "aon:items"
 
 
-def _item_cache_key(item_level: int, category: str, size: int) -> str:
-    return f"{item_level}|{category}|{size}"
-
-
-def _item_cache_get(key: str) -> list[AoNItem] | None:
-    entry = _item_cache.get(key)
-    if entry is None:
-        return None
-    results, expires_at = entry
-    if time.monotonic() > expires_at:
-        del _item_cache[key]
-        return None
-    return results
-
-
-def _item_cache_set(key: str, results: list[AoNItem]) -> None:
-    # Evict expired entries to prevent unbounded growth
-    if len(_item_cache) >= _ITEM_CACHE_MAX:
-        now = time.monotonic()
-        expired = [k for k, (_, exp) in _item_cache.items() if now > exp]
-        for k in expired:
-            del _item_cache[k]
-    _item_cache[key] = (results, time.monotonic() + _ITEM_CACHE_TTL)
+def _aon_cache_key(item_level: int, category: str, size: int) -> str:
+    """Build a namespaced cache key for an AoN item search."""
+    return f"{_AON_ITEM_PREFIX}:{item_level}:{category}:{size}"
 
 
 async def search_aon_items(
@@ -183,20 +158,25 @@ async def search_aon_items(
 ) -> list[AoNItem]:
     """Search AoN Elasticsearch for PF2e items at a specific item level.
 
-    Results are cached in-memory with a 1-hour TTL to avoid redundant
-    network calls when generating loot for the same level repeatedly.
+    Results are cached permanently (process lifetime for in-memory, persistent
+    for Redis) via the centralized :mod:`grug.cache` module.  AoN item data
+    only changes when new PF2e books are published, so permanent caching is
+    appropriate.
 
     Args:
         item_level: The PF2e item level to filter on.
         category: ``"permanent"``, ``"consumable"``, or ``"any"``.
         size: Max results to return from Elasticsearch.
     """
+    from grug.cache import get_cache
+
     # ── Check cache first ─────────────────────────────────────────────
-    cache_key = _item_cache_key(item_level, category, size)
-    cached = _item_cache_get(cache_key)
+    cache = get_cache()
+    cache_key = _aon_cache_key(item_level, category, size)
+    cached = await cache.get(cache_key)
     if cached is not None:
         logger.debug("AoN item cache hit: level=%d category=%s", item_level, category)
-        return cached
+        return [AoNItem(**d) for d in cached]
 
     try:
         from elasticsearch import AsyncElasticsearch
@@ -267,8 +247,8 @@ async def search_aon_items(
                 )
             )
 
-        # ── Store in cache ────────────────────────────────────────────
-        _item_cache_set(cache_key, items)
+        # ── Store permanently in cache (no TTL) ──────────────────────
+        await cache.set(cache_key, [dataclasses.asdict(item) for item in items])
         return items
     except Exception as exc:
         logger.warning("AoN item search failed for level %d: %s", item_level, exc)
