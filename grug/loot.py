@@ -126,16 +126,38 @@ class AoNItem:
 
 
 # Item sub-types commonly found in PF2e treasure
-_CONSUMABLE_TYPES = frozenset({
-    "Alchemical Bombs", "Alchemical Elixirs", "Alchemical Poisons",
-    "Alchemical Tools", "Ammunition", "Fulu", "Gadget", "Magical Tattoo",
-    "Oil", "Potion", "Scroll", "Snare", "Spellheart", "Talisman",
-})
+_CONSUMABLE_TYPES = frozenset(
+    {
+        "Alchemical Bombs",
+        "Alchemical Elixirs",
+        "Alchemical Poisons",
+        "Alchemical Tools",
+        "Ammunition",
+        "Fulu",
+        "Gadget",
+        "Magical Tattoo",
+        "Oil",
+        "Potion",
+        "Scroll",
+        "Snare",
+        "Spellheart",
+        "Talisman",
+    }
+)
 
-_PERMANENT_TYPES = frozenset({
-    "Armor", "Held Item", "Shield", "Staff", "Wand", "Weapon", "Worn Item",
-    "Apex Item", "Rune",
-})
+_PERMANENT_TYPES = frozenset(
+    {
+        "Armor",
+        "Held Item",
+        "Shield",
+        "Staff",
+        "Wand",
+        "Weapon",
+        "Worn Item",
+        "Apex Item",
+        "Rune",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
@@ -201,9 +223,16 @@ async def search_aon_items(
                 index="aon",
                 query={"bool": {"must": must_clauses}},
                 source=[
-                    "name", "type", "text", "url", "level",
-                    "rarity", "trait_raw", "price_raw",
-                    "item_category", "item_subcategory",
+                    "name",
+                    "type",
+                    "text",
+                    "url",
+                    "level",
+                    "rarity",
+                    "trait_raw",
+                    "price_raw",
+                    "item_category",
+                    "item_subcategory",
                 ],
                 size=size,
             )
@@ -238,9 +267,7 @@ async def search_aon_items(
                     rarity=src.get("rarity", "Common"),
                     traits=src.get("trait_raw") or [],
                     url=(
-                        f"https://2e.aonprd.com{src['url']}"
-                        if src.get("url")
-                        else ""
+                        f"https://2e.aonprd.com{src['url']}" if src.get("url") else ""
                     ),
                     price=src.get("price_raw", ""),
                     description=desc,

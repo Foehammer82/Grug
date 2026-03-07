@@ -15,7 +15,6 @@ const TABS = [
   { label: 'Config',       path: 'config',       adminOnly: true },
   { label: 'Calendar',        path: 'events',       adminOnly: false },
   { label: 'Scheduled Tasks', path: 'tasks',        adminOnly: true },
-  { label: 'Documents',    path: 'documents',    adminOnly: false },
   { label: 'Glossary',     path: 'glossary',     adminOnly: false },
   { label: "Grug's Notes", path: 'notes',        adminOnly: false },
   { label: 'Campaigns',    path: 'campaigns',    adminOnly: false },
